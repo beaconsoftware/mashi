@@ -1,13 +1,82 @@
-# Pre-production deploy runbook
+# Mashi deployment runbook
 
-Steps to take Mashi from single-user (Sidd-only) to multi-tenant beta for other
-product leads. Follow in order — skipping or reordering can corrupt data or
-brick syncs.
+Centralized doc for everything pipeline-related — what's deployed, where, how
+to add new users, how to bring up a fresh environment, and the gotchas we hit
+on the way to first colleague signing in.
 
-**Status**: Migration 012 applied to local Supabase (`supabase_db_mashi`),
-947 s2d_items + 3 companies attributed, RLS policies verified. The migration
-file itself was hardened to handle autocommit (uses inline subqueries
-instead of session-scoped settings) — safe to push to fresh DBs now.
+---
+
+## Current production state
+
+| Layer | Where | Notes |
+|---|---|---|
+| Code repo | [github.com/sidd-beacon/mashi](https://github.com/sidd-beacon/mashi) | Private. Owner: `sidd-beacon`. |
+| CI | GitHub Actions (`.github/workflows/ci.yml`) | Typecheck + lint + build on every PR/push. |
+| App hosting | Vercel project `beacon-sw/mashi` | Auto-deploys `main` → production via Vercel GitHub App. |
+| Stable URL | `https://mashi-beacon-sw.vercel.app` | Gated by org-level Vercel Deployment Protection (see workaround below). |
+| Hosted DB | Supabase project `mashi` (ref `akpbzaivscqvaoapkdwd`, region `us-east-1`) | Migrations 001–012 applied. RLS verified. |
+| Local dev DB | Supabase Docker (`supabase_db_mashi`) | Mirrors production schema; full migration history. |
+| Auth | Supabase Auth + Google OAuth | App is in Google "Testing" mode — each new user must be added as a Test User. |
+
+## Inviting a new user
+
+End-to-end checklist for adding `someone@theirorg.com`:
+
+1. **Allowlist their email domain** if it's not already there:
+   ```sql
+   INSERT INTO public.signup_allowlist (domain, note) VALUES
+     ('theirorg.com', 'Why they have access')
+   ON CONFLICT (domain) DO NOTHING;
+   ```
+   Run via [Supabase SQL editor](https://supabase.com/dashboard/project/akpbzaivscqvaoapkdwd/sql/new).
+2. **Add as Google OAuth Test User** at [console.cloud.google.com → APIs & Services → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) → Test users → Add. *Without this they hit "Access blocked: app has not completed the Google verification process".*
+3. **Give them access to the Vercel deploy** — one of:
+   - Add to `beacon-sw` Vercel team (Members tier) — cleanest, pass through SSO automatically.
+   - Send them a [Shareable Link](https://vercel.com/docs/security/deployment-protection/methods-to-bypass-deployment-protection/shareable-links) — bypasses SSO per-link, per-deployment.
+   - Set up a custom domain in Deployment Protection Exceptions (one-time work, then anyone can hit it).
+4. **Send them the URL**. They sign in with Google → land at `/onboard/welcome`. The onboarding wizard walks them through connections + first sync.
+
+## Per-provider gotchas
+
+These all bit us in production. Heads-up:
+
+### Google OAuth (Gmail + Calendar + auth)
+
+- **App is in "Testing" mode** — only Test Users can sign in. Add invitees explicitly. Cap is 100 users until you submit for verification.
+- **Authorized redirect URIs must include all of**:
+  ```
+  https://akpbzaivscqvaoapkdwd.supabase.co/auth/v1/callback
+  https://mashi-beacon-sw.vercel.app/auth/callback
+  https://mashi-beacon-sw.vercel.app/api/connect/gmail/callback
+  https://mashi-beacon-sw.vercel.app/api/connect/gcal/callback
+  http://localhost:3456/api/connect/gmail/callback   (local dev)
+  http://localhost:3456/api/connect/gcal/callback    (local dev)
+  http://127.0.0.1:54321/auth/v1/callback            (local Supabase)
+  ```
+- **Authorized JavaScript origins**: `https://mashi-beacon-sw.vercel.app`
+
+### Slack (in-app connector)
+
+- App must have **Public Distribution activated** — otherwise only the original workspace (Beacon) can install. Activate in [api.slack.com → your app → Manage Distribution](https://api.slack.com/apps).
+- The HTTPS pre-distribution check rejects `http://localhost` redirect URIs. Remove the localhost URL before activating; use ngrok if you ever need to test OAuth locally.
+- Mashi uses User tokens (`xoxp-`), not Bot tokens. Bot Token Scopes section can stay empty.
+
+### Linear (in-app connector)
+
+- Uses per-user **personal API keys**, not OAuth. Settings location: each user clicks their avatar → **Preferences → Security & access → Personal API keys**.
+- If a user can't see "Create API key", their workspace admin has restricted it. Fix: admin goes to **Workspace settings → Security & access → API key creation** and sets to `All members`. (The in-app dialog includes this exact text now.)
+
+### Fireflies
+
+- API key only, paste-and-go. No OAuth, no developer-side work. Each user grabs theirs from `app.fireflies.ai → Settings → Developer Settings`.
+
+## Vercel Deployment Protection workaround
+
+The `beacon-sw` Vercel team has org-level "Require Log In" enabled and only Owners can change it. The production URL returns 401 to non-team-members. Three workarounds documented in order of effort:
+
+1. **Team Owner disables team-level Vercel Authentication** for the `mashi` project — cleanest, requires Owner permission Sidd doesn't have.
+2. **Add a custom domain + put it in Deployment Protection Exceptions**. The custom domain is publicly accessible, the `.vercel.app` URL stays gated. Requires DNS control over a domain. Tried `mashi.beaconsoftware.com` but never set the DNS record; the path is in the script `scripts/post-domain-setup.sh` if revisited.
+3. **Shareable Links** per-user — bypasses SSO via signed link. Not scalable but works for 1–5 invitees.
 
 ---
 
@@ -207,83 +276,25 @@ Walking the entire path from "someone visits the live URL" to "they get a workin
   attributed via RLS, primordial user marked already-onboarded
 - Migration 012 hardened for both autocommit AND fresh-DB cases
 
-### 🟡 Blocker — production has no real database
+### ✅ Resolved — hosted Supabase is live
 
-Production Vercel env points `NEXT_PUBLIC_SUPABASE_URL` at
-`http://127.0.0.1:54321` (your laptop). From Vercel's servers that's
-unreachable. The only reason sign-in even gets to Google is because the
-browser is doing the OAuth dance directly; the actual DB calls fail
-silently as soon as you'd try to do anything.
+Production now points at `https://akpbzaivscqvaoapkdwd.supabase.co`. Migrations 001–012 applied, RLS verified end-to-end with a simulated MAP user signup.
 
-**Fix path** (one of):
+### ✅ Resolved — auth redirect lands at production URL
 
-A. **Automated**: run `supabase login` once, then `bash scripts/setup-production.sh`
-   from this dir. Creates hosted project, applies migrations, switches Vercel
-   env, redeploys. ~3 min.
+Supabase Auth `site_url` set to `https://mashi-beacon-sw.vercel.app` via Management API. Redirect allowlist: `https://mashi-beacon-sw.vercel.app/**`, `https://mashi-*-beacon-sw.vercel.app/**`, `http://localhost:3456/**`.
 
-B. **Manual via Dashboard** (10 min):
-   1. supabase.com → New Project → name `mashi`, region `us-east-1`
-   2. SQL Editor → paste each of `supabase/migrations/0{03..12}_*.sql` in order
-   3. SQL Editor → `NOTIFY pgrst, 'reload schema';`
-   4. Project Settings → API → copy URL + anon key + service_role key
-   5. Vercel Dashboard → mashi → Settings → Environment Variables →
-      replace `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-      `SUPABASE_SERVICE_ROLE_KEY` with the hosted values
-   6. `vercel deploy --prod` to rebuild
+### ✅ Resolved — Google OAuth callbacks present
 
-### 🟡 Blocker — auth redirect goes back to localhost
+Authorized redirect URIs include the four needed for production (Supabase Auth + sign-in callback + gmail connect + gcal connect). Each new invitee gets added as a Test User in [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) — Google's "Testing" mode requirement.
 
-After Google OAuth completes, Supabase redirects the user to whatever
-its **Site URL** setting says. Local Supabase's `config.toml` has that
-set to `http://localhost:3456` — fine for `pnpm dev`, wrong for
-production. The hosted Supabase will default to `http://localhost:3000`
-when first created.
+### ✅ Resolved — Slack distribution active
 
-**Fix** (once hosted project exists):
-- Supabase Dashboard → Authentication → URL Configuration
-  - **Site URL**: `https://mashi-beacon-sw.vercel.app`
-  - **Additional Redirect URLs**: add `https://mashi-beacon-sw.vercel.app/**`
-    plus `https://mashi-*-beacon-sw.vercel.app/**` for preview deploys
+Production redirect URI added; Public Distribution activated. Beacon + MAP can install. User Token Scopes wired for `channels:history`, `channels:read`, `chat:write`, `groups:history`, `im:history`, `im:read`, `mpim:history`, `mpim:read`, `users:read`, `users:read.email`.
 
-### 🟡 Blocker — Google OAuth client missing production callbacks
+### ✅ Linear is API-key based, no developer-side OAuth needed
 
-Your current Google OAuth client has these authorized redirect URIs:
-```
-http://127.0.0.1:54321/auth/v1/callback       (local Supabase)
-http://localhost:3456/api/connect/gmail/callback   (local dev)
-http://localhost:3456/api/connect/gcal/callback    (local dev)
-https://megamind-*  (unrelated — different project, can ignore or delete)
-```
-
-**Missing for Mashi production** — paste into Google Cloud Console →
-Credentials → your OAuth 2.0 Client ID → "Authorized redirect URIs":
-
-```
-https://<hosted-ref>.supabase.co/auth/v1/callback
-https://mashi-beacon-sw.vercel.app/auth/callback
-https://mashi-beacon-sw.vercel.app/api/connect/gmail/callback
-https://mashi-beacon-sw.vercel.app/api/connect/gcal/callback
-```
-
-And under **Authorized JavaScript origins**:
-```
-https://mashi-beacon-sw.vercel.app
-```
-
-Note: Google's allowlist doesn't support wildcards. Preview-deploy URLs
-(`https://mashi-<hash>-beacon-sw.vercel.app`) won't be able to do OAuth.
-Workaround: do sign-in testing only on the stable production URL, or
-manually add a preview alias when needed.
-
-### 🟡 Blocker — Slack + Linear OAuth (only if you use them in prod)
-
-| Provider | Where | Add |
-|---|---|---|
-| Slack | api.slack.com → your app → OAuth & Permissions | `https://mashi-beacon-sw.vercel.app/api/connect/slack/callback` |
-| Linear | linear.app → Settings → API → OAuth Applications | `https://mashi-beacon-sw.vercel.app/api/connect/linear/callback` |
-| Outlook (optional) | Azure AD app → Authentication | `https://mashi-beacon-sw.vercel.app/api/connect/outlook/callback` |
-
-Fireflies uses an API key, not OAuth. No redirect URI needed.
+Each user creates a personal API key in **Preferences → Security & access → Personal API keys**. The connections-manager dialog in-app surfaces this path explicitly. If a user can't see "Personal API keys", their admin has restricted creation — they need to flip the workspace setting (also documented in-app).
 
 ### 🟢 Working, no action needed
 
