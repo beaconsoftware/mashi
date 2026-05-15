@@ -340,10 +340,25 @@ CREATE OR REPLACE FUNCTION create_user_profile_on_signup()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
+-- Pin search_path: without this, SECURITY DEFINER functions are a security
+-- foot-gun (a malicious user with CREATE on a schema in their search_path
+-- could shadow built-ins).
+SET search_path = public, pg_temp
 AS $$
 BEGIN
-  INSERT INTO user_profile (user_id, email, name, onboarding_step)
-  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)), 0)
+  -- Bypass RLS for this insert. The trigger runs in supabase_auth_admin's
+  -- session, where auth.uid() is NULL — so the user_profile WITH CHECK
+  -- (auth.uid() = user_id) policy would otherwise reject every signup with
+  -- "new row violates row-level security policy", surfacing as GoTrue's
+  -- generic "Database error saving new user" message.
+  SET LOCAL row_security = off;
+  INSERT INTO public.user_profile (user_id, email, name, onboarding_step)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
+    0
+  )
   ON CONFLICT (user_id) DO NOTHING;
   RETURN NEW;
 END;
