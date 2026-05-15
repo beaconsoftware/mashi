@@ -138,7 +138,7 @@ export function SyncStep({ cleanupRanAt }: Props) {
             Webhook-based realtime is coming. For now, hit sync from the top bar whenever.
           </div>
           {phase === "idle" && (
-            <Button onClick={runAll} disabled={connections.length === 0} size="sm" className="gap-1.5">
+            <Button type="button" onClick={runAll} disabled={connections.length === 0} size="sm" className="gap-1.5">
               <Sparkles className="h-3.5 w-3.5" />
               Pull everything
             </Button>

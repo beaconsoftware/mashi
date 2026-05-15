@@ -118,7 +118,7 @@ export function PortcosStep() {
             placeholder="Company name…"
             className="h-9"
           />
-          <Button onClick={add} disabled={!draft.trim() || adding} size="sm" className="gap-1.5">
+          <Button type="button" onClick={add} disabled={!draft.trim() || adding} size="sm" className="gap-1.5">
             {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             Add
           </Button>

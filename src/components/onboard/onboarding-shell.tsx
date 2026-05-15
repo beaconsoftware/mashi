@@ -85,15 +85,22 @@ export function OnboardingShell({
     setErr(null);
     try {
       if (beforeAdvance) await beforeAdvance();
-      const nextN = Math.min(TOTAL_STEPS, currentStep + 1);
+
+      // Defensive: validate currentStep is sane. Previously a NaN or 0
+      // would silently navigate to /onboard/welcome via the `?? "welcome"`
+      // fallback, which was reported as "pressing Enter sends you back
+      // to the beginning of onboarding."
+      const safeStep = Number(currentStep);
+      if (!Number.isInteger(safeStep) || safeStep < 1 || safeStep > TOTAL_STEPS) {
+        throw new Error(`Onboarding got an invalid step (${currentStep}). Refresh and try again.`);
+      }
+
+      const nextN = Math.min(TOTAL_STEPS, safeStep + 1);
       const res = await fetch("/api/onboard/step", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ step: nextN }),
       });
-      // We don't gate navigation on the server response — the API is
-      // resilient to missing migration columns; if it fails with a real
-      // error we'll surface it but still let the user proceed.
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         console.warn("[onboard] step advance returned non-ok:", j);
@@ -102,7 +109,10 @@ export function OnboardingShell({
         router.push("/");
       } else {
         const next = ONBOARDING_STEPS.find((s) => s.n === nextN);
-        router.push(`/onboard/${next?.slug ?? "welcome"}`);
+        if (!next) {
+          throw new Error(`No onboarding step for n=${nextN}`);
+        }
+        router.push(`/onboard/${next.slug}`);
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Couldn't advance");
@@ -134,6 +144,7 @@ export function OnboardingShell({
       <div className="flex items-center justify-end gap-2">
         <Button
           ref={ctaRef}
+          type="button"
           onClick={advance}
           disabled={advancing || !canAdvance}
           className={cn(
