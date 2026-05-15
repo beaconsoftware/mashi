@@ -50,6 +50,40 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Onboarding gate. Routes the onboarding flow itself needs (the wizard,
+  // plus the settings/companies pages it deep-links to) bypass the gate
+  // so we don't get a redirect loop. Everything else under (dashboard)
+  // requires onboarded=true.
+  if (user && !isPublic && !pathname.startsWith("/onboard")) {
+    const onboardingAllowed =
+      pathname.startsWith("/settings/connections") ||
+      pathname.startsWith("/settings/style") ||
+      pathname.startsWith("/companies") ||
+      pathname.startsWith("/api/"); // API routes manage their own auth
+
+    if (!onboardingAllowed) {
+      const { data: profile, error } = await supabase
+        .from("user_profile")
+        .select("onboarding_step, onboarded_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      // If the column doesn't exist yet (migration pending), let them through.
+      const migrationPending =
+        !!error && /could not find|does not exist/i.test(error.message);
+
+      if (!migrationPending) {
+        const step = profile?.onboarding_step ?? 0;
+        if (step < 6 && !profile?.onboarded_at) {
+          const url = req.nextUrl.clone();
+          url.pathname = "/onboard";
+          url.search = "";
+          return NextResponse.redirect(url);
+        }
+      }
+    }
+  }
+
   return res;
 }
 
