@@ -15,6 +15,14 @@ interface Props {
   canAdvance?: boolean;
   continueLabel?: string;
   beforeAdvance?: () => Promise<void> | void;
+  /**
+   * When true, render a small "Skip for now" link next to the Continue
+   * button even when `canAdvance` is false. Used on steps where the
+   * gating is desirable but not mandatory — Connect (you should
+   * connect something, but you might already have) and Sync (you
+   * should sync, but if you've done it before…).
+   */
+  allowSkip?: boolean;
 }
 
 /**
@@ -29,6 +37,7 @@ export function OnboardingShell({
   canAdvance = true,
   continueLabel,
   beforeAdvance,
+  allowSkip = false,
 }: Props) {
   const router = useRouter();
   const [advancing, setAdvancing] = useState(false);
@@ -154,7 +163,16 @@ export function OnboardingShell({
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-end gap-3">
+        {allowSkip && !canAdvance && !advancing && (
+          <button
+            type="button"
+            onClick={advance}
+            className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Skip for now →
+          </button>
+        )}
         <Button
           ref={ctaRef}
           type="button"

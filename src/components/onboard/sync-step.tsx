@@ -102,7 +102,7 @@ export function SyncStep({ cleanupRanAt }: Props) {
   const canAdvance = phase === "done";
 
   return (
-    <OnboardingShell currentStep={5} canAdvance={canAdvance}>
+    <OnboardingShell currentStep={5} canAdvance={canAdvance} allowSkip>
       <div className="space-y-3">
         {/* Heads-up — shown only before the user starts, so it sets
             expectations without becoming wallpaper after they hit Go. */}

@@ -46,7 +46,7 @@ export function ConnectStep() {
 
   const count = connected.size;
   return (
-    <OnboardingShell currentStep={2} canAdvance={count > 0}>
+    <OnboardingShell currentStep={2} canAdvance={count > 0} allowSkip>
       <Grid connected={connected} />
       <div className="mt-3 flex items-center justify-between text-[12px]">
         <span className="text-muted-foreground">
