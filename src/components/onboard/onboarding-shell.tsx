@@ -95,16 +95,29 @@ export function OnboardingShell({
         throw new Error(`Onboarding got an invalid step (${currentStep}). Refresh and try again.`);
       }
 
+      // Calling the last step writes onboarded_at; if that write fails, the
+      // dashboard middleware will see step<6 + onboarded_at IS NULL and
+      // bounce the user back to /onboard, which then redirects to /welcome.
+      // So we MUST treat a non-ok response as fatal at the last step.
       const nextN = Math.min(TOTAL_STEPS, safeStep + 1);
       const res = await fetch("/api/onboard/step", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ step: nextN }),
       });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        console.warn("[onboard] step advance returned non-ok:", j);
+        throw new Error(
+          body.error ?? `Couldn't save your progress (status ${res.status}).`
+        );
       }
+
+      // router.refresh() forces the server components (including middleware
+      // that reads user_profile) to re-execute with fresh data before
+      // router.push navigates. Without this, the middleware can read a
+      // pre-write snapshot of onboarding_step and bounce us back.
+      router.refresh();
+
       if (isLast) {
         router.push("/");
       } else {
