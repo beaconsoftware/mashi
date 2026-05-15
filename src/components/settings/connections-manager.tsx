@@ -539,11 +539,25 @@ function ApiKeyDialog({
               "Grab a key from app.fireflies.ai → Settings → Developer Settings."
             ) : provider === "linear" ? (
               <>
-                In Linear, switch to the workspace you want to connect → Settings →{" "}
-                <span className="font-medium text-foreground">API</span> →
-                &quot;Personal API keys&quot; → New key with scopes{" "}
+                In Linear, switch to the workspace you want to connect → click
+                your avatar (top-left) →{" "}
+                <span className="font-medium text-foreground">Preferences</span> →{" "}
+                <span className="font-medium text-foreground">Security & access</span> →
+                scroll to <span className="font-medium text-foreground">Personal API keys</span>{" "}
+                → New key with scopes{" "}
                 <span className="font-mono">read, write, issues:create, comments:create</span>.
                 One key per workspace.
+                <br />
+                <br />
+                <span className="text-foreground/70">
+                  Can&apos;t see &quot;Personal API keys&quot;? Your workspace admin has
+                  restricted creation. Ask them to set{" "}
+                  <span className="font-medium text-foreground">
+                    Workspace settings → Security & access → API key creation
+                  </span>{" "}
+                  to <span className="font-mono">All members</span>, or have them
+                  create a key on your behalf.
+                </span>
               </>
             ) : (
               "Paste your API key."
