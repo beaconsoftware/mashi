@@ -129,12 +129,24 @@ Concurrency group cancels stale runs when you push twice quickly.
   (reconcile/consolidate/bundle 120s, onboard cleanup + sync 300s — these
   exceed Vercel's default 10s/60s ceilings)
 
-**One-time Vercel setup**:
-1. `vercel link` from this directory to associate with a project
-2. Set all env vars from `.env.example` in Project Settings → Environment Variables
-   (Production + Preview scopes)
-3. Each PR opens a preview URL automatically
-4. Push to `main` ships to production
+**Status**: Vercel project `beacon-sw/mashi` is linked to this directory.
+Production + Development env vars are populated from `.env.local`. Two
+manual one-time steps remain:
+
+1. **Connect GitHub login to Vercel** — visit
+   [vercel.com/account/login-connections](https://vercel.com/account/login-connections)
+   and add the GitHub connection. Without this, Vercel can't auto-deploy
+   from `sidd-beacon/mashi` pushes. After it's set, run `vercel git connect`
+   from this dir.
+2. **Copy env vars to Preview scope** — Vercel CLI requires an explicit
+   git-branch argument for Preview env, which means scripting it would
+   silo every var to a single branch. Cleaner to use the Dashboard:
+   Project Settings → Environment Variables → for each var, click "Edit"
+   and tick the Preview checkbox.
+
+Daily flow after that:
+- PR opens → preview URL with the Preview env scope
+- Merge to `main` → production deploy
 
 ### Local pre-commit
 There is **no Husky / lint-staged**. The reason: this project lives inside
