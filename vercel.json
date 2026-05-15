@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "regions": ["iad1"],
+  "functions": {
+    "src/app/api/reconcile/route.ts": { "maxDuration": 120 },
+    "src/app/api/consolidate/route.ts": { "maxDuration": 120 },
+    "src/app/api/bundle-meetings/route.ts": { "maxDuration": 120 },
+    "src/app/api/onboard/cleanup/route.ts": { "maxDuration": 300 },
+    "src/app/api/sync/[provider]/[connectionId]/route.ts": { "maxDuration": 300 }
+  }
+}

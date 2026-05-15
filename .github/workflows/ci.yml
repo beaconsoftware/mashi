@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs on the same ref when a new commit lands. Saves CI
+# minutes when you push twice in quick succession.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck + Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+
+      # Reuse the existing project lint script. ESLint runs against the whole
+      # repo; if pre-existing files have lint debt we'll see it here too.
+      # When that becomes noisy, tighten the lint script to "src/**" and gate
+      # only new files via lint-staged on pre-commit.
+      - name: Lint
+        run: pnpm lint
+
+  build:
+    name: Next build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: verify
+
+    # `next build` needs Supabase URL + anon key resolvable at build time
+    # because some pages call createSupabaseBrowserClient at module init.
+    # We pass non-functional placeholders for the build — the build doesn't
+    # actually hit the API, but it imports the helper. Vercel uses the real
+    # secrets at deploy time.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+      SUPABASE_SERVICE_ROLE_KEY: ci-build-placeholder
+      ANTHROPIC_API_KEY: ci-build-placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
