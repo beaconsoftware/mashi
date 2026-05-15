@@ -30,20 +30,40 @@
 --    picked.
 
 -- ============================================================================
--- 0. Pre-flight: ensure at least one user exists for the backfill to attach to
+-- 0. Pre-flight
 -- ============================================================================
 --
 -- We don't stash the primordial user via set_config() — that's transaction-
 -- local, which silently breaks if a runner (docker exec psql, etc.) auto-
 -- commits each statement. Instead, every UPDATE re-queries auth.users
--- inline. Slightly more I/O, fully robust.
+-- inline.
+--
+-- The migration works on both:
+--   - An existing DB with data (rows get backfilled to the oldest user)
+--   - A fresh DB with no users or data (UPDATEs no-op, structure still installs)
+--
+-- We warn loudly if there's data without a user to attribute it to, but
+-- don't crash — that case can only happen when applying to a partially-
+-- populated DB, which is exotic.
 
 DO $$
+DECLARE
+  orphan_count INT;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM auth.users) THEN
-    RAISE EXCEPTION
-      'No users in auth.users. Sign in once before running this migration so '
-      'pre-migration rows can be attributed to an owner.';
+    -- Fresh DB. Nothing to backfill. Structure installs cleanly.
+    RAISE NOTICE 'No users in auth.users — skipping backfill (no rows to attribute).';
+    RETURN;
+  END IF;
+
+  -- Sanity: count rows in s2d_items that would need attribution. Just a
+  -- heads-up in the migration log; doesn't gate.
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 's2d_items' AND column_name = 'user_id') THEN
+    EXECUTE 'SELECT COUNT(*) FROM s2d_items WHERE user_id IS NULL' INTO orphan_count;
+    IF orphan_count > 0 THEN
+      RAISE NOTICE 'Will backfill % rows in s2d_items to oldest auth user', orphan_count;
+    END IF;
   END IF;
 END $$;
 

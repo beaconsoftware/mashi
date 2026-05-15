@@ -190,6 +190,137 @@ manual-approval GitHub workflow then. For now the friction is intentional.
 
 ---
 
+## Thorough pre-production audit (as of last update)
+
+Walking the entire path from "someone visits the live URL" to "they get a working board":
+
+### ✅ Done
+
+- GitHub repo private at [sidd-beacon/mashi](https://github.com/sidd-beacon/mashi)
+- Vercel project `beacon-sw/mashi` linked, GitHub auto-deploy connected
+- CI runs typecheck + lint + build on every PR + push to main
+- Vercel `vercel.json` configures `maxDuration` per long endpoint
+- Production deploy live (gated by Vercel deployment protection)
+- Production stable alias `mashi-beacon-sw.vercel.app` set as `NEXT_PUBLIC_APP_URL`
+- 15 secrets pushed to Vercel Production + Development scopes
+- Local Supabase fully migrated through 012, 947 s2d_items + 3 companies
+  attributed via RLS, primordial user marked already-onboarded
+- Migration 012 hardened for both autocommit AND fresh-DB cases
+
+### 🟡 Blocker — production has no real database
+
+Production Vercel env points `NEXT_PUBLIC_SUPABASE_URL` at
+`http://127.0.0.1:54321` (your laptop). From Vercel's servers that's
+unreachable. The only reason sign-in even gets to Google is because the
+browser is doing the OAuth dance directly; the actual DB calls fail
+silently as soon as you'd try to do anything.
+
+**Fix path** (one of):
+
+A. **Automated**: run `supabase login` once, then `bash scripts/setup-production.sh`
+   from this dir. Creates hosted project, applies migrations, switches Vercel
+   env, redeploys. ~3 min.
+
+B. **Manual via Dashboard** (10 min):
+   1. supabase.com → New Project → name `mashi`, region `us-east-1`
+   2. SQL Editor → paste each of `supabase/migrations/0{03..12}_*.sql` in order
+   3. SQL Editor → `NOTIFY pgrst, 'reload schema';`
+   4. Project Settings → API → copy URL + anon key + service_role key
+   5. Vercel Dashboard → mashi → Settings → Environment Variables →
+      replace `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+      `SUPABASE_SERVICE_ROLE_KEY` with the hosted values
+   6. `vercel deploy --prod` to rebuild
+
+### 🟡 Blocker — auth redirect goes back to localhost
+
+After Google OAuth completes, Supabase redirects the user to whatever
+its **Site URL** setting says. Local Supabase's `config.toml` has that
+set to `http://localhost:3456` — fine for `pnpm dev`, wrong for
+production. The hosted Supabase will default to `http://localhost:3000`
+when first created.
+
+**Fix** (once hosted project exists):
+- Supabase Dashboard → Authentication → URL Configuration
+  - **Site URL**: `https://mashi-beacon-sw.vercel.app`
+  - **Additional Redirect URLs**: add `https://mashi-beacon-sw.vercel.app/**`
+    plus `https://mashi-*-beacon-sw.vercel.app/**` for preview deploys
+
+### 🟡 Blocker — Google OAuth client missing production callbacks
+
+Your current Google OAuth client has these authorized redirect URIs:
+```
+http://127.0.0.1:54321/auth/v1/callback       (local Supabase)
+http://localhost:3456/api/connect/gmail/callback   (local dev)
+http://localhost:3456/api/connect/gcal/callback    (local dev)
+https://megamind-*  (unrelated — different project, can ignore or delete)
+```
+
+**Missing for Mashi production** — paste into Google Cloud Console →
+Credentials → your OAuth 2.0 Client ID → "Authorized redirect URIs":
+
+```
+https://<hosted-ref>.supabase.co/auth/v1/callback
+https://mashi-beacon-sw.vercel.app/auth/callback
+https://mashi-beacon-sw.vercel.app/api/connect/gmail/callback
+https://mashi-beacon-sw.vercel.app/api/connect/gcal/callback
+```
+
+And under **Authorized JavaScript origins**:
+```
+https://mashi-beacon-sw.vercel.app
+```
+
+Note: Google's allowlist doesn't support wildcards. Preview-deploy URLs
+(`https://mashi-<hash>-beacon-sw.vercel.app`) won't be able to do OAuth.
+Workaround: do sign-in testing only on the stable production URL, or
+manually add a preview alias when needed.
+
+### 🟡 Blocker — Slack + Linear OAuth (only if you use them in prod)
+
+| Provider | Where | Add |
+|---|---|---|
+| Slack | api.slack.com → your app → OAuth & Permissions | `https://mashi-beacon-sw.vercel.app/api/connect/slack/callback` |
+| Linear | linear.app → Settings → API → OAuth Applications | `https://mashi-beacon-sw.vercel.app/api/connect/linear/callback` |
+| Outlook (optional) | Azure AD app → Authentication | `https://mashi-beacon-sw.vercel.app/api/connect/outlook/callback` |
+
+Fireflies uses an API key, not OAuth. No redirect URI needed.
+
+### 🟢 Working, no action needed
+
+- New-user flow (verified end-to-end against local DB on 2026-05-15):
+  signup → allowlist check → auto-profile → redirect to `/onboard`
+- `signup_allowlist` seeded with `beaconsoftware.com`
+- The dashboard guard at `(dashboard)/layout.tsx` correctly redirects
+  un-onboarded users to `/onboard`
+- AI usage attribution wired for triage + chat + copilot
+
+### 🔵 Nice-to-haves for after first colleague signs in
+
+- **Custom domain**: `mashi.beaconsoftware.com` or similar via Vercel →
+  Domains. Means stable URL + you don't depend on the `vercel.app` alias.
+- **Error tracking**: Sentry or similar. Hobby Vercel logs disappear in 24h.
+- **Per-user rate limits**: a malicious or buggy user can blow your
+  Anthropic budget. Defer until you have 3+ users.
+- **Transactional email**: Supabase's built-in email is rate-limited and
+  unreliable. Wire Resend (env var already in `.env.example`) when you
+  need confirmation / password-reset emails.
+- **Webhook-based sync**: currently everything polls. Roadmap.
+
+### Sanity-check checklist after applying production fixes
+
+Before inviting your first colleague, in this order:
+
+1. Visit `https://mashi-beacon-sw.vercel.app` — should hit sign-in page (not 401-Vercel-protection — toggle that off first in Project Settings)
+2. Sign in with your own Google account → should land on `/onboard/welcome`
+   (you'll be a new user in the hosted DB regardless of being primordial on local)
+3. Walk through onboarding to step 6 → cockpit loads, no console errors
+4. In a second browser / incognito, sign in with a different `@beaconsoftware.com` account
+5. Verify in Supabase Dashboard → `s2d_items` shows two distinct `user_id` values
+6. As either user, try to query the other user's `user_id` via the SQL editor
+   with their session token — should return zero rows (RLS isolation working)
+
+---
+
 ## Rollback
 
 The migration is mostly additive. If something goes wrong:
