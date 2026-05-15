@@ -61,16 +61,30 @@ Skipping any of these = "Database error saving new user" surfaced from GoTrue wi
 
 ## Migration patterns
 
-- **Additive only.** Never drop columns; never rewrite history. Use new sequentially-numbered migrations.
-- **Idempotent.** Use `IF NOT EXISTS`, `ON CONFLICT DO NOTHING`, `DROP TRIGGER IF EXISTS`. Migrations may be re-applied.
+- **Additive only.** Never drop columns; never rewrite history. Use new sequentially-numbered migrations. The CI workflow auto-applies on push to `main`, so a destructive migration ships the moment it lands.
+- **Idempotent.** Use `IF NOT EXISTS`, `ON CONFLICT DO NOTHING`, `DROP TRIGGER IF EXISTS`. Migrations may be re-applied (the CI re-runs `supabase db push` on every push, even if no new migrations — it's a no-op when there's nothing new).
 - **Robust to autocommit.** Don't rely on `set_config(..., true)` (transaction-local) — the runner may autocommit each statement. Inline subqueries against `auth.users` if you need a primordial user (`SELECT id FROM auth.users ORDER BY created_at ASC LIMIT 1`).
 - **Works on empty + populated DBs.** Pre-flight checks should be `RAISE NOTICE`, never `EXCEPTION`, unless truly fatal. See `012_multi_tenant_rls.sql` for the pattern.
 
-After applying via Dashboard or `supabase db push`:
-```sql
-NOTIFY pgrst, 'reload schema';
+### How migrations actually deploy
+
 ```
-Otherwise PostgREST won't see new columns/triggers for ~10 min.
+You add 013_foo.sql to supabase/migrations/
+   ↓ git push origin main
+.github/workflows/migrate.yml fires (path filter on supabase/migrations/**)
+   ↓ supabase link --project-ref akpbzaivscqvaoapkdwd
+   ↓ supabase db push  (checks supabase_migrations.schema_migrations,
+                        applies only versions not already recorded)
+   ↓ NOTIFY pgrst, 'reload schema'  (so new columns are queryable right away)
+   ↓
+Vercel deploys the code (gated on this workflow passing, via the
+"Wait for CI" project setting)
+```
+
+The `schema_migrations` table is the source of truth for what's applied where. If you ever need to know whether prod has a specific migration, query it directly.
+
+### Manual override
+You can always still apply by hand: `supabase db push --linked` from this dir, or paste SQL into the Dashboard editor. The CI is the default path; manual works for emergencies or one-offs.
 
 ## Don't touch lightly
 

@@ -230,9 +230,52 @@ pnpm verify   # typecheck + lint
 pnpm build    # full Next.js build (slowest; do before pushing big PRs)
 ```
 
-### Migrations in CI
-Not automated yet — apply manually via `supabase db push` or Dashboard SQL
-editor. When you have ≥3 active users this becomes a real footgun; add a
+### Supabase migrations in CI
+[`.github/workflows/migrate.yml`](.github/workflows/migrate.yml) auto-applies
+Supabase migrations to production on every push to `main` that touches
+`supabase/migrations/**`. Other pushes skip it (no-op).
+
+What it does:
+1. Installs the Supabase CLI (`supabase/setup-cli@v1`)
+2. Links to project `akpbzaivscqvaoapkdwd`
+3. Runs `supabase db push` — idempotent; only applies migration files not
+   already recorded in `supabase_migrations.schema_migrations`
+4. Issues `NOTIFY pgrst, 'reload schema'` so PostgREST picks up new
+   columns/tables immediately (otherwise ~10 min cache lag)
+
+Concurrency group `supabase-migrations-prod` queues runs so two pushes
+can't race. The workflow fails loudly if either secret is missing or a
+migration errors.
+
+**Required GitHub Secrets** at
+[`github.com/sidd-beacon/mashi/settings/secrets/actions`](https://github.com/sidd-beacon/mashi/settings/secrets/actions):
+
+| Name | Value |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | Personal access token from [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens) — name it `mashi-ci`, save the value, paste here |
+| `SUPABASE_DB_PASSWORD` | The DB password from project creation: `07asHiD+xLNFsfKr6ehw3DUjCHAQA/eQ` |
+
+### Vercel: wait for CI before deploying
+After the migration workflow exists, gate Vercel deploys on it so the
+schema is always ready when the code that needs it lands:
+
+1. Vercel Dashboard → `beacon-sw/mashi` → Project Settings → Git
+2. Find **"Wait for CI to Pass before Deploying"** → toggle ON
+3. Vercel will now hold each deploy until both `verify` and `apply` jobs
+   pass on the corresponding commit
+
+Without this toggle, Vercel can ship code that depends on a migration
+before the migration finishes applying. The 500s last ~30 seconds but
+look bad. With the toggle, you get correct ordering for free.
+
+### Migrations: legacy manual path (still works)
+You can always apply migrations by hand via `supabase db push --linked`
+or by pasting SQL into the Dashboard editor. The CI workflow is just
+the convenience layer. The `schema_migrations` table is the source of
+truth; whichever path you use, Supabase tracks what's been applied.
+
+### Older manual notes (kept for reference)
+When you have ≥3 active users this becomes a real footgun; add a
 manual-approval GitHub workflow then. For now the friction is intentional.
 
 ---
