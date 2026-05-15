@@ -353,3 +353,11 @@ DROP TRIGGER IF EXISTS create_user_profile_trigger ON auth.users;
 CREATE TRIGGER create_user_profile_trigger
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION create_user_profile_on_signup();
+
+-- supabase_auth_admin (the role GoTrue uses to insert into auth.users) needs
+-- EXECUTE on these trigger functions or the INSERT fails with "Database
+-- error saving new user". The allowlist function inherited PUBLIC EXECUTE
+-- by default, but freshly-created functions don't always get it. Grant
+-- explicitly to be safe across Supabase environments.
+GRANT EXECUTE ON FUNCTION enforce_signup_allowlist()         TO supabase_auth_admin, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION create_user_profile_on_signup()    TO supabase_auth_admin, anon, authenticated, service_role;
