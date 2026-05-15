@@ -1,11 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+/**
+ * Translate the raw error params Supabase appends to the redirect URL
+ * into something a human can act on. Supabase puts errors in both
+ * the search params AND the URL fragment (e.g. `?error=...&#error=...`),
+ * so we read from both.
+ */
+function parseAuthError(search: URLSearchParams, hash: string): string | null {
+  const fragment = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+  const code = fragment.get("error_code") ?? search.get("error_code") ?? "";
+  const description = fragment.get("error_description") ?? search.get("error_description") ?? "";
+  const error = fragment.get("error") ?? search.get("error") ?? "";
+
+  if (!code && !description && !error) return null;
+
+  // Friendly mapping for the common ones we've actually seen
+  if (description.includes("Database error saving new user")) {
+    return "Supabase couldn't create your account. This is usually a server-side trigger failure — ping Sidd.";
+  }
+  if (description.toLowerCase().includes("not on the signup allowlist")) {
+    return "Your email domain isn't on the allowlist yet. Ask Sidd to add it.";
+  }
+  if (code === "access_denied" || error === "access_denied") {
+    return "Sign-in was cancelled. Try again whenever.";
+  }
+  if (error === "missing_code") {
+    return "OAuth handshake didn't complete. Try signing in again.";
+  }
+  // Fallback — show the description if Supabase gave one, otherwise the code
+  return description.replace(/\+/g, " ") || code || error;
+}
 
 export function SignInForm() {
   const search = useSearchParams();
@@ -13,6 +44,17 @@ export function SignInForm() {
 
   const [signing, setSigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Pick up errors that Supabase / our /auth/callback handler appended
+  // to the URL on a failed sign-in round-trip.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const msg = parseAuthError(
+      new URLSearchParams(window.location.search),
+      window.location.hash
+    );
+    if (msg) setError(msg);
+  }, []);
 
   async function signInWithGoogle() {
     setSigning(true);
