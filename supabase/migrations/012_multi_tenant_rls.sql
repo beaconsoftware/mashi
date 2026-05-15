@@ -310,12 +310,17 @@ CREATE OR REPLACE FUNCTION enforce_signup_allowlist()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
+-- Pin search_path: supabase_auth_admin's session doesn't include `public`,
+-- so unqualified table refs fail with "relation does not exist" and GoTrue
+-- surfaces that as "Database error saving new user". Pinning + qualifying
+-- the schema makes the function safe regardless of caller search_path.
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   email_domain TEXT;
 BEGIN
   email_domain := split_part(NEW.email, '@', 2);
-  IF NOT EXISTS (SELECT 1 FROM signup_allowlist WHERE domain = email_domain) THEN
+  IF NOT EXISTS (SELECT 1 FROM public.signup_allowlist WHERE domain = email_domain) THEN
     RAISE EXCEPTION 'Email domain "%" is not on the signup allowlist. Contact an admin.', email_domain;
   END IF;
   RETURN NEW;
