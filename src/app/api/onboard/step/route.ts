@@ -42,20 +42,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, step: current });
   }
 
-  const patch: Record<string, unknown> = { onboarding_step: step };
+  // UPSERT not UPDATE: if the create_user_profile_on_signup trigger
+  // failed (search_path bug, transient DB error, whatever) the user has
+  // an auth.users row but no user_profile row. A plain UPDATE WHERE
+  // user_id = X then matches 0 rows, silently returns ok=true, and
+  // every click in the wizard "succeeds" without actually persisting —
+  // the user gets stuck in a redirect loop because the middleware
+  // keeps seeing step=0. Upserting is self-healing.
+  const upsertRow: Record<string, unknown> = {
+    user_id: user.id,
+    email: user.email,
+    onboarding_step: step,
+  };
   if (step >= TOTAL_STEPS) {
-    patch.onboarded_at = new Date().toISOString();
+    upsertRow.onboarded_at = new Date().toISOString();
   }
 
-  const { error } = await supabase
+  const { data: written, error } = await supabase
     .from("user_profile")
-    .update(patch)
-    .eq("user_id", user.id);
+    .upsert(upsertRow, { onConflict: "user_id" })
+    .select("onboarding_step, onboarded_at")
+    .single();
+
   if (error) {
     if (isMissingColumn(error.message)) {
       return NextResponse.json({ ok: true, step, warning: "migration_pending" });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Defensive: if the write didn't actually land what we asked for,
+  // surface it so the wizard doesn't silently navigate forward.
+  if (written?.onboarding_step !== step) {
+    return NextResponse.json(
+      {
+        error: `onboarding_step write didn't land: expected ${step}, got ${written?.onboarding_step}`,
+      },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ ok: true, step });
