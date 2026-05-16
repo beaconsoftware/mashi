@@ -3,11 +3,15 @@ name: Apply Supabase migrations
 on:
   push:
     branches: [main]
-    # Only run when migration files (or this workflow) actually change.
-    # Other code-only pushes skip this entirely.
-    paths:
-      - "supabase/migrations/**"
-      - ".github/workflows/migrate.yml"
+  # Manual trigger so you can re-run from the Actions UI if something goes
+  # sideways (e.g. a transient Supabase outage during the first attempt).
+  workflow_dispatch:
+  # NOTE: this workflow used to filter by `paths: supabase/migrations/**`
+  # to skip code-only pushes. We removed that filter because Vercel
+  # Deployment Checks require the check to ALWAYS report a status —
+  # a skipped workflow never reports, so Vercel would wait forever and
+  # never promote. `supabase db push` is idempotent; when there are no
+  # new migrations it costs ~5 seconds.
 
 # Don't run two migration jobs in parallel against the same DB. Queue
 # them, with the latest superseding any in-progress run.
