@@ -69,3 +69,18 @@ jobs:
         run: |
           echo "::notice::Migrations applied to project $PROJECT_REF"
           echo "::notice::Schema cache reloaded"
+
+      # Tell Vercel this check passed (or failed) so its Deployment Checks
+      # gate can hold the production alias until migrations land. The
+      # `name` here MUST match exactly what you typed into Vercel's
+      # Project Settings → Build & Deployment → Deployment Checks →
+      # "Send workflow updates to Vercel → Check Name".
+      #
+      # `if: always()` ensures we report success OR failure — without it,
+      # a failed migration would never notify Vercel and the deploy
+      # would sit forever waiting for a status that never comes.
+      - name: Notify Vercel (deployment check)
+        if: always()
+        uses: vercel/repository-dispatch/actions/status@v1
+        with:
+          name: "Vercel - mashi: migrations"
