@@ -13,6 +13,13 @@ on:
   # never promote. `supabase db push` is idempotent; when there are no
   # new migrations it costs ~5 seconds.
 
+# The vercel/repository-dispatch action calls the GitHub API to read
+# this workflow's job status, so it needs `actions: read`. Default
+# GITHUB_TOKEN perms on push events don't include it.
+permissions:
+  contents: read
+  actions: read
+
 # Don't run two migration jobs in parallel against the same DB. Queue
 # them, with the latest superseding any in-progress run.
 concurrency:
