@@ -34,7 +34,11 @@ export async function middleware(req: NextRequest) {
   const isPublic =
     pathname.startsWith("/auth") ||
     pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico";
+    pathname === "/favicon.ico" ||
+    // MCP routes authenticate via Bearer token (mashi_api_tokens), not
+    // via Supabase session. Skip the session gate so the DXT can call
+    // them without an OAuth cookie.
+    pathname.startsWith("/api/mcp");
 
   if (!user && !isPublic) {
     const url = req.nextUrl.clone();
