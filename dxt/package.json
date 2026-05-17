@@ -1,11 +1,11 @@
 {
   "name": "mashi-dxt",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "bundle": "pnpm build && cd .. && rm -f mashi.dxt && (cd dxt && zip -r ../mashi.dxt manifest.json dist icon.png 2>/dev/null || zip -r ../mashi.dxt manifest.json dist)"
+    "bundle": "pnpm build && node bundle.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"

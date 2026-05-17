@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "mashi",
   "display_name": "Mashi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read your unified work data — board, meetings, messages, Linear, calendar — across every connected source.",
   "long_description": "Mashi is a personal chief-of-staff system that pulls Gmail, Slack, Linear, Fireflies, and Google Calendar into one place. This extension exposes that unified surface as MCP tools so Claude can answer 'what do we know about X' with one tool call instead of hitting five distributed MCPs and trying to reconcile the results. Tools are read-only and scoped to your own data via a personal API token.",
   "author": {
