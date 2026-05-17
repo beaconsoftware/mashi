@@ -295,5 +295,19 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 });
 
+// Surface any fatal error to stderr so Claude Desktop's MCP log shows
+// the reason instead of just "Server transport closed unexpectedly".
+process.on("uncaughtException", (err) => {
+  console.error("[mashi-dxt] uncaughtException:", err);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("[mashi-dxt] unhandledRejection:", err);
+});
+
 const transport = new StdioServerTransport();
-await server.connect(transport);
+try {
+  await server.connect(transport);
+} catch (err) {
+  console.error("[mashi-dxt] connect failed:", err);
+  process.exit(1);
+}
