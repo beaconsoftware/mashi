@@ -19,6 +19,10 @@ on:
 permissions:
   contents: read
   actions: read
+  # vercel/repository-dispatch posts a commit status (POST
+  # /repos/{owner}/{repo}/statuses/{sha}) so Vercel Deployment Checks
+  # can see the pass/fail. Needs statuses:write.
+  statuses: write
 
 # Don't run two migration jobs in parallel against the same DB. Queue
 # them, with the latest superseding any in-progress run.
