@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // DXT has its own tsconfig + node_modules; root lint shouldn't touch it.
+    "dxt/**",
   ]),
   // React Compiler ESLint plugin rules are strict and several pre-existing
   // files in the codebase violate them (sprint planner, review-deck,
