@@ -1,0 +1,65 @@
+{
+  "dxt_version": "0.1",
+  "name": "mashi",
+  "display_name": "Mashi",
+  "version": "0.1.0",
+  "description": "Read your unified work data — board, meetings, messages, Linear, calendar — across every connected source.",
+  "long_description": "Mashi is a personal chief-of-staff system that pulls Gmail, Slack, Linear, Fireflies, and Google Calendar into one place. This extension exposes that unified surface as MCP tools so Claude can answer 'what do we know about X' with one tool call instead of hitting five distributed MCPs and trying to reconcile the results. Tools are read-only and scoped to your own data via a personal API token.",
+  "author": {
+    "name": "Sidd Sengupta",
+    "email": "sidd.sengupta@beaconsoftware.com"
+  },
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/server.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/server.js"],
+      "env": {
+        "MASHI_API_TOKEN": "${user_config.mashi_api_token}",
+        "MASHI_BASE_URL": "${user_config.mashi_base_url}"
+      }
+    }
+  },
+  "user_config": {
+    "mashi_api_token": {
+      "type": "string",
+      "title": "Mashi API token",
+      "description": "Generate one at https://mashi-beacon-sw.vercel.app/settings/api-tokens",
+      "sensitive": true,
+      "required": true
+    },
+    "mashi_base_url": {
+      "type": "string",
+      "title": "Mashi base URL",
+      "description": "Defaults to the hosted Mashi. Override only for local dev (http://localhost:3456).",
+      "default": "https://mashi-beacon-sw.vercel.app",
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "whoami", "description": "Who is currently signed in, what's connected, summary counts." },
+    { "name": "list_today", "description": "Today's calendar + urgent + sprint items + items resurfacing from snooze." },
+    { "name": "list_companies", "description": "Your portfolio companies." },
+    { "name": "search_board", "description": "Search S2D items by query, pathway, priority, status, company." },
+    { "name": "search_meetings", "description": "Search Fireflies meetings by query, company, or date." },
+    { "name": "search_messages", "description": "Search Gmail + Slack messages by query, sender, source, date." },
+    { "name": "search_linear", "description": "Search Linear issues by query, status, priority, assignee, company." },
+    { "name": "search_everything", "description": "One-shot search across board, meetings, messages, Linear." },
+    { "name": "get_item", "description": "Full S2D item by id or ticket number (MASH-N)." },
+    { "name": "get_meeting", "description": "Meeting + extracted action items." },
+    { "name": "get_message_thread", "description": "Every message in a Gmail thread or Slack conversation." },
+    { "name": "get_linear_issue", "description": "Linear issue by id, external_id, or URL." },
+    { "name": "get_calendar_event", "description": "Calendar event by id or external_id." },
+    { "name": "who_is", "description": "Cross-source lookup for a person by name or email — gathers meetings, messages, Linear assignments, S2D mentions." },
+    { "name": "context_for_item", "description": "Full source-side context for an S2D item — every linked Gmail thread, Slack convo, Linear issue, Fireflies meeting." }
+  ],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "linux", "win32"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

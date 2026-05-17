@@ -14,6 +14,7 @@ import {
   Mic,
   Plug,
   Activity,
+  KeyRound,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -133,6 +134,17 @@ export function Sidebar() {
               <span>Usage</span>
               <span className="font-mono text-[10px] text-muted-foreground">$</span>
             </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href="/settings/api-tokens"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <KeyRound className="h-4 w-4" />
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">API Tokens</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
