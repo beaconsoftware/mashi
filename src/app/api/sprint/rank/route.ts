@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
 
@@ -15,17 +18,28 @@ export const dynamic = "force-dynamic";
  * on-demand only — not auto-fired on planner entry.
  */
 export async function POST(req: NextRequest) {
+  // Require auth — previously this route was open, meaning anyone with a
+  // guessed UUID could read s2d_items rows via service-role.
+  const userSb = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await userSb.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
   const { s2dItemIds } = (await req.json()) as { s2dItemIds?: string[] };
   if (!Array.isArray(s2dItemIds) || s2dItemIds.length < 2) {
     return NextResponse.json({ orderedIds: s2dItemIds ?? [] });
   }
 
+  // Service-role bypasses RLS, so scope by user.id explicitly. Any id in
+  // the request that doesn't belong to the caller is silently dropped.
   const supabase = createSupabaseServiceClient();
   const { data: items } = await supabase
     .from("s2d_items")
     .select(
       "id, ticket_number, title, description, pathway, priority, est_minutes, queue_reason, source_label"
     )
+    .eq("user_id", user.id)
     .in("id", s2dItemIds);
   if (!items || items.length === 0) {
     return NextResponse.json({ orderedIds: s2dItemIds });
@@ -47,7 +61,7 @@ Output strict JSON, no fences, no preamble:
 
 The output must contain EXACTLY the same ids as the input, just reordered. Don't add, drop, or invent.`;
 
-  const user = `Items to sequence:
+  const userMsg = `Items to sequence:
 ${items
   .map(
     (i) =>
@@ -66,7 +80,7 @@ Return JSON.`;
       {
         model: MODELS.secondary,
         system,
-        messages: [{ role: "user", content: user }],
+        messages: [{ role: "user", content: userMsg }],
         max_tokens: 800,
       },
       "sprint_rank"

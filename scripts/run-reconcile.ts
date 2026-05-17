@@ -19,9 +19,14 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
 }
 
 async function main() {
+  const userId = process.argv[2];
+  if (!userId) {
+    console.error("usage: tsx scripts/run-reconcile.ts <user-id>");
+    process.exit(2);
+  }
   const { reconcileAllStatuses } = await import("../src/lib/triage/reconcile");
-  console.log("Running reconcile…");
-  const r = await reconcileAllStatuses();
+  console.log("Running reconcile for", userId);
+  const r = await reconcileAllStatuses(userId);
   console.log(JSON.stringify(r, null, 2));
 }
 

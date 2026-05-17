@@ -49,22 +49,26 @@ export async function POST(req: NextRequest) {
   // Service client for cross-table writes
   const sb = createSupabaseServiceClient();
 
-  // Fetch the items we're scheduling so we can build event titles + descriptions
+  // Fetch the items we're scheduling — scoped to this user via service-role
+  // (service-role bypasses RLS; without the user_id filter, anyone with
+  // guessed UUIDs could schedule events for another tenant's items).
   const ids = body.blocks.map((b) => b.s2dItemId);
   const { data: items } = await sb
     .from("s2d_items")
     .select("id, ticket_number, title, pathway, priority, description")
+    .eq("user_id", user.id)
     .in("id", ids);
   const itemMap = new Map((items ?? []).map((i) => [i.id, i]));
 
   const origin = req.nextUrl.origin;
 
-  // Resolve calendar provider (if any)
+  // Resolve calendar provider — also user-scoped
   let provider: "gcal" | "mscal" | null = null;
   if (body.createCalendarEvents && body.calendarAccountId) {
     const { data: acct } = await sb
       .from("connected_accounts")
       .select("provider")
+      .eq("user_id", user.id)
       .eq("id", body.calendarAccountId)
       .single();
     if (acct?.provider === "gcal" || acct?.provider === "mscal") {
@@ -88,7 +92,9 @@ export async function POST(req: NextRequest) {
     const start = new Date(b.startAt);
     const end = new Date(start.getTime() + b.durationMin * 60_000);
 
-    // Stamp the sprint window on the item
+    // Stamp the sprint window on the item (still scoped by user_id even
+    // though item.id only resolves to this user's rows above — defense in
+    // depth in case the loop is ever fed external ids).
     await sb
       .from("s2d_items")
       .update({
@@ -97,6 +103,7 @@ export async function POST(req: NextRequest) {
         sprint_date: start.toISOString().slice(0, 10),
         sprint_calendar_account_id: provider ? body.calendarAccountId : null,
       })
+      .eq("user_id", user.id)
       .eq("id", item.id);
 
     if (!provider || !body.calendarAccountId) {
@@ -123,6 +130,7 @@ export async function POST(req: NextRequest) {
       await sb
         .from("s2d_items")
         .update({ sprint_calendar_event_id: eventId })
+        .eq("user_id", user.id)
         .eq("id", item.id);
       events.push({ s2dItemId: item.id, calendarEventId: eventId });
     } catch (err) {

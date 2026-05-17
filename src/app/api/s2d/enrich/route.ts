@@ -63,14 +63,16 @@ export async function POST(req: NextRequest) {
 
   const sb = createSupabaseServiceClient();
 
-  // 1. Local search — pull every signal that mentions the placeholder
-  const local = await searchLocal(sb, placeholder, body.companyId ?? null);
+  // Every query below is scoped to user.id — service-role bypasses RLS,
+  // so without this filter the local-context search could pull rows from
+  // another tenant's meetings/messages/linear_issues and bleed them into
+  // the enrichment prompt.
+  const local = await searchLocal(sb, placeholder, body.companyId ?? null, user.id);
 
-  // 2. If thin (< 3 hits), supplement with a live Fireflies search
   let liveHits: EnrichedDraft["context_used"] = [];
   if (local.length < 3) {
     try {
-      liveHits = await searchLiveFireflies(sb, placeholder);
+      liveHits = await searchLiveFireflies(sb, placeholder, user.id);
     } catch (err) {
       console.warn("[enrich] live fireflies search failed:", err);
     }
@@ -89,18 +91,19 @@ type SB = ReturnType<typeof createSupabaseServiceClient>;
 async function searchLocal(
   sb: SB,
   placeholder: string,
-  companyId: string | null
+  companyId: string | null,
+  userId: string
 ): Promise<EnrichedDraft["context_used"]> {
   const q = placeholder.toLowerCase();
-  // Postgres ilike — naive but effective for keyword overlap
   const pattern = `%${q.replace(/[%_]/g, "")}%`;
 
   const out: EnrichedDraft["context_used"] = [];
 
-  // Fireflies meetings (summary + title)
+  // Fireflies meetings — user-scoped
   let meetings = sb
     .from("meetings")
     .select("title, date, summary")
+    .eq("user_id", userId)
     .or(`title.ilike.${pattern},summary.ilike.${pattern}`)
     .order("date", { ascending: false })
     .limit(4);
@@ -115,10 +118,11 @@ async function searchLocal(
     });
   }
 
-  // Linear issues
+  // Linear issues — user-scoped
   let issues = sb
     .from("linear_issues")
     .select("title, description, status, updated_at")
+    .eq("user_id", userId)
     .or(`title.ilike.${pattern},description.ilike.${pattern}`)
     .order("updated_at", { ascending: false })
     .limit(3);
@@ -133,10 +137,11 @@ async function searchLocal(
     });
   }
 
-  // Messages (gmail + slack)
+  // Messages (gmail + slack) — user-scoped
   let msgs = sb
     .from("messages")
     .select("source, subject, sender_name, full_content, preview, received_at")
+    .eq("user_id", userId)
     .or(`subject.ilike.${pattern},full_content.ilike.${pattern},preview.ilike.${pattern}`)
     .order("received_at", { ascending: false })
     .limit(4);
@@ -158,11 +163,13 @@ const FF_GRAPHQL = "https://api.fireflies.ai/graphql";
 
 async function searchLiveFireflies(
   sb: SB,
-  query: string
+  query: string,
+  userId: string
 ): Promise<EnrichedDraft["context_used"]> {
   const { data: ff } = await sb
     .from("connected_accounts")
     .select("id")
+    .eq("user_id", userId)
     .eq("provider", "fireflies")
     .limit(1)
     .maybeSingle();

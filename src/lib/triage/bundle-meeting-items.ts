@@ -30,7 +30,7 @@ interface Row {
  * canonical row. The bar for bundling here is much lower than the general
  * consolidate — same meeting + same project/initiative = bundle.
  */
-export async function bundleSameMeetingActionItems(): Promise<{
+export async function bundleSameMeetingActionItems(userId: string): Promise<{
   meetingsScanned: number;
   bundlesCreated: number;
   itemsMerged: number;
@@ -41,12 +41,16 @@ export async function bundleSameMeetingActionItems(): Promise<{
   let bundlesCreated = 0;
   let itemsMerged = 0;
 
-  // Pull all open Fireflies items grouped by source thread (= meeting external_id)
+  // Pull THIS USER's open Fireflies items only. Without user_id scoping,
+  // two users with overlapping Fireflies meetings (same external_id from
+  // a shared workspace) would have their action items bundled into one
+  // cross-tenant canonical row.
   const { data: items } = await supabase
     .from("s2d_items")
     .select(
       "id, title, description, source_thread_id, pathway, priority, company_id, linked_sources"
     )
+    .eq("user_id", userId)
     .eq("source_type", "fireflies")
     .neq("status", "done")
     .not("source_thread_id", "is", null);
@@ -70,7 +74,7 @@ export async function bundleSameMeetingActionItems(): Promise<{
       const bundles = await askToBundle(meetingId, group);
       for (const bundle of bundles) {
         if (bundle.itemIds.length < 2) continue;
-        await applyBundle(supabase, group, bundle);
+        await applyBundle(supabase, group, bundle, userId);
         bundlesCreated++;
         itemsMerged += bundle.itemIds.length - 1; // -1 because canonical stays open
         details.push(
@@ -194,7 +198,8 @@ type SB = ReturnType<typeof createSupabaseServiceClient>;
 async function applyBundle(
   supabase: SB,
   groupItems: Row[],
-  bundle: BundleProposal
+  bundle: BundleProposal,
+  userId: string
 ): Promise<void> {
   const itemsInBundle = groupItems.filter((g) => bundle.itemIds.includes(g.id));
   if (itemsInBundle.length < 2) return;
@@ -239,6 +244,7 @@ async function applyBundle(
       last_update_summary: `Bundled ${dupes.length} related item${dupes.length === 1 ? "" : "s"} into this one`,
       last_update_at: new Date().toISOString(),
     })
+    .eq("user_id", userId)
     .eq("id", canonical.id);
 
   for (const d of dupes) {
@@ -250,6 +256,7 @@ async function applyBundle(
         outcome: `Bundled into "${bundle.canonicalTitle.slice(0, 100)}" (same-meeting initiative)`,
         resolved_via: "auto_detected",
       })
+      .eq("user_id", userId)
       .eq("id", d.id);
   }
 }

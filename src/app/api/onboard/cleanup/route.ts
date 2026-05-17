@@ -50,7 +50,7 @@ export async function POST() {
 
   let result;
   try {
-    result = await reconcileAllStatuses();
+    result = await reconcileAllStatuses(user.id);
   } catch (err) {
     return NextResponse.json(
       {

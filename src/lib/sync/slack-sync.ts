@@ -207,7 +207,7 @@ export async function syncSlackConnection(connectionId: string): Promise<{
     // Auto-close items where the user has replied in the conversation
     let autoClosed = 0;
     try {
-      const r = await reconcileMessageReplies("slack");
+      const r = await reconcileMessageReplies("slack", conn.user_id);
       autoClosed = r.closed;
     } catch (err) {
       console.warn("[slack-sync] reconcile failed:", err);

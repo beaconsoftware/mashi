@@ -59,15 +59,18 @@ function outcomeForSilence(pathway: string, days: number): string {
 
 const LINEAR_GRAPHQL = "https://api.linear.app/graphql";
 
-export async function reconcileLinearStatuses(): Promise<ReconcileResult> {
+export async function reconcileLinearStatuses(userId: string): Promise<ReconcileResult> {
   const supabase = createSupabaseServiceClient();
   const details: string[] = [];
   const closedIds: string[] = [];
 
-  // Open S2D items sourced from Linear
+  // Open S2D items sourced from Linear — scoped to this user. Service-role
+  // bypasses RLS; without the user_id filter we'd close/modify other
+  // tenants' Linear-sourced items.
   const { data: items } = await supabase
     .from("s2d_items")
     .select("id, title, source_thread_id")
+    .eq("user_id", userId)
     .eq("source_type", "linear")
     .neq("status", "done");
 
@@ -114,6 +117,7 @@ export async function reconcileLinearStatuses(): Promise<ReconcileResult> {
               outcome: `Resolved in Linear: ${state.name}`,
               resolved_via: "auto_detected",
             })
+            .eq("user_id", userId)
             .eq("id", g.id);
           details.push(`${g.title} → ${state.name}`);
           closedIds.push(g.id);
@@ -134,6 +138,7 @@ export async function reconcileLinearStatuses(): Promise<ReconcileResult> {
               outcome: `Auto-closed: Linear issue stale ${Math.round(ageMs / 86_400_000)} days (${state.name})`,
               resolved_via: "auto_detected",
             })
+            .eq("user_id", userId)
             .eq("id", g.id);
           details.push(`${g.title} → stale ${Math.round(ageMs / 86_400_000)}d`);
           closedIds.push(g.id);
@@ -203,26 +208,27 @@ async function fetchLinearIssueStates(
 
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
 
-export async function reconcileGmailReplies(): Promise<ReconcileResult> {
+export async function reconcileGmailReplies(userId: string): Promise<ReconcileResult> {
   const supabase = createSupabaseServiceClient();
   const details: string[] = [];
   const closedIds: string[] = [];
 
-  // All open Gmail items. Different pathways get different silence cutoffs
-  // (see SILENCE_CUTOFFS below).
+  // All of THIS USER's open Gmail items. Without the user_id filter,
+  // we'd reach across tenants and close another user's items.
   const { data: items } = await supabase
     .from("s2d_items")
     .select("id, title, source_thread_id, pathway, created_at")
+    .eq("user_id", userId)
     .eq("source_type", "gmail")
     .neq("status", "done");
   if (!items || items.length === 0)
     return { source: "gmail", closed: 0, closedIds: [], details: [] };
 
-  // Map thread → connection via a sample message in that thread
   const threadIds = items.map((i) => i.source_thread_id).filter((s): s is string => !!s);
   const { data: msgs } = await supabase
     .from("messages")
     .select("thread_id, connected_account_id")
+    .eq("user_id", userId)
     .eq("source", "gmail")
     .in("thread_id", threadIds);
   const connByThread = new Map<string, string>();
@@ -237,6 +243,7 @@ export async function reconcileGmailReplies(): Promise<ReconcileResult> {
   const { data: accts } = await supabase
     .from("connected_accounts")
     .select("id, account_email")
+    .eq("user_id", userId)
     .in("id", accountIds);
   const emailByConn = new Map<string, string>();
   for (const a of accts ?? []) {
@@ -279,6 +286,7 @@ export async function reconcileGmailReplies(): Promise<ReconcileResult> {
               outcome: "Auto-closed: you replied in the Gmail thread",
               resolved_via: "auto_detected",
             })
+            .eq("user_id", userId)
             .eq("id", it.id);
           details.push(`${it.title} → you replied`);
           closedIds.push(it.id);
@@ -301,6 +309,7 @@ export async function reconcileGmailReplies(): Promise<ReconcileResult> {
               outcome: outcomeForSilence(it.pathway, days),
               resolved_via: "auto_detected",
             })
+            .eq("user_id", userId)
             .eq("id", it.id);
           details.push(`${it.title} → quiet ${days}d (${it.pathway})`);
           closedIds.push(it.id);
@@ -353,28 +362,26 @@ async function fetchGmailThreadLatest(
 
 const SLACK_API = "https://slack.com/api";
 
-export async function reconcileSlackReplies(): Promise<ReconcileResult> {
+export async function reconcileSlackReplies(userId: string): Promise<ReconcileResult> {
   const supabase = createSupabaseServiceClient();
   const details: string[] = [];
   const closedIds: string[] = [];
 
-  // All open Slack items — silence cutoff varies by pathway (see
-  // silenceCutoffMs in this file).
+  // All of THIS USER's open Slack items.
   const { data: items } = await supabase
     .from("s2d_items")
     .select("id, title, source_thread_id, pathway, created_at")
+    .eq("user_id", userId)
     .eq("source_type", "slack")
     .neq("status", "done");
   if (!items || items.length === 0)
     return { source: "slack", closed: 0, closedIds: [], details: [] };
 
-  // Each Slack S2D's source_thread_id is `<conv_id>:<YYYY-MM-DD>`. We need to
-  // know which Slack workspace (connection) it belongs to.
-  // Lookup: a sample message in messages table with thread_id pointing at any ts on this slice.
-  // Simpler: pick the first Slack connection. Multi-workspace dev case is rare.
+  // This user's Slack connections only.
   const { data: slackConns } = await supabase
     .from("connected_accounts")
     .select("id, account_email")
+    .eq("user_id", userId)
     .eq("provider", "slack");
   if (!slackConns || slackConns.length === 0) {
     return { source: "slack", closed: 0, closedIds: [], details: [] };
@@ -430,6 +437,7 @@ export async function reconcileSlackReplies(): Promise<ReconcileResult> {
               outcome: "Auto-closed: you replied in the Slack conversation",
               resolved_via: "auto_detected",
             })
+            .eq("user_id", userId)
             .eq("id", it.id);
           details.push(`${it.title} → you replied`);
           closedIds.push(it.id);
@@ -448,6 +456,7 @@ export async function reconcileSlackReplies(): Promise<ReconcileResult> {
               outcome: outcomeForSilence(it.pathway, days),
               resolved_via: "auto_detected",
             })
+            .eq("user_id", userId)
             .eq("id", it.id);
           details.push(`${it.title} → quiet ${days}d (${it.pathway})`);
           closedIds.push(it.id);
@@ -467,52 +476,47 @@ export async function reconcileSlackReplies(): Promise<ReconcileResult> {
  * Backwards-compat wrapper so existing imports in sync routes keep working.
  */
 export async function reconcileMessageReplies(
-  source: "gmail" | "slack"
+  source: "gmail" | "slack",
+  userId: string
 ): Promise<ReconcileResult> {
-  return source === "gmail" ? reconcileGmailReplies() : reconcileSlackReplies();
+  return source === "gmail" ? reconcileGmailReplies(userId) : reconcileSlackReplies(userId);
 }
 
 // ============================================================================
-// Run all
+// Run all (per user)
 // ============================================================================
 
-export async function reconcileAllStatuses(): Promise<{
+export async function reconcileAllStatuses(userId: string): Promise<{
   total: number;
   byProvider: ReconcileResult[];
   fireflies: number;
   stale: number;
   cascaded: number;
 }> {
-  // Source-level signals first (cheap external API checks)
-  const linear = await reconcileLinearStatuses();
-  const gmail = await reconcileGmailReplies();
-  const slack = await reconcileSlackReplies();
+  // Every step is scoped to userId. Service-role bypasses RLS; without
+  // scoping, this pass would touch every tenant's items.
+  const linear = await reconcileLinearStatuses(userId);
+  const gmail = await reconcileGmailReplies(userId);
+  const slack = await reconcileSlackReplies(userId);
 
-  // Fireflies: close action items from meetings 30+ days old.
-  // Rationale: an action item from a month ago has either been done elsewhere
-  // (Linear ticket, Gmail thread, follow-up meeting) or quietly dropped.
-  // Leaving it on the board is just noise.
   let fireflies = { closed: 0, closedIds: [] as string[] };
   try {
-    fireflies = await reconcileFirefliesByMeetingAge(30);
+    fireflies = await reconcileFirefliesByMeetingAge(30, userId);
   } catch (err) {
     console.warn("[reconcile] fireflies age check failed:", err);
   }
 
-  // AI common-sense pass: closes items whose own content shows the work is past
-  // (past dinner dates, past board meetings, "Friday" that already happened).
   let staleResult: { closed: number; closedIds: string[]; details: string[] } = {
     closed: 0,
     closedIds: [],
     details: [],
   };
   try {
-    staleResult = await aiStalenessReview();
+    staleResult = await aiStalenessReview(userId);
   } catch (err) {
     console.warn("[reconcile] AI staleness review failed:", err);
   }
 
-  // Cross-source closure propagation across all the just-closed items.
   const allClosedIds = [
     ...linear.closedIds,
     ...gmail.closedIds,
@@ -523,7 +527,7 @@ export async function reconcileAllStatuses(): Promise<{
   let cascaded = 0;
   if (allClosedIds.length > 0) {
     try {
-      const r = await propagateClosures(allClosedIds);
+      const r = await propagateClosures(allClosedIds, userId);
       cascaded = r.cascaded;
     } catch (err) {
       console.warn("[reconcile] propagation failed:", err);
@@ -551,27 +555,28 @@ export async function reconcileAllStatuses(): Promise<{
  * been resolved in some other channel or quietly dropped.
  */
 export async function reconcileFirefliesByMeetingAge(
-  maxAgeDays: number
+  maxAgeDays: number,
+  userId: string
 ): Promise<{ closed: number; closedIds: string[] }> {
   const supabase = createSupabaseServiceClient();
   const cutoffMs = Date.now() - maxAgeDays * 86_400_000;
   const closedIds: string[] = [];
 
-  // Open Fireflies items
   const { data: items } = await supabase
     .from("s2d_items")
     .select("id, title, source_thread_id")
+    .eq("user_id", userId)
     .eq("source_type", "fireflies")
     .neq("status", "done");
   if (!items || items.length === 0) return { closed: 0, closedIds: [] };
 
-  // Map each item's source_thread_id (= meeting external_id) to meeting.date
   const externalIds = items.map((i) => i.source_thread_id).filter((s): s is string => !!s);
   if (externalIds.length === 0) return { closed: 0, closedIds: [] };
 
   const { data: meetings } = await supabase
     .from("meetings")
     .select("external_id, date")
+    .eq("user_id", userId)
     .in("external_id", externalIds);
 
   const dateByExternalId = new Map<string, number>();
@@ -593,6 +598,7 @@ export async function reconcileFirefliesByMeetingAge(
           outcome: `Auto-closed: action item from a ${ageDays}-day-old meeting (presumed handled elsewhere or dropped)`,
           resolved_via: "auto_detected",
         })
+        .eq("user_id", userId)
         .eq("id", it.id);
       if (!error) closedIds.push(it.id);
     }

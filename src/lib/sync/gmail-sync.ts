@@ -202,7 +202,7 @@ export async function syncGmailConnection(connectionId: string): Promise<{
     // Auto-close items where the user has replied in the thread
     let autoClosed = 0;
     try {
-      const r = await reconcileMessageReplies("gmail");
+      const r = await reconcileMessageReplies("gmail", conn.user_id);
       autoClosed = r.closed;
     } catch (err) {
       console.warn("[gmail-sync] reconcile failed:", err);

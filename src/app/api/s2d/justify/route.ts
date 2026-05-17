@@ -36,13 +36,15 @@ export async function POST(req: NextRequest) {
 
   const sb = createSupabaseServiceClient();
 
-  // Only operate on items that ACTUALLY lack a justification — saves
-  // tokens if the deck reopens.
+  // Service-role bypasses RLS, so scope by user.id explicitly. Without
+  // this filter, a malicious caller could pass another user's item ids
+  // and write AI-generated justifications onto their rows.
   const { data: items } = await sb
     .from("s2d_items")
     .select(
       "id, title, description, pathway, priority, status, queue_reason, source_type, source_label"
     )
+    .eq("user_id", user.id)
     .in("id", ids)
     .is("review_justification", null);
 
@@ -104,6 +106,7 @@ Return JSON.`;
       await sb
         .from("s2d_items")
         .update({ review_justification: entry.justification })
+        .eq("user_id", user.id)
         .eq("id", entry.id);
     }
     return NextResponse.json({ ok: true, generated: list.length });

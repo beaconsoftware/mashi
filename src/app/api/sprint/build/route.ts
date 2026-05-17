@@ -37,13 +37,14 @@ export async function POST(req: NextRequest) {
   if (!user) return new Response("unauthorized", { status: 401 });
 
   const sb = createSupabaseServiceClient();
-  // Pull the full open pool — backlog + todo + in_queue. Exclude items
-  // already locked into a future sprint block so we don't double-book.
+  // Pull the full open pool for THIS USER — service-role bypasses RLS,
+  // so we must filter by user.id explicitly.
   const { data: items } = await sb
     .from("s2d_items")
     .select(
       "id, ticket_number, title, description, pathway, priority, status, est_minutes, queue_reason, source_label, company_id, needs_review"
     )
+    .eq("user_id", user.id)
     .neq("status", "done")
     .neq("status", "in_progress")
     .eq("needs_review", false)
@@ -53,8 +54,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ orderedIds: [], rationale: "No open items to plan from." });
   }
 
-  // Companies for context
-  const { data: companies } = await sb.from("companies").select("id, name");
+  // Companies for context — also user-scoped
+  const { data: companies } = await sb
+    .from("companies")
+    .select("id, name")
+    .eq("user_id", user.id);
   const companyById = new Map((companies ?? []).map((c) => [c.id, c.name]));
 
   const today = new Date().toISOString().slice(0, 10);

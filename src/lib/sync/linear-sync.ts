@@ -181,7 +181,7 @@ export async function syncLinearConnection(connectionId: string): Promise<{
     // Auto-close S2D items whose Linear issue is now completed/cancelled
     let autoClosed = 0;
     try {
-      const r = await reconcileLinearStatuses();
+      const r = await reconcileLinearStatuses(conn.user_id);
       autoClosed = r.closed;
     } catch (err) {
       console.warn("[linear-sync] reconcile failed:", err);

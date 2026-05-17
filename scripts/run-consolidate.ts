@@ -11,9 +11,14 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
 }
 
 async function main() {
+  const userId = process.argv[2];
+  if (!userId) {
+    console.error("usage: tsx scripts/run-consolidate.ts <user-id>");
+    process.exit(2);
+  }
   const { consolidateDuplicates } = await import("../src/lib/triage/consolidate");
-  console.log("Running consolidate…");
-  const r = await consolidateDuplicates();
+  console.log("Running consolidate for", userId);
+  const r = await consolidateDuplicates(userId);
   console.log(JSON.stringify(r, null, 2));
 }
 

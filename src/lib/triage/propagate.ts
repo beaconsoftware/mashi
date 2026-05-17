@@ -39,7 +39,10 @@ interface OpenItem {
  * SAME work, not just topically adjacent. We'd rather miss a few than
  * close items that still need attention.
  */
-export async function propagateClosures(closedItemIds: string[]): Promise<{
+export async function propagateClosures(
+  closedItemIds: string[],
+  userId: string
+): Promise<{
   cascaded: number;
   details: string[];
 }> {
@@ -47,26 +50,28 @@ export async function propagateClosures(closedItemIds: string[]): Promise<{
 
   const supabase = createSupabaseServiceClient();
 
-  // Fetch the closed items' data
+  // Fetch closed items — service-role bypasses RLS so scope by user_id.
   const { data: closed } = await supabase
     .from("s2d_items")
     .select("id, title, description, source_type, company_id, outcome")
+    .eq("user_id", userId)
     .in("id", closedItemIds);
   if (!closed || closed.length === 0) return { cascaded: 0, details: [] };
 
   const details: string[] = [];
   let cascaded = 0;
-
-  // Avoid double-closing within a single propagation run
   const alreadyCascadedIds = new Set<string>();
 
   for (const c of closed as ClosedItem[]) {
-    if (!c.company_id) continue; // can't find siblings without a company anchor
+    if (!c.company_id) continue;
 
-    // Fetch open items in same company (excluding the closed one itself)
+    // Sibling items in same company AND owned by same user. The user_id
+    // filter is crucial — without it, closing a Sidd item could cascade
+    // to close a Matt item with the same company name.
     const { data: open } = await supabase
       .from("s2d_items")
       .select("id, title, description, source_type, pathway")
+      .eq("user_id", userId)
       .eq("company_id", c.company_id)
       .neq("status", "done")
       .neq("id", c.id)
@@ -94,6 +99,7 @@ export async function propagateClosures(closedItemIds: string[]): Promise<{
           outcome: `Linked closure: "${c.title.slice(0, 100)}"`,
           resolved_via: "auto_detected",
         })
+        .eq("user_id", userId)
         .eq("id", lid);
       if (!error) {
         cascaded++;

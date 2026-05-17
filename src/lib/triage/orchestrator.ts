@@ -374,15 +374,16 @@ async function findSameWorkOpenItem(args: {
 }): Promise<DedupMatch | null> {
   const supabase = createSupabaseServiceClient();
 
-  // Candidate pool: 100 most-recent open items. Scoped to the company when
-  // known; otherwise pulled globally so cross-source signals without a portco
-  // mapping (e.g. a gcal event for someone we haven't tied to a company yet)
-  // can still collapse against the matching gmail/slack item.
+  // Candidate pool: 100 most-recent open items belonging to THIS USER.
+  // Service-role bypasses RLS, so we must filter by user_id explicitly —
+  // otherwise the dedup gate could match (and worse, mutate via
+  // linked_sources or watch-resolved closure) another tenant's row.
   let query = supabase
     .from("s2d_items")
     .select(
       "id, title, description, source_type, source_thread_id, source_label, linked_sources, priority, pathway"
     )
+    .eq("user_id", args.userId)
     .neq("status", "done")
     .order("created_at", { ascending: false })
     .limit(100);

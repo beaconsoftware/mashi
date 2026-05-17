@@ -25,7 +25,7 @@ interface OpenItem {
  *
  * Strict: when the date is ambiguous or no clear time reference, do NOT close.
  */
-export async function aiStalenessReview(): Promise<{
+export async function aiStalenessReview(userId: string): Promise<{
   closed: number;
   closedIds: string[];
   details: string[];
@@ -36,6 +36,7 @@ export async function aiStalenessReview(): Promise<{
     .select(
       "id, title, description, queue_reason, ai_suggestion, source_label, pathway, priority, created_at"
     )
+    .eq("user_id", userId)
     .neq("status", "done")
     .order("created_at", { ascending: false })
     .limit(800);
@@ -63,6 +64,7 @@ export async function aiStalenessReview(): Promise<{
             outcome: `Auto-closed (stale): ${sid.reason}`,
             resolved_via: "auto_detected",
           })
+          .eq("user_id", userId)
           .eq("id", sid.id);
         if (!error) {
           closedIds.push(sid.id);

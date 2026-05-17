@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { reconcileAllStatuses } from "@/lib/triage/reconcile";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,15 +9,18 @@ export const maxDuration = 120;
 /**
  * POST /api/reconcile
  *
- * One-time / on-demand status reconciliation. Closes S2D items whose
- * underlying source has clearly moved on:
- *   - Linear: issue is in a completed/cancelled state type
- *   - Gmail/Slack: the user has replied after the S2D item was created
- *     (non-watching pathways only)
+ * Per-user reconciliation pass — closes the caller's S2D items whose
+ * underlying source has clearly moved on (Linear completed/cancelled,
+ * Gmail/Slack replied, etc).
  */
 export async function POST() {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
   try {
-    const r = await reconcileAllStatuses();
+    const r = await reconcileAllStatuses(user.id);
     return NextResponse.json({ ok: true, ...r });
   } catch (err) {
     return NextResponse.json(

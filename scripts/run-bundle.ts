@@ -10,11 +10,16 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
 }
 
 async function main() {
+  const userId = process.argv[2];
+  if (!userId) {
+    console.error("usage: tsx scripts/run-bundle.ts <user-id>");
+    process.exit(2);
+  }
   const { bundleSameMeetingActionItems } = await import(
     "../src/lib/triage/bundle-meeting-items"
   );
-  console.log("Bundling same-meeting items…");
-  const r = await bundleSameMeetingActionItems();
+  console.log("Bundling same-meeting items for", userId);
+  const r = await bundleSameMeetingActionItems(userId);
   console.log(JSON.stringify(r, null, 2));
 }
 

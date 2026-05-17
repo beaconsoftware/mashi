@@ -29,7 +29,7 @@ interface S2DRow {
  * `done` with outcome="Merged into ${canonical.title}" so the audit trail
  * is preserved.
  */
-export async function consolidateDuplicates(): Promise<{
+export async function consolidateDuplicates(userId: string): Promise<{
   clustersFound: number;
   merged: number;
   details: string[];
@@ -39,9 +39,13 @@ export async function consolidateDuplicates(): Promise<{
   let clustersFound = 0;
   let merged = 0;
 
-  // One pass per company. We deliberately scope to OPEN items only; closed
-  // items already auto-document themselves.
-  const { data: companies } = await supabase.from("companies").select("id, name");
+  // Per-company pass over THIS USER's open items. Without the user_id
+  // filter, two users with the same-named company would have their items
+  // merged into one canonical row across tenants. Catastrophic.
+  const { data: companies } = await supabase
+    .from("companies")
+    .select("id, name")
+    .eq("user_id", userId);
   if (!companies) return { clustersFound: 0, merged: 0, details: [] };
 
   for (const company of companies) {
@@ -50,6 +54,7 @@ export async function consolidateDuplicates(): Promise<{
       .select(
         "id, title, description, source_type, source_id, source_thread_id, source_label, status, pathway, priority, company_id, linked_sources, created_at, updated_at"
       )
+      .eq("user_id", userId)
       .eq("company_id", company.id)
       .neq("status", "done")
       .order("created_at", { ascending: true })
@@ -100,9 +105,9 @@ export async function consolidateDuplicates(): Promise<{
           last_update_summary: `Merged ${dupes.length} duplicate source${dupes.length === 1 ? "" : "s"} into this item`,
           last_update_at: new Date().toISOString(),
         })
+        .eq("user_id", userId)
         .eq("id", canonical.id);
 
-      // Mark duplicates as merged (status=done, outcome explains)
       for (const d of dupes) {
         await supabase
           .from("s2d_items")
@@ -112,6 +117,7 @@ export async function consolidateDuplicates(): Promise<{
             outcome: `Merged into "${canonical.title.slice(0, 100)}"`,
             resolved_via: "auto_detected",
           })
+          .eq("user_id", userId)
           .eq("id", d.id);
         merged++;
       }
