@@ -38,10 +38,13 @@ import { cn } from "@/lib/utils";
  *
  * Three input modes: pointer drag, action buttons, keyboard arrows.
  *
- * The cards are a 3-deep stack: top card is interactive, the two behind
- * peek with slight scale + y offset so the deck reads as having depth.
- * On swipe, the top card flies off; the next card animates forward into
- * the active position with a small overshoot bounce.
+ * Render strategy: one card visible at a time, keyed by item.id so each
+ * new card remounts cleanly. We previously kept a 3-card peek behind
+ * the top card, but the parallel "fly top off" + "animate next forward"
+ * tweens raced against the cursor advance — the next-card tween would
+ * outlive the cursor update and re-grow the wrong item, producing the
+ * "three overlapping cards" rendering bug. Single-card is dumb and
+ * reliable.
  */
 
 interface Props {
@@ -90,12 +93,11 @@ export function ReviewDeck({ items, open, onClose }: Props) {
 
   const remaining = deckRef.current.length - cursor;
   const current = deckRef.current[cursor];
-  const next1 = deckRef.current[cursor + 1];
-  const next2 = deckRef.current[cursor + 2];
 
   const topCardRef = useRef<HTMLDivElement | null>(null);
-  const next1Ref = useRef<HTMLDivElement | null>(null);
-  const next2Ref = useRef<HTMLDivElement | null>(null);
+  // Guard against double-swipes while the top card is still flying off.
+  // If the user spam-clicks Approve, only the first one should land.
+  const swipingRef = useRef(false);
 
   const applySwipe = useCallback(
     async (action: SwipeAction) => {
@@ -144,8 +146,12 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   const flyOff = useCallback(
     (action: SwipeAction, dir: { x: number; y: number }) => {
       if (!topCardRef.current) return;
+      if (swipingRef.current) return; // guard: already animating
+      swipingRef.current = true;
       const card = topCardRef.current;
-      // Compute end position outside the viewport in the swipe direction
+      // Kill any in-flight tween on this card so a fresh fly-off isn't
+      // racing the drag-snap-back or anything else.
+      gsap.killTweensOf(card);
       const vec = normalize(dir);
       const distance = 800;
       const rot = dir.x * 0.08;
@@ -158,17 +164,11 @@ export function ReviewDeck({ items, open, onClose }: Props) {
         ease: EASE.out,
         onComplete: () => {
           applySwipe(action);
+          // Releasing after applySwipe means the next card (which mounts
+          // fresh due to key=current.id) is interactable immediately.
+          swipingRef.current = false;
         },
       });
-      // Animate the next card forward into the active position
-      if (next1Ref.current) {
-        gsap.to(next1Ref.current, {
-          scale: 1,
-          y: 0,
-          duration: DUR.base,
-          ease: EASE.back,
-        });
-      }
     },
     [applySwipe]
   );
@@ -292,22 +292,9 @@ export function ReviewDeck({ items, open, onClose }: Props) {
     { dependencies: [open, cursor] }
   );
 
-  // Reset top card transform when cursor advances so the new top card starts
-  // at neutral position
-  useEffect(() => {
-    if (topCardRef.current) {
-      gsap.set(topCardRef.current, { x: 0, y: 0, rotation: 0, opacity: 1 });
-      const overlay = topCardRef.current.querySelector(
-        "[data-swipe-overlay]"
-      ) as HTMLElement | null;
-      if (overlay) {
-        overlay.style.background = "transparent";
-        overlay.dataset.label = "";
-      }
-    }
-    if (next1Ref.current) gsap.set(next1Ref.current, { scale: 0.95, y: 8 });
-    if (next2Ref.current) gsap.set(next2Ref.current, { scale: 0.9, y: 16 });
-  }, [cursor]);
+  // Card transforms reset automatically because the CardFace below is
+  // keyed by current.id — each new card mounts as a fresh DOM element
+  // with no inline transforms, then heroEntry animates it in cleanly.
 
   if (!open) return null;
 
@@ -351,32 +338,12 @@ export function ReviewDeck({ items, open, onClose }: Props) {
           </button>
         </div>
 
-        {/* Deck */}
-        <div className="relative my-6 flex-1 min-h-0 select-none">
-          {next2 && (
-            <CardFace
-              item={next2}
-              cardRef={next2Ref}
-              style={{ transform: "scale(0.9) translateY(16px)", zIndex: 1 }}
-              dim
-              override={overrides[next2.id]}
-              setOverride={() => undefined}
-            />
-          )}
-          {next1 && (
-            <CardFace
-              item={next1}
-              cardRef={next1Ref}
-              style={{ transform: "scale(0.95) translateY(8px)", zIndex: 2 }}
-              dim
-              override={overrides[next1.id]}
-              setOverride={() => undefined}
-            />
-          )}
+        {/* Deck — single card, keyed so each new item gets a fresh mount */}
+        <div className="relative my-6 flex-1 min-h-0 select-none overflow-hidden">
           <CardFace
+            key={current.id}
             item={current}
             cardRef={topCardRef}
-            style={{ zIndex: 3 }}
             interactive
             override={o}
             setOverride={(patch) =>
