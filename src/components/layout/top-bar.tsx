@@ -3,6 +3,7 @@
 import { ChatToggleButton } from "@/components/chat/chat-panel";
 import { NotificationHub } from "@/components/layout/notification-hub";
 import { SyncStatusChip } from "@/components/layout/sync-status-chip";
+import { SpotlightTrigger } from "@/components/spotlight/spotlight-trigger";
 
 interface TopBarProps {
   title: string;
@@ -21,6 +22,7 @@ export function TopBar({ title, subtitle, right }: TopBarProps) {
       </div>
       <div className="flex items-center gap-2">
         {right}
+        <SpotlightTrigger />
         <SyncStatusChip />
         <NotificationHub />
         <ChatToggleButton />
