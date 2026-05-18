@@ -93,6 +93,8 @@ export function ReviewDeck({ items, open, onClose }: Props) {
 
   const remaining = deckRef.current.length - cursor;
   const current = deckRef.current[cursor];
+  const next1 = deckRef.current[cursor + 1];
+  const next2 = deckRef.current[cursor + 2];
 
   const topCardRef = useRef<HTMLDivElement | null>(null);
   // Guard against double-swipes while the top card is still flying off.
@@ -338,13 +340,45 @@ export function ReviewDeck({ items, open, onClose }: Props) {
           </button>
         </div>
 
-        {/* Deck — single card, keyed so each new item gets a fresh mount */}
-        <div className="relative my-6 flex-1 min-h-0 select-none overflow-hidden">
+        {/* Deck — visible stack via static CSS transforms on the behind
+            cards (zero GSAP, zero race conditions). Only the top card
+            animates on swipe. New top card mounts via key=current.id so
+            each item gets a clean heroEntry. */}
+        <div className="relative my-6 flex-1 min-h-0 select-none">
+          {next2 && (
+            <CardFace
+              key={`bg2-${next2.id}`}
+              item={next2}
+              dim
+              className="pointer-events-none"
+              // scale + translate via inline style — pure CSS, no GSAP
+              // ever touches these elements.
+              style={{
+                transform: "scale(0.9) translateY(16px)",
+                opacity: 0.5,
+                zIndex: 1,
+              }}
+            />
+          )}
+          {next1 && (
+            <CardFace
+              key={`bg1-${next1.id}`}
+              item={next1}
+              dim
+              className="pointer-events-none"
+              style={{
+                transform: "scale(0.95) translateY(8px)",
+                opacity: 0.7,
+                zIndex: 2,
+              }}
+            />
+          )}
           <CardFace
             key={current.id}
             item={current}
             cardRef={topCardRef}
             interactive
+            style={{ zIndex: 3 }}
             override={o}
             setOverride={(patch) =>
               setOverrides((prev) => ({
@@ -399,8 +433,9 @@ function Overlay({
 
 interface CardFaceProps {
   item: S2DItem;
-  cardRef: React.RefObject<HTMLDivElement | null>;
+  cardRef?: React.RefObject<HTMLDivElement | null>;
   style?: React.CSSProperties;
+  className?: string;
   dim?: boolean;
   interactive?: boolean;
   override?: { priority?: Priority; pathway?: Pathway; status?: S2DStatus };
@@ -418,6 +453,7 @@ function CardFace({
   item,
   cardRef,
   style,
+  className,
   dim,
   interactive,
   override,
@@ -442,7 +478,8 @@ function CardFace({
       className={cn(
         "absolute inset-0 mx-auto flex max-w-lg flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl",
         interactive ? "cursor-grab touch-none active:cursor-grabbing" : "pointer-events-none",
-        dim && "opacity-70"
+        dim && "opacity-70",
+        className
       )}
     >
       {/* Drag-direction tint overlay */}
