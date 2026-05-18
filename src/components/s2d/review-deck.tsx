@@ -16,6 +16,8 @@ import {
   X,
   Keyboard,
   Loader2,
+  ExternalLink,
+  Link as LinkIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { S2DItem, Pathway, Priority, S2DStatus } from "@/types";
@@ -26,6 +28,7 @@ import { useUpdateS2DItem } from "@/hooks/use-s2d";
 import { useGSAP } from "@gsap/react";
 import { gsap, EASE, DUR, heroEntry } from "@/lib/animation";
 import { cn } from "@/lib/utils";
+import { allSources, deriveSourceUrl, type SourceRef } from "@/lib/sources/url";
 
 /**
  * Tinder-style swipe deck for the Review queue.
@@ -583,6 +586,8 @@ function CardFace({
           )}
         </div>
 
+        <SourcesSection item={item} />
+
         {/* Inline overrides */}
         {interactive && setOverride && (
           <div className="grid grid-cols-3 gap-2 text-[11px]">
@@ -636,6 +641,89 @@ function CardFace({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * "Sources" section on the review card — clickable chips for the primary
+ * source + every linked source. Each chip is an external link when we
+ * can build one; unlinked chips show as plain badges. The intent is
+ * "click to inspect" — opens Gmail / Slack / Linear / Fireflies in a
+ * new tab so the user can see the full context that triggered the item.
+ */
+function SourcesSection({
+  item,
+}: {
+  item: Pick<
+    S2DItem,
+    "source_type" | "source_thread_id" | "source_label" | "source_url" | "linked_sources"
+  >;
+}) {
+  const sources = allSources({
+    source_type: item.source_type ?? null,
+    source_thread_id: item.source_thread_id,
+    source_label: item.source_label,
+    source_url: item.source_url,
+    linked_sources: item.linked_sources,
+  });
+  if (sources.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <LinkIcon className="h-3 w-3" />
+        Sources
+        <span className="font-mono opacity-70">{sources.length}</span>
+      </div>
+      <ul className="flex flex-col gap-1.5">
+        {sources.map((src, i) => (
+          <SourceChip key={`${src.source_type}-${src.source_thread_id}-${i}`} src={src} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SourceChip({ src }: { src: SourceRef }) {
+  const url = deriveSourceUrl(src);
+  const label = src.source_label ?? `${src.source_type ?? "source"}: ${src.source_thread_id ?? "?"}`;
+  const inner = (
+    <>
+      {src.source_type && (
+        <SourceIcon type={src.source_type as S2DItem["source_type"] as never} />
+      )}
+      <span className="flex-1 truncate text-[12px] text-foreground/85">{label}</span>
+      {url ? (
+        <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
+      ) : (
+        <span className="shrink-0 rounded bg-secondary px-1 py-0.5 font-mono text-[9px] text-muted-foreground/70">
+          no link
+        </span>
+      )}
+    </>
+  );
+  const classes =
+    "flex items-center gap-2 rounded-md border border-border/40 bg-background/40 px-2.5 py-1.5 transition-colors";
+  if (url) {
+    return (
+      <li>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(classes, "hover:border-border hover:bg-accent/30")}
+        >
+          {inner}
+        </a>
+      </li>
+    );
+  }
+  return (
+    <li>
+      <div className={cn(classes, "cursor-default opacity-70")} title="No deep link available — search in the source app">
+        {inner}
+      </div>
+    </li>
   );
 }
 

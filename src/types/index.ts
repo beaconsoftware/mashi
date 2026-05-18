@@ -64,6 +64,13 @@ export interface S2DItem {
   energy?: Energy;
   source_type?: SourceType;
   source_id?: string | null;
+  /**
+   * Upstream provider's stable identifier for the thread/issue/event
+   * this item came from. (`source_id` is a Mashi-side composite of
+   * thread_id + a title slug; `source_thread_id` is the raw upstream
+   * id used to deep-link back to the source app.)
+   */
+  source_thread_id?: string | null;
   source_url?: string | null;
   source_label?: string | null;
   company_id?: string | null;
