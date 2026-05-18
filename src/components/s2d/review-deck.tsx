@@ -96,8 +96,6 @@ export function ReviewDeck({ items, open, onClose }: Props) {
 
   const remaining = deckRef.current.length - cursor;
   const current = deckRef.current[cursor];
-  const next1 = deckRef.current[cursor + 1];
-  const next2 = deckRef.current[cursor + 2];
 
   const topCardRef = useRef<HTMLDivElement | null>(null);
   // Guard against double-swipes while the top card is still flying off.
@@ -357,38 +355,27 @@ export function ReviewDeck({ items, open, onClose }: Props) {
           </button>
         </div>
 
-        {/* Deck. Behind cards are EMPTY visual placeholders (no content) —
-            just stylized rectangles that suggest depth. This makes it
-            impossible for next-card content to bleed through the top card,
-            which was the persistent "all cards visible" bug. Only the top
-            card has content + animates on swipe. */}
-        <div className="relative my-6 flex-1 min-h-0 select-none">
-          {next2 && (
-            <BehindPlaceholder
-              key="bg2"
-              style={{
-                transform: "scale(0.88) translateY(22px)",
-                opacity: 0.35,
-                zIndex: 1,
-              }}
-            />
-          )}
-          {next1 && (
-            <BehindPlaceholder
-              key="bg1"
-              style={{
-                transform: "scale(0.94) translateY(11px)",
-                opacity: 0.55,
-                zIndex: 2,
-              }}
-            />
-          )}
+        {/* Deck — single card render. The "visible stack" illusion is
+            done via two static drop-shadow lines on the bottom of the
+            card itself (see CardFace), not real card DOM nodes. After
+            multiple attempts to make a 3-card stack reliable I'm
+            keeping this dead simple: one card in the DOM at any time.
+            "94 left" counter and the swipe progress bar communicate
+            "there's more behind" without us having to render extra
+            cards that keep finding new ways to bleed through. */}
+        <div className="relative isolate my-6 flex-1 min-h-0 select-none">
           <CardFace
             key={current.id}
             item={current}
             cardRef={topCardRef}
             interactive
-            style={{ zIndex: 3 }}
+            // Two stacked drop-shadows render as faint card edges
+            // peeking below — pure CSS, zero real card content behind.
+            style={{
+              zIndex: 3,
+              boxShadow:
+                "0 8px 24px -4px hsl(0 0% 0% / 0.5), 0 12px 0 -4px hsl(240 8% 7% / 1), 0 12px 1px -4px hsl(240 5% 25% / 0.4), 0 22px 0 -8px hsl(240 8% 7% / 1), 0 22px 1px -8px hsl(240 5% 25% / 0.25)",
+            }}
             override={o}
             setOverride={(patch) =>
               setOverrides((prev) => ({
