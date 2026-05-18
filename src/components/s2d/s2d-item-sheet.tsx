@@ -41,8 +41,13 @@ import { SourceIcon } from "@/components/shared/source-icon";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
-import { S2DCopilot } from "@/components/s2d/s2d-copilot";
+// S2DCopilot intentionally removed — the always-streaming AI suggestion
+// box at the top of the sheet pushed everything down and didn't justify
+// the space. Pathway-specific actions below (DraftReplyAction,
+// HeadsDownAction's Claude-prompt builder, etc.) cover the same intent
+// on-demand. File kept on disk in case we want to bring it back.
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
+import { fetchAndRenderClaudePrompt } from "@/lib/s2d/claude-prompt";
 import type { S2DItem } from "@/types";
 import { PRIORITY_META } from "@/types";
 import { cn } from "@/lib/utils";
@@ -172,8 +177,6 @@ function ItemSheetBody({ item }: { item: S2DItem }) {
               onMarkRead={clearUnseen}
             />
           )}
-
-          <S2DCopilot item={item} />
 
           <ItemContextPanel item={item} />
 
@@ -536,26 +539,98 @@ function isoIn({ days = 0, hours = 0 }: { days?: number; hours?: number }) {
 
 function HeadsDownAction({ item, setBanner }: { item: S2DItem; setBanner: (b: Banner) => void }) {
   const updateItem = useUpdateS2DItem();
+  const [buildingPrompt, setBuildingPrompt] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   function startNow() {
     updateItem.mutate({ id: item.id, patch: { status: "in_progress" } });
     setBanner({ kind: "ok", msg: "Started, moved to In Progress" });
   }
+
+  // "Start in Claude" / "Start in Claude Code" flow:
+  //   1. Fetch the item's full source context via /api/s2d/[id]/context
+  //   2. Render it as a Markdown Claude prompt
+  //   3. Copy to clipboard so the user pastes into a fresh conversation
+  //   4. Open claude.ai in a new tab for convenience
+  // Web Claude's URL doesn't accept prefilled messages, so clipboard +
+  // open-tab is the cleanest UX. Same approach for Claude Code: open
+  // the user's terminal/IDE separately; the prompt is already on the
+  // clipboard.
+  async function copyPromptAndOpenClaude(target: "web" | "code") {
+    setBuildingPrompt(true);
+    try {
+      const text = await fetchAndRenderClaudePrompt(item);
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      if (target === "web") {
+        window.open("https://claude.ai/new", "_blank", "noopener,noreferrer");
+        setBanner({ kind: "ok", msg: "Prompt copied. Paste into the new Claude tab." });
+      } else {
+        setBanner({ kind: "ok", msg: "Prompt copied. Paste into Claude Code." });
+      }
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: err instanceof Error ? err.message : "Couldn't build prompt",
+      });
+    } finally {
+      setBuildingPrompt(false);
+    }
+  }
+
   const gcalUrl = buildGcalCreateUrl(item);
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" onClick={startNow} className="gap-1.5">
-        <Zap className="h-3.5 w-3.5" />
-        Start now
-      </Button>
-      <a
-        href={gcalUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-[12px] hover:bg-accent"
-      >
-        <CalendarPlus className="h-3.5 w-3.5" />
-        Block time in Calendar
-      </a>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={startNow} className="gap-1.5">
+          <Zap className="h-3.5 w-3.5" />
+          Start now
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => copyPromptAndOpenClaude("web")}
+          disabled={buildingPrompt}
+          className="gap-1.5"
+          title="Copy full context as a Claude prompt and open claude.ai"
+        >
+          {buildingPrompt ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : copied ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <ExternalLink className="h-3.5 w-3.5" />
+          )}
+          {buildingPrompt ? "Packing context…" : copied ? "Copied" : "Start in Claude"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => copyPromptAndOpenClaude("code")}
+          disabled={buildingPrompt}
+          className="gap-1.5"
+          title="Copy full context as a Claude prompt for Claude Code"
+        >
+          <Copy className="h-3.5 w-3.5" />
+          Prompt for Claude Code
+        </Button>
+        <a
+          href={gcalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-[12px] hover:bg-accent"
+        >
+          <CalendarPlus className="h-3.5 w-3.5" />
+          Block time
+        </a>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        &quot;Start in Claude&quot; packs every cached source for this item (Gmail
+        threads, Slack messages, Linear issue, meeting transcript) into a
+        single Markdown prompt and copies it. Paste into a fresh Claude
+        conversation to start work with full context loaded.
+      </p>
     </div>
   );
 }
