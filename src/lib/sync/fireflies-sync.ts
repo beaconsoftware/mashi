@@ -126,7 +126,7 @@ export async function syncFirefliesConnection(connectionId: string): Promise<{
     if (meetingRows.length > 0) {
       const { error: upErr } = await supabase
         .from("meetings")
-        .upsert(meetingRows, { onConflict: "external_id" });
+        .upsert(meetingRows, { onConflict: "user_id,external_id" });
       if (upErr) throw upErr;
       stored = meetingRows.length;
     }

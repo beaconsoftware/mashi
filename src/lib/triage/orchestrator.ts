@@ -192,7 +192,13 @@ async function applyOperation(
         updatePatch.last_update_at = new Date().toISOString();
       }
 
-      await supabase.from("s2d_items").update(updatePatch).eq("id", match.id);
+      // user_id scope is defense-in-depth — match.id came from a
+      // user-scoped lookup upstream, but never lean on a single check.
+      await supabase
+        .from("s2d_items")
+        .update(updatePatch)
+        .eq("id", match.id)
+        .eq("user_id", userId);
 
       // Audit trail — every dedup decision is logged so it's never silent
       await supabase.from("triage_runs").insert({
@@ -278,7 +284,8 @@ async function applyOperation(
           last_update_at: new Date().toISOString(),
         }),
       })
-      .eq("id", op.s2d_item_id);
+      .eq("id", op.s2d_item_id)
+      .eq("user_id", userId);
     if (error) throw error;
     return { created: 0, updated: 1, closed: 0 };
   }
@@ -293,7 +300,8 @@ async function applyOperation(
           outcome: op.outcome,
           resolved_via: "auto_detected",
         })
-        .eq("id", op.s2d_item_id);
+        .eq("id", op.s2d_item_id)
+        .eq("user_id", userId);
       if (error) throw error;
       return { created: 0, updated: 0, closed: 1 };
     } else {

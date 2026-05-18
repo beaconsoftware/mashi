@@ -128,7 +128,7 @@ export async function syncGCalConnection(connectionId: string): Promise<{
     if (rows.length > 0) {
       const { error: upErr } = await supabase
         .from("calendar_events")
-        .upsert(rows, { onConflict: "external_id" });
+        .upsert(rows, { onConflict: "user_id,external_id" });
       if (upErr) throw upErr;
       upserted = rows.length;
     }

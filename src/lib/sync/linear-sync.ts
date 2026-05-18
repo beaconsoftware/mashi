@@ -115,7 +115,7 @@ export async function syncLinearConnection(connectionId: string): Promise<{
     if (issueRows.length > 0) {
       const { error: upErr } = await supabase
         .from("linear_issues")
-        .upsert(issueRows, { onConflict: "external_id" });
+        .upsert(issueRows, { onConflict: "user_id,external_id" });
       if (upErr) throw upErr;
     }
 

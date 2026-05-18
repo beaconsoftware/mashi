@@ -163,7 +163,7 @@ export async function syncGmailConnection(connectionId: string): Promise<{
 
     const { error: upErr } = await supabase
       .from("messages")
-      .upsert(messageRows, { onConflict: "external_id" });
+      .upsert(messageRows, { onConflict: "user_id,external_id" });
     if (upErr) throw upErr;
 
     // 6) Per-thread triage, parallelized

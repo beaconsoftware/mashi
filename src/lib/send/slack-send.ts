@@ -6,6 +6,12 @@ const SLACK_API = "https://slack.com/api";
 interface SendOptions {
   s2dItemId: string;
   text: string;
+  /**
+   * Caller's user_id (from session auth). Required — every query in this
+   * helper scopes by it so a stray bug in upstream auth can't route a
+   * send through another tenant's Slack token.
+   */
+  userId: string;
 }
 
 interface SendResult {
@@ -31,6 +37,7 @@ export async function sendSlackReply(opts: SendOptions): Promise<SendResult> {
     .from("s2d_items")
     .select("id, source_type, source_thread_id, title")
     .eq("id", opts.s2dItemId)
+    .eq("user_id", opts.userId)
     .single();
   if (!item || item.source_type !== "slack" || !item.source_thread_id) {
     return { ok: false, message: "not a Slack-sourced S2D item" };
@@ -42,10 +49,13 @@ export async function sendSlackReply(opts: SendOptions): Promise<SendResult> {
     return { ok: false, message: "couldn't parse Slack conversation id" };
   }
 
-  // Find the connected_account via a message in this conversation
+  // Find the connected_account via a message in this conversation.
+  // user_id filter is the load-bearing one — without it we'd pick the
+  // first Slack message in the DB regardless of owner.
   const { data: msgs } = await supabase
     .from("messages")
     .select("connected_account_id, thread_id, received_at")
+    .eq("user_id", opts.userId)
     .eq("source", "slack")
     .like("external_id", `slack:%:%`)
     .order("received_at", { ascending: false })
@@ -63,13 +73,14 @@ export async function sendSlackReply(opts: SendOptions): Promise<SendResult> {
     }
   }
 
-  // Fallback: pick the first Slack connection we have. Multi-workspace dev
-  // users will need richer logic, but for now this works since most users
-  // only have one Slack workspace per portco.
+  // Fallback: pick the caller's first Slack connection. MUST scope by
+  // user_id — without it, this used to pick the oldest Slack connection
+  // in the DB regardless of owner (i.e. another tenant's token).
   if (!connectedAccountId) {
     const { data: anyConn } = await supabase
       .from("connected_accounts")
       .select("id")
+      .eq("user_id", opts.userId)
       .eq("provider", "slack")
       .limit(1)
       .single();
@@ -111,7 +122,8 @@ export async function sendSlackReply(opts: SendOptions): Promise<SendResult> {
       outcome: opts.text.slice(0, 800),
       resolved_via: "manual",
     })
-    .eq("id", item.id);
+    .eq("id", item.id)
+    .eq("user_id", opts.userId);
 
   return { ok: true, message: "Sent to Slack", ts: j.ts };
 }

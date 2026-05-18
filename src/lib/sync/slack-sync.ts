@@ -171,7 +171,7 @@ export async function syncSlackConnection(connectionId: string): Promise<{
     }));
     const { error: upErr } = await supabase
       .from("messages")
-      .upsert(messageRows, { onConflict: "external_id" });
+      .upsert(messageRows, { onConflict: "user_id,external_id" });
     if (upErr) throw upErr;
 
     // Group into daily slices per conversation

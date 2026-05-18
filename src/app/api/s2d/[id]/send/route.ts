@@ -30,6 +30,16 @@ export async function POST(
   }
 
   const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "not authenticated" }, { status: 401 });
+  }
+
+  // Session client + RLS already scopes this lookup to the caller — but we
+  // also thread userId into the send helpers so their service-role queries
+  // re-enforce it. Belt and suspenders.
   const { data: item, error } = await supabase
     .from("s2d_items")
     .select("source_type")
@@ -41,12 +51,12 @@ export async function POST(
 
   try {
     if (item.source_type === "gmail") {
-      const r = await sendGmailReply({ s2dItemId: id, body });
+      const r = await sendGmailReply({ s2dItemId: id, body, userId: user.id });
       if (!r.ok) return NextResponse.json({ error: r.message }, { status: 500 });
       return NextResponse.json({ ok: true, channel: "gmail", message: r.message });
     }
     if (item.source_type === "slack") {
-      const r = await sendSlackReply({ s2dItemId: id, text: body });
+      const r = await sendSlackReply({ s2dItemId: id, text: body, userId: user.id });
       if (!r.ok) return NextResponse.json({ error: r.message }, { status: 500 });
       return NextResponse.json({ ok: true, channel: "slack", message: r.message });
     }

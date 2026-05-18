@@ -21,6 +21,12 @@ const GRAPHQL_URL = "https://api.linear.app/graphql";
 export async function pushS2DStatusToLinear(opts: {
   s2dItemId: string;
   newStatus: S2DStatus;
+  /**
+   * Caller's user_id (from session auth). Required — every query
+   * scopes by it so we can never push status to another tenant's
+   * Linear workspace via a stray ID collision.
+   */
+  userId: string;
 }): Promise<{ ok: boolean; message: string }> {
   const supabase = createSupabaseServiceClient();
 
@@ -29,6 +35,7 @@ export async function pushS2DStatusToLinear(opts: {
     .from("s2d_items")
     .select("id, source_type, source_thread_id")
     .eq("id", opts.s2dItemId)
+    .eq("user_id", opts.userId)
     .single();
   if (itemErr || !item) {
     return { ok: false, message: "s2d item not found" };
@@ -37,10 +44,14 @@ export async function pushS2DStatusToLinear(opts: {
     return { ok: false, message: "not a linear item" };
   }
 
-  // Find the Linear connection by joining through linear_issues
+  // Find the Linear connection by joining through linear_issues.
+  // user_id scopes the lookup so two users importing the same Linear
+  // issue (different workspaces, same external_id collision) never
+  // cross-route.
   const { data: issueRow } = await supabase
     .from("linear_issues")
     .select("connected_account_id")
+    .eq("user_id", opts.userId)
     .eq("external_id", item.source_thread_id)
     .maybeSingle();
 

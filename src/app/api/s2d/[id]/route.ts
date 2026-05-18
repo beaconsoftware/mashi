@@ -26,8 +26,15 @@ export async function PATCH(
   const patch = (await req.json()) as Partial<S2DItem>;
 
   const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "not authenticated" }, { status: 401 });
+  }
 
-  // Pre-read so we know the previous status (for sync-back decision)
+  // Pre-read so we know the previous status (for sync-back decision).
+  // Session client + RLS scopes this lookup to the caller.
   const { data: before } = await supabase
     .from("s2d_items")
     .select("status, source_type")
@@ -68,6 +75,7 @@ export async function PATCH(
       syncBack = await pushS2DStatusToLinear({
         s2dItemId: id,
         newStatus: writable.status as S2DStatus,
+        userId: user.id,
       });
     } catch (err) {
       syncBack = {

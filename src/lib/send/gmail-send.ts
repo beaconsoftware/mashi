@@ -6,6 +6,12 @@ const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
 interface SendOptions {
   s2dItemId: string;
   body: string;
+  /**
+   * Caller's user_id (from session auth). Required — every query in this
+   * helper scopes by it so a stray bug in upstream auth can't route a
+   * reply through another tenant's Gmail connection.
+   */
+  userId: string;
   /** Override the auto-detected To address (defaults to last sender in thread). */
   toOverride?: string;
   /** Override subject (defaults to "Re: <thread subject>"). */
@@ -35,6 +41,7 @@ export async function sendGmailReply(opts: SendOptions): Promise<SendResult> {
     .from("s2d_items")
     .select("id, source_type, source_thread_id, title")
     .eq("id", opts.s2dItemId)
+    .eq("user_id", opts.userId)
     .single();
   if (!item || item.source_type !== "gmail" || !item.source_thread_id) {
     return { ok: false, message: "not a Gmail-sourced S2D item" };
@@ -47,6 +54,7 @@ export async function sendGmailReply(opts: SendOptions): Promise<SendResult> {
     .select(
       "external_id, connected_account_id, sender_email, sender_name, subject, received_at"
     )
+    .eq("user_id", opts.userId)
     .eq("source", "gmail")
     .eq("thread_id", item.source_thread_id)
     .order("received_at", { ascending: false });
@@ -65,6 +73,7 @@ export async function sendGmailReply(opts: SendOptions): Promise<SendResult> {
     .from("connected_accounts")
     .select("account_email")
     .eq("id", connectedAccountId)
+    .eq("user_id", opts.userId)
     .single();
   const myEmail = (conn?.account_email ?? "").toLowerCase();
 
@@ -159,7 +168,8 @@ export async function sendGmailReply(opts: SendOptions): Promise<SendResult> {
       outcome: opts.body.slice(0, 800),
       resolved_via: "manual",
     })
-    .eq("id", item.id);
+    .eq("id", item.id)
+    .eq("user_id", opts.userId);
 
   return {
     ok: true,
