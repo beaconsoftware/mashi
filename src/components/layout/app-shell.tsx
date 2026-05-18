@@ -1,7 +1,12 @@
 "use client";
 
 import { Sidebar } from "@/components/layout/sidebar";
-import { ChatPanel, ChatSummonPill } from "@/components/chat/chat-panel";
+import { ChatPanel } from "@/components/chat/chat-panel";
+// ChatSummonPill removed from the always-visible UI — the pulsing
+// bottom-right "Summon Mashi" pill kept reading like the copilot was
+// opening by default. The ChatToggleButton in the top bar is the
+// remaining (less shouty) way to open chat. ChatSummonPill is still
+// exported and can be re-mounted later if we want it back.
 import { SyncStatusBar } from "@/components/layout/sync-status-bar";
 import { SprintGlobalMount } from "@/components/sprint/sprint-global-mount";
 import { SpotlightProvider } from "@/components/spotlight/spotlight-context";
@@ -18,7 +23,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
         <ChatPanel />
         <SprintGlobalMount />
-        <ChatSummonPill />
         <SpotlightModal />
       </div>
     </SpotlightProvider>
