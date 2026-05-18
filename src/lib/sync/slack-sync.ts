@@ -3,7 +3,7 @@ import { getActiveAccessToken } from "@/lib/oauth/flow";
 import { runTriageOnUnit, loadExistingForUnit } from "@/lib/triage/orchestrator";
 import { parallelMap } from "@/lib/utils/parallel";
 import { reconcileMessageReplies } from "@/lib/triage/reconcile";
-import { recordSyncFailure } from "@/lib/oauth/reauth";
+import { recordSyncFailure, formatSyncError } from "@/lib/oauth/reauth";
 
 const SLACK_API = "https://slack.com/api";
 const INITIAL_LOOKBACK_DAYS = 7;
@@ -225,7 +225,8 @@ export async function syncSlackConnection(connectionId: string): Promise<{
       closed: closed + autoClosed,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Slack sync failed";
+    const msg = formatSyncError(err, "Slack");
+    console.error("[sync] Slack failed", { connectionId, err, msg });
     await recordSyncFailure(connectionId, msg);
     throw err;
   }

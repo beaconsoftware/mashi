@@ -3,7 +3,7 @@ import { getActiveAccessToken } from "@/lib/oauth/flow";
 import { runTriageOnUnit, loadExistingForUnit } from "@/lib/triage/orchestrator";
 import { parallelMap } from "@/lib/utils/parallel";
 import { reconcileLinearStatuses } from "@/lib/triage/reconcile";
-import { recordSyncFailure } from "@/lib/oauth/reauth";
+import { recordSyncFailure, formatSyncError } from "@/lib/oauth/reauth";
 
 const GRAPHQL_URL = "https://api.linear.app/graphql";
 
@@ -205,7 +205,8 @@ export async function syncLinearConnection(connectionId: string): Promise<{
       closed: closed + autoClosed,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Linear sync failed";
+    const msg = formatSyncError(err, "Linear");
+    console.error("[sync] Linear failed", { connectionId, err, msg });
     await recordSyncFailure(connectionId, msg);
     throw err;
   }

@@ -2,7 +2,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { getActiveAccessToken } from "@/lib/oauth/flow";
 import { runTriageOnUnit, loadExistingForUnit } from "@/lib/triage/orchestrator";
 import { parallelMap } from "@/lib/utils/parallel";
-import { recordSyncFailure } from "@/lib/oauth/reauth";
+import { recordSyncFailure, formatSyncError } from "@/lib/oauth/reauth";
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 const LOOKBACK_DAYS = 7;
@@ -208,7 +208,8 @@ export async function syncGCalConnection(connectionId: string): Promise<{
 
     return { fetched: events.length, upserted, triaged, created, updated, closed };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Calendar sync failed";
+    const msg = formatSyncError(err, "Calendar");
+    console.error("[sync] Calendar failed", { connectionId, err, msg });
     await recordSyncFailure(connectionId, msg);
     throw err;
   }

@@ -3,7 +3,7 @@ import { getActiveAccessToken } from "@/lib/oauth/flow";
 import { runTriageOnUnit, loadExistingForUnit } from "@/lib/triage/orchestrator";
 import { parallelMap } from "@/lib/utils/parallel";
 import { reconcileMessageReplies } from "@/lib/triage/reconcile";
-import { recordSyncFailure } from "@/lib/oauth/reauth";
+import { recordSyncFailure, formatSyncError } from "@/lib/oauth/reauth";
 
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
 
@@ -219,7 +219,8 @@ export async function syncGmailConnection(connectionId: string): Promise<{
       closed: closed + autoClosed,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Gmail sync failed";
+    const msg = formatSyncError(err, "Gmail");
+    console.error("[sync] Gmail failed", { connectionId, err, msg });
     await recordSyncFailure(connectionId, msg);
     throw err;
   }

@@ -1,6 +1,39 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 /**
+ * Best-effort string extraction for whatever a sync function might have
+ * thrown. The provider-specific catch blocks all used `err instanceof Error
+ * ? err.message : "X sync failed"` which silently hid Supabase PostgrestError
+ * objects, plain-object throws, and string throws — so the DB ended up with
+ * useless generic messages. This unwraps the common shapes and falls back
+ * to a JSON.stringify so something diagnostic always lands in last_sync_error.
+ */
+export function formatSyncError(err: unknown, providerLabel: string): string {
+  if (err instanceof Error) {
+    // Error.message is usually enough; include cause when present.
+    const causeMsg =
+      err.cause instanceof Error ? ` (cause: ${err.cause.message})` : "";
+    return `${err.message}${causeMsg}`;
+  }
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object") {
+    const o = err as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+    // Supabase PostgrestError shape.
+    if (typeof o.message === "string") {
+      const code = typeof o.code === "string" ? ` [${o.code}]` : "";
+      const hint = typeof o.hint === "string" ? ` — ${o.hint}` : "";
+      return `${o.message}${code}${hint}`;
+    }
+    try {
+      return JSON.stringify(o).slice(0, 400);
+    } catch {
+      /* fall through */
+    }
+  }
+  return `${providerLabel} sync failed (no error detail)`;
+}
+
+/**
  * Detect whether an error message indicates the provider rejected our token
  * (401/403/expired/revoked). When that happens we mark the connection
  * `needs_reauth` so the UI shows a Reconnect button instead of a generic

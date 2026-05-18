@@ -2,7 +2,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { getActiveAccessToken } from "@/lib/oauth/flow";
 import { runTriageOnUnit } from "@/lib/triage/orchestrator";
 import { parallelMap } from "@/lib/utils/parallel";
-import { recordSyncFailure } from "@/lib/oauth/reauth";
+import { recordSyncFailure, formatSyncError } from "@/lib/oauth/reauth";
 import type { ExistingS2DContext } from "@/lib/triage/types";
 
 const GRAPHQL_URL = "https://api.fireflies.ai/graphql";
@@ -228,7 +228,8 @@ export async function syncFirefliesConnection(connectionId: string): Promise<{
       closed,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Fireflies sync failed";
+    const msg = formatSyncError(err, "Fireflies");
+    console.error("[sync] Fireflies failed", { connectionId, err, msg });
     await recordSyncFailure(connectionId, msg);
     throw err;
   }
