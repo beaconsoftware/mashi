@@ -77,6 +77,17 @@ export function ReviewDeck({ items, open, onClose }: Props) {
     }
   }, [open, items]);
 
+  // Live lookup over the most recent items prop. The deck *order* is
+  // pinned by the snapshot in deckRef, but per-item fields like
+  // review_justification (filled in by /api/s2d/justify and pulled in
+  // via TanStack Query refetch) need to show through. Without this,
+  // the "Generating justification…" placeholder stayed forever even
+  // after the backend wrote the real text.
+  const liveItemsById = useMemo(
+    () => new Map(items.map((it) => [it.id, it])),
+    [items]
+  );
+
   // Lazy-backfill justifications for items missing them
   useEffect(() => {
     if (!open) return;
@@ -95,50 +106,91 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   }, [open]);
 
   const remaining = deckRef.current.length - cursor;
-  const current = deckRef.current[cursor];
+  // Use the live row from items (so updated review_justification etc. flows
+  // through), falling back to the snapshot if the row was deleted upstream
+  // for any reason.
+  const currentSnapshot = deckRef.current[cursor];
+  const current = currentSnapshot
+    ? liveItemsById.get(currentSnapshot.id) ?? currentSnapshot
+    : undefined;
 
   const topCardRef = useRef<HTMLDivElement | null>(null);
   // Guard against double-swipes while the top card is still flying off.
   // If the user spam-clicks Approve, only the first one should land.
   const swipingRef = useRef(false);
+  // Pending safety timeout — stored on a ref so we can cancel it from
+  // multiple places: a subsequent flyOff, the gsap onComplete, AND on
+  // component unmount. Earlier version only cleared inside onComplete,
+  // which meant a tween killed by killTweensOf would leave the timeout
+  // pending → applySwipe fires a second time → cursor double-advances.
+  const safetyRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearSafety() {
+    if (safetyRef.current) {
+      clearTimeout(safetyRef.current);
+      safetyRef.current = null;
+    }
+  }
+
+  // Clean up any pending safety on unmount/close so we don't fire
+  // applySwipe + setCursor on a torn-down component.
+  useEffect(() => {
+    return clearSafety;
+  }, []);
 
   const applySwipe = useCallback(
-    async (action: SwipeAction) => {
+    (action: SwipeAction) => {
       if (!current) return;
-      const o = overrides[current.id] ?? {};
-      const priority = o.priority ?? current.priority;
-      const pathway = o.pathway ?? current.pathway;
-      let status: S2DStatus = o.status ?? current.status;
+      try {
+        const o = overrides[current.id] ?? {};
+        const priority = o.priority ?? current.priority;
+        const pathway = o.pathway ?? current.pathway;
+        let status: S2DStatus = o.status ?? current.status;
 
-      const patch: Partial<S2DItem> & Record<string, unknown> = {
-        priority,
-        pathway,
-      };
+        const patch: Partial<S2DItem> & Record<string, unknown> = {
+          priority,
+          pathway,
+        };
 
-      if (action === "approve") {
-        patch.needs_review = false;
-        patch.status = status;
-      } else if (action === "backlog") {
-        patch.needs_review = false;
-        patch.status = "backlog";
-        status = "backlog";
-      } else if (action === "snooze") {
-        patch.needs_review = false;
-        patch.status = "in_queue";
-        const t = new Date();
-        t.setDate(t.getDate() + 1);
-        t.setHours(9, 0, 0, 0);
-        patch.snoozed_until = t.toISOString();
-        patch.queue_reason = "Snoozed from review (24h)";
-      } else if (action === "drop") {
-        patch.needs_review = false;
-        patch.status = "done";
-        patch.outcome = "Dropped before review";
-        patch.resolved_via = "manual";
+        if (action === "approve") {
+          patch.needs_review = false;
+          patch.status = status;
+        } else if (action === "backlog") {
+          patch.needs_review = false;
+          patch.status = "backlog";
+          status = "backlog";
+        } else if (action === "snooze") {
+          patch.needs_review = false;
+          patch.status = "in_queue";
+          const t = new Date();
+          t.setDate(t.getDate() + 1);
+          t.setHours(9, 0, 0, 0);
+          patch.snoozed_until = t.toISOString();
+          patch.queue_reason = "Snoozed from review (24h)";
+        } else if (action === "drop") {
+          patch.needs_review = false;
+          patch.status = "done";
+          patch.outcome = "Dropped before review";
+          patch.resolved_via = "manual";
+        }
+
+        updateItem.mutate({ id: current.id, patch });
+        // Drop the swiped override so the map doesn't grow unbounded
+        // over a long session.
+        const swipedId = current.id;
+        setOverrides((prev) => {
+          if (!(swipedId in prev)) return prev;
+          const { [swipedId]: _drop, ...rest } = prev;
+          void _drop;
+          return rest;
+        });
+      } catch (err) {
+        // Don't let an unexpected throw wedge the deck on this card —
+        // surface the error and advance anyway.
+        console.error("[review-deck] applySwipe failed:", err);
+      } finally {
+        setCursor((c) => c + 1);
       }
-
-      updateItem.mutate({ id: current.id, patch });
-      setCursor((c) => c + 1);
     },
     [current, overrides, updateItem]
   );
@@ -155,6 +207,13 @@ export function ReviewDeck({ items, open, onClose }: Props) {
       // Kill any in-flight tween on this card so a fresh fly-off isn't
       // racing the drag-snap-back or anything else.
       gsap.killTweensOf(card);
+      // Also clear any pending safety from a previous flyOff. Without
+      // this, killTweensOf above silently prevents the previous
+      // onComplete from running → its `clearTimeout` never fires →
+      // the old safety eventually triggers applySwipe a SECOND time,
+      // double-advancing the cursor and skipping a card. (Critical
+      // bug found in audit.)
+      clearSafety();
       const vec = normalize(dir);
       const distance = 800;
       const rot = dir.x * 0.08;
@@ -162,10 +221,10 @@ export function ReviewDeck({ items, open, onClose }: Props) {
       // Safety net: if gsap onComplete somehow doesn't fire (killed tween,
       // animation queue lost, prefers-reduced-motion edge), force-advance
       // after 600ms so the deck can't get permanently wedged on "swipingRef
-      // stays true forever". This is the bug behind the user-reported "gets
-      // stuck every now and then".
-      const safety = setTimeout(() => {
+      // stays true forever".
+      safetyRef.current = setTimeout(() => {
         if (swipingRef.current) {
+          safetyRef.current = null;
           applySwipe(action);
           swipingRef.current = false;
         }
@@ -179,7 +238,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
         duration: DUR.short,
         ease: EASE.out,
         onComplete: () => {
-          clearTimeout(safety);
+          clearSafety();
           applySwipe(action);
           // Releasing after applySwipe means the next card (which mounts
           // fresh due to key=current.id) is interactable immediately.
@@ -418,31 +477,13 @@ function Overlay({
   return (
     <div
       ref={rootRef}
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-background/95 backdrop-blur-md"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       {children}
     </div>
-  );
-}
-
-/**
- * Empty, content-less rounded rectangle behind the top card. Pure
- * visual depth — never holds an item, never animates via GSAP, never
- * has anything to "bleed through" the front. Replaces the previous
- * approach of rendering full CardFace components for next1/next2, which
- * kept causing all-cards-visible bugs as the layout/z-order edge cases
- * compounded.
- */
-function BehindPlaceholder({ style }: { style?: React.CSSProperties }) {
-  return (
-    <div
-      style={style}
-      className="pointer-events-none absolute inset-0 mx-auto max-w-lg rounded-2xl border border-border/30 bg-card shadow-xl"
-      aria-hidden
-    />
   );
 }
 
@@ -584,7 +625,13 @@ function CardFace({
               </span>
               <select
                 value={priority}
-                onChange={(e) => setOverride({ priority: e.target.value as Priority })}
+                onChange={(e) => {
+                  setOverride({ priority: e.target.value as Priority });
+                  // Blur so arrow keys go back to deck swipes (otherwise
+                  // ArrowRight is swallowed by the keyboard guard until
+                  // the user clicks off the select).
+                  e.target.blur();
+                }}
                 className="w-full rounded border border-border/40 bg-secondary px-1.5 py-1"
               >
                 {(Object.keys(PRIORITY_META) as Priority[]).map((p) => (
@@ -600,7 +647,10 @@ function CardFace({
               </span>
               <select
                 value={pathway}
-                onChange={(e) => setOverride({ pathway: e.target.value as Pathway })}
+                onChange={(e) => {
+                  setOverride({ pathway: e.target.value as Pathway });
+                  e.target.blur();
+                }}
                 className="w-full rounded border border-border/40 bg-secondary px-1.5 py-1"
               >
                 {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => (
@@ -616,7 +666,10 @@ function CardFace({
               </span>
               <select
                 value={status}
-                onChange={(e) => setOverride({ status: e.target.value as S2DStatus })}
+                onChange={(e) => {
+                  setOverride({ status: e.target.value as S2DStatus });
+                  e.target.blur();
+                }}
                 className="w-full rounded border border-border/40 bg-secondary px-1.5 py-1"
               >
                 <option value="todo">Todo</option>
