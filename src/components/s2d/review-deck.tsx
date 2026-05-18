@@ -354,6 +354,13 @@ export function ReviewDeck({ items, open, onClose }: Props) {
 
   // ───────────────────────────── Entry animation ─────────────────────────────
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Overlay fade-in fires ONCE when the modal opens. CRITICAL: this used
+  // to depend on [open, cursor] which meant every swipe re-ran a
+  // gsap.from(opacity: 0) on the entire overlay — including the
+  // backdrop — making the whole modal translucent for 200ms after every
+  // swipe. That's the "card shows up translucent" bug the user reported
+  // (board behind visibly showing through).
   useGSAP(
     () => {
       if (!open || !rootRef.current) return;
@@ -362,6 +369,17 @@ export function ReviewDeck({ items, open, onClose }: Props) {
         duration: DUR.short,
         ease: EASE.out,
       });
+    },
+    { dependencies: [open] }
+  );
+
+  // New-top-card entry fires on each cursor advance. heroEntry tweens
+  // from opacity:0 scale:0.94 with clearProps:"all" so the card lands
+  // at its natural state. Only touches topCardRef.current, never the
+  // root overlay.
+  useGSAP(
+    () => {
+      if (!open) return;
       const card = topCardRef.current;
       if (card) heroEntry(card);
     },
@@ -477,7 +495,7 @@ function Overlay({
   return (
     <div
       ref={rootRef}
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-background/95 backdrop-blur-md"
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-background backdrop-blur-md"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
