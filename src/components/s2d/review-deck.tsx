@@ -157,6 +157,19 @@ export function ReviewDeck({ items, open, onClose }: Props) {
       const vec = normalize(dir);
       const distance = 800;
       const rot = dir.x * 0.08;
+
+      // Safety net: if gsap onComplete somehow doesn't fire (killed tween,
+      // animation queue lost, prefers-reduced-motion edge), force-advance
+      // after 600ms so the deck can't get permanently wedged on "swipingRef
+      // stays true forever". This is the bug behind the user-reported "gets
+      // stuck every now and then".
+      const safety = setTimeout(() => {
+        if (swipingRef.current) {
+          applySwipe(action);
+          swipingRef.current = false;
+        }
+      }, 600);
+
       gsap.to(card, {
         x: vec.x * distance,
         y: vec.y * distance,
@@ -165,6 +178,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
         duration: DUR.short,
         ease: EASE.out,
         onComplete: () => {
+          clearTimeout(safety);
           applySwipe(action);
           // Releasing after applySwipe means the next card (which mounts
           // fresh due to key=current.id) is interactable immediately.
@@ -340,35 +354,28 @@ export function ReviewDeck({ items, open, onClose }: Props) {
           </button>
         </div>
 
-        {/* Deck — visible stack via static CSS transforms on the behind
-            cards (zero GSAP, zero race conditions). Only the top card
-            animates on swipe. New top card mounts via key=current.id so
-            each item gets a clean heroEntry. */}
+        {/* Deck. Behind cards are EMPTY visual placeholders (no content) —
+            just stylized rectangles that suggest depth. This makes it
+            impossible for next-card content to bleed through the top card,
+            which was the persistent "all cards visible" bug. Only the top
+            card has content + animates on swipe. */}
         <div className="relative my-6 flex-1 min-h-0 select-none">
           {next2 && (
-            <CardFace
-              key={`bg2-${next2.id}`}
-              item={next2}
-              dim
-              className="pointer-events-none"
-              // scale + translate via inline style — pure CSS, no GSAP
-              // ever touches these elements.
+            <BehindPlaceholder
+              key="bg2"
               style={{
-                transform: "scale(0.9) translateY(16px)",
-                opacity: 0.5,
+                transform: "scale(0.88) translateY(22px)",
+                opacity: 0.35,
                 zIndex: 1,
               }}
             />
           )}
           {next1 && (
-            <CardFace
-              key={`bg1-${next1.id}`}
-              item={next1}
-              dim
-              className="pointer-events-none"
+            <BehindPlaceholder
+              key="bg1"
               style={{
-                transform: "scale(0.95) translateY(8px)",
-                opacity: 0.7,
+                transform: "scale(0.94) translateY(11px)",
+                opacity: 0.55,
                 zIndex: 2,
               }}
             />
@@ -428,6 +435,24 @@ function Overlay({
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * Empty, content-less rounded rectangle behind the top card. Pure
+ * visual depth — never holds an item, never animates via GSAP, never
+ * has anything to "bleed through" the front. Replaces the previous
+ * approach of rendering full CardFace components for next1/next2, which
+ * kept causing all-cards-visible bugs as the layout/z-order edge cases
+ * compounded.
+ */
+function BehindPlaceholder({ style }: { style?: React.CSSProperties }) {
+  return (
+    <div
+      style={style}
+      className="pointer-events-none absolute inset-0 mx-auto max-w-lg rounded-2xl border border-border/30 bg-card shadow-xl"
+      aria-hidden
+    />
   );
 }
 
