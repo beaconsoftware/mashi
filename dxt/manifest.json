@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "mashi",
   "display_name": "Mashi",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Read your unified work data — board, meetings, messages, Linear, calendar — across every connected source.",
   "long_description": "Mashi is a personal chief-of-staff system that pulls Gmail, Slack, Linear, Fireflies, and Google Calendar into one place. This extension exposes that unified surface as MCP tools so Claude can answer 'what do we know about X' with one tool call instead of hitting five distributed MCPs and trying to reconcile the results. Tools are read-only and scoped to your own data via a personal API token.",
   "author": {
@@ -18,7 +18,8 @@
       "args": ["${__dirname}/dist/server.js"],
       "env": {
         "MASHI_API_TOKEN": "${user_config.mashi_api_token}",
-        "MASHI_BASE_URL": "${user_config.mashi_base_url}"
+        "MASHI_BASE_URL": "${user_config.mashi_base_url}",
+        "MASHI_VERCEL_BYPASS": "${user_config.mashi_vercel_bypass}"
       }
     }
   },
@@ -35,6 +36,14 @@
       "title": "Mashi base URL",
       "description": "Defaults to the hosted Mashi. Override only for local dev (http://localhost:3456).",
       "default": "https://mashi-beacon-sw.vercel.app",
+      "required": false
+    },
+    "mashi_vercel_bypass": {
+      "type": "string",
+      "title": "Vercel SSO bypass token",
+      "description": "Lets traffic past Vercel's SSO gate. The hosted Mashi has this baked in by default — only change if you've rotated the bypass secret.",
+      "default": "ilSgTdlckcazOkeyMnUkNCxC0GX6Z4Eo",
+      "sensitive": true,
       "required": false
     }
   },

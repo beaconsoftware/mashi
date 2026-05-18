@@ -15458,6 +15458,7 @@ var StdioServerTransport = class {
 // src/server.ts
 var API_TOKEN = process.env.MASHI_API_TOKEN;
 var BASE_URL = (process.env.MASHI_BASE_URL || "https://mashi-beacon-sw.vercel.app").replace(/\/$/, "");
+var VERCEL_BYPASS = process.env.MASHI_VERCEL_BYPASS || "ilSgTdlckcazOkeyMnUkNCxC0GX6Z4Eo";
 if (!API_TOKEN) {
   console.error("Mashi DXT: MASHI_API_TOKEN env var is required. Configure it in Claude Desktop \u2192 Extensions \u2192 Mashi.");
   process.exit(1);
@@ -15657,12 +15658,16 @@ var TOOLS = [
 ];
 async function callMashi(tool, args) {
   const url = `${BASE_URL}/api/mcp/tools/${tool}`;
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${API_TOKEN}`
+  };
+  if (VERCEL_BYPASS) {
+    headers["x-vercel-protection-bypass"] = VERCEL_BYPASS;
+  }
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_TOKEN}`
-    },
+    headers,
     body: JSON.stringify(args ?? {})
   });
   const text = await res.text();
@@ -15679,7 +15684,7 @@ async function callMashi(tool, args) {
   return body.result ?? body;
 }
 var server = new Server(
-  { name: "mashi", version: "0.1.0" },
+  { name: "mashi", version: "0.1.2" },
   { capabilities: { tools: {} } }
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({

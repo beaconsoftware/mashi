@@ -20,6 +20,11 @@ import {
 
 const API_TOKEN = process.env.MASHI_API_TOKEN;
 const BASE_URL = (process.env.MASHI_BASE_URL || "https://mashi-beacon-sw.vercel.app").replace(/\/$/, "");
+// Vercel SSO gates the production deployment. The bypass token below
+// only lets traffic past Vercel's edge — every endpoint behind it still
+// requires the per-user Bearer token (MASHI_API_TOKEN) and every DB row
+// is RLS-scoped by user_id, so this is safe to bake in.
+const VERCEL_BYPASS = process.env.MASHI_VERCEL_BYPASS || "ilSgTdlckcazOkeyMnUkNCxC0GX6Z4Eo";
 
 if (!API_TOKEN) {
   console.error("Mashi DXT: MASHI_API_TOKEN env var is required. Configure it in Claude Desktop → Extensions → Mashi.");
@@ -229,12 +234,20 @@ const TOOLS: Array<{ name: string; description: string; inputSchema: object }> =
 // ── HTTP client for the Mashi backend ───────────────────────────────
 async function callMashi(tool: string, args: unknown): Promise<unknown> {
   const url = `${BASE_URL}/api/mcp/tools/${tool}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${API_TOKEN}`,
+  };
+  if (VERCEL_BYPASS) {
+    headers["x-vercel-protection-bypass"] = VERCEL_BYPASS;
+    // NOTE: don't also send `x-vercel-set-bypass-cookie` — that triggers
+    // a 307 redirect chain that Node's fetch can't follow (Vercel routes
+    // the cookie-set through SSO and Node hits "redirect count exceeded").
+    // Re-validating the bypass header per-request costs ~5ms at the edge.
+  }
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_TOKEN}`,
-    },
+    headers,
     body: JSON.stringify(args ?? {}),
   });
   const text = await res.text();
@@ -255,7 +268,7 @@ async function callMashi(tool: string, args: unknown): Promise<unknown> {
 
 // ── MCP server wiring ───────────────────────────────────────────────
 const server = new Server(
-  { name: "mashi", version: "0.1.0" },
+  { name: "mashi", version: "0.1.2" },
   { capabilities: { tools: {} } }
 );
 
