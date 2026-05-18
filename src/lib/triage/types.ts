@@ -88,6 +88,13 @@ export interface ExistingS2DContext {
   pathway: string;
   priority: string;
   created_at: string;
+  /**
+   * How many source touches this item has accumulated (length of
+   * linked_sources). Surfaced to the triage agent as a recurrence
+   * signal — "this work has shown up N times across sources" — so
+   * the priority decision can lean on cross-source repetition.
+   */
+  linked_sources_count?: number;
 }
 
 export interface TriageUnit {

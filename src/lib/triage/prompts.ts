@@ -52,11 +52,28 @@ Sidd is the product lead at Beacon Software, a PE-backed software holding compan
 - delegated: handed to someone else, he's tracking
 - watching: he's acted, waiting for response/movement
 
-# Priority
-- urgent: action TODAY (explicit deadline, blocker, exec/customer waiting)
-- high: action this week
-- medium: this sprint
-- low: someday / nice-to-have
+# Priority — be PARSIMONIOUS. Default is medium.
+Sidd's board is bloated with "urgent" because past triage runs over-fired. Recalibrate.
+
+Working definitions (use the LOWEST level that fits):
+- urgent (action TODAY): only when at least one of these is true
+    * an explicit hard deadline TODAY or already missed
+    * a paying customer is blocked right now
+    * money is actively bleeding (downtime, payments stuck, etc.)
+    * an exec / Sidd's direct boss is waiting on a specific reply with a same-day expectation stated
+  "exec/customer is involved" alone is NOT enough. Most portco emails CC an exec — that's the default state, not urgency.
+- high (action this week): real this-week deadline, customer-impacting bug being prioritized, decision a teammate is blocked on, a recurring signal hitting from multiple sources.
+- medium (this sprint — DEFAULT): the honest answer for most things. Useful, real work, no fire.
+- low (someday / nice-to-have): legitimate but no near-term return; ideas to revisit.
+
+Calibration heuristic: if you'd assign urgent or high to MORE than 1 in 4 items, you're miscalibrated. Walk back. Most "looks important" emails are medium.
+
+# Recurrence signal — the strongest evidence of importance
+You'll be shown a \`linked_sources_count\` on every existing open item. This is the number of times this same work has surfaced across Sidd's sources (Gmail thread + Slack DM + Linear issue + meeting transcript, etc.).
+- linked_sources_count >= 3 is a real signal: the topic keeps coming up. Treat as a recurrence indicator.
+- When you decide to UPDATE an existing item with a high linked_sources_count, lean toward bumping priority up to high (or urgent only if a same-day trigger ALSO fires).
+- When CREATING a new item that is clearly the same work as something with linked_sources_count >= 3 — don't. Choose update or close instead.
+- Recurrence does NOT mean someone is mad — it can also mean "we just have a lot of channels". Use it alongside the trigger conditions above, not as a sole urgency reason.
 
 # Board column on create (status field)
 - "todo" (default): on-deck. Sidd should pick this up in the current sprint week. Use for anything actionable now.
@@ -106,10 +123,14 @@ export function buildTriageUserPrompt(unit: TriageUnit): string {
     unit.existing_items.length === 0
       ? "(none — this unit has no existing open S2D items)"
       : unit.existing_items
-          .map(
-            (it, i) =>
-              `${i + 1}. id=${it.id}\n   title="${it.title}"\n   status=${it.status} pathway=${it.pathway} priority=${it.priority}\n   created=${it.created_at}`
-          )
+          .map((it, i) => {
+            const lsc = it.linked_sources_count ?? 0;
+            const recurrenceNote =
+              lsc >= 3
+                ? `   linked_sources_count=${lsc} ← RECURRING SIGNAL (hit ${lsc}× across sources)\n`
+                : `   linked_sources_count=${lsc}\n`;
+            return `${i + 1}. id=${it.id}\n   title="${it.title}"\n   status=${it.status} pathway=${it.pathway} priority=${it.priority}\n${recurrenceNote}   created=${it.created_at}`;
+          })
           .join("\n");
 
   return `New context arrived from ${unit.source_type}.

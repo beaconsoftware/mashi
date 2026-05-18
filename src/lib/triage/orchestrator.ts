@@ -341,11 +341,21 @@ export async function loadExistingForUnit(
   const supabase = createSupabaseServiceClient();
   const { data } = await supabase
     .from("s2d_items")
-    .select("id, title, status, pathway, priority, created_at")
+    .select("id, title, status, pathway, priority, created_at, linked_sources")
     .eq("source_type", sourceType)
     .eq("source_thread_id", sourceThreadId)
     .neq("status", "done");
-  return data ?? [];
+  return (data ?? []).map((it) => {
+    const { linked_sources, ...rest } = it as typeof it & {
+      linked_sources?: unknown[] | null;
+    };
+    return {
+      ...rest,
+      linked_sources_count: Array.isArray(linked_sources)
+        ? linked_sources.length
+        : 0,
+    };
+  });
 }
 
 /**
