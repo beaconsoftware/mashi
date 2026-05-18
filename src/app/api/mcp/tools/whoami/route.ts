@@ -16,7 +16,7 @@ export const POST = mcpTool<Record<string, never>, unknown>(async (_args, ctx) =
       .maybeSingle(),
     ctx.supabase
       .from("connected_accounts")
-      .select("provider, account_email, account_label, last_synced_at, last_sync_status")
+      .select("provider, account_email, account_label, last_synced_at, last_sync_status, last_sync_error")
       .eq("user_id", ctx.userId),
     ctx.supabase
       .from("companies")
@@ -37,6 +37,7 @@ export const POST = mcpTool<Record<string, never>, unknown>(async (_args, ctx) =
       label: c.account_label ?? c.account_email,
       last_synced_at: c.last_synced_at,
       status: c.last_sync_status,
+      error: c.last_sync_error,
     })),
     counts: {
       companies: companyCount.count ?? 0,
