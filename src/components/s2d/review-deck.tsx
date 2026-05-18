@@ -355,36 +355,19 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // ───────────────────────────── Entry animation ─────────────────────────────
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Overlay fade-in fires ONCE when the modal opens. CRITICAL: this used
-  // to depend on [open, cursor] which meant every swipe re-ran a
-  // gsap.from(opacity: 0) on the entire overlay — including the
-  // backdrop — making the whole modal translucent for 200ms after every
-  // swipe. That's the "card shows up translucent" bug the user reported
-  // (board behind visibly showing through).
-  useGSAP(
-    () => {
-      if (!open || !rootRef.current) return;
-      gsap.from(rootRef.current, {
-        opacity: 0,
-        duration: DUR.short,
-        ease: EASE.out,
-      });
-    },
-    { dependencies: [open] }
-  );
-
-  // New-top-card entry fires on each cursor advance. heroEntry tweens
-  // from opacity:0 scale:0.94 with clearProps:"all" so the card lands
-  // at its natural state. Only touches topCardRef.current, never the
-  // root overlay.
-  useGSAP(
-    () => {
-      if (!open) return;
-      const card = topCardRef.current;
-      if (card) heroEntry(card);
-    },
-    { dependencies: [open, cursor] }
-  );
+  // ENTRY ANIMATIONS DELIBERATELY REMOVED.
+  //
+  // Both `gsap.from(rootRef, opacity: 0)` and `heroEntry(card)` tween
+  // opacity from 0 to 1. The card uses DUR.hero = 0.7s. For the entire
+  // duration of that tween (700ms after every cursor advance), the
+  // card is partially transparent and the board behind shows through
+  // the opaque backdrop's edges — that's the "card translucent after
+  // swipe" symptom the user kept reporting.
+  //
+  // No opacity tweens on this component anymore. Modal pops in
+  // instantly; new cards pop in instantly. The progress bar + remaining
+  // counter + swipe gesture itself carry enough motion that the user
+  // doesn't lose track of "a new card arrived". Correctness > polish.
 
   // Card transforms reset automatically because the CardFace below is
   // keyed by current.id — each new card mounts as a fresh DOM element
@@ -495,7 +478,13 @@ function Overlay({
   return (
     <div
       ref={rootRef}
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-background backdrop-blur-md"
+      className="fixed inset-0 z-[110] flex items-center justify-center"
+      // Inline color — defensive against any Tailwind class collision /
+      // global CSS that might otherwise leave the overlay transparent.
+      // hsl(240 10% 4%) matches the dashboard's --background, fully
+      // opaque. No alpha. No bleed-through possible at the backdrop
+      // layer.
+      style={{ backgroundColor: "hsl(240 10% 4%)" }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
