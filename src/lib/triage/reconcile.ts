@@ -491,6 +491,7 @@ export async function reconcileAllStatuses(userId: string): Promise<{
   byProvider: ReconcileResult[];
   fireflies: number;
   calendarPast: number;
+  prepPast: number;
   stale: number;
   cascaded: number;
 }> {
@@ -516,6 +517,16 @@ export async function reconcileAllStatuses(userId: string): Promise<{
     console.warn("[reconcile] calendar past-event sweep failed:", err);
   }
 
+  // Close "Prep for X" items that reference a calendar event that has
+  // ended. Catches the items whose source isn't calendar but whose
+  // linked_sources points to a now-past meeting.
+  let prepPast = { closed: 0, closedIds: [] as string[] };
+  try {
+    prepPast = await reconcilePastPrepItems(userId);
+  } catch (err) {
+    console.warn("[reconcile] prep-items past-meeting sweep failed:", err);
+  }
+
   let staleResult: { closed: number; closedIds: string[]; details: string[] } = {
     closed: 0,
     closedIds: [],
@@ -533,6 +544,7 @@ export async function reconcileAllStatuses(userId: string): Promise<{
     ...slack.closedIds,
     ...fireflies.closedIds,
     ...calendarPast.closedIds,
+    ...prepPast.closedIds,
     ...staleResult.closedIds,
   ];
   let cascaded = 0;
@@ -552,11 +564,13 @@ export async function reconcileAllStatuses(userId: string): Promise<{
       slack.closed +
       fireflies.closed +
       calendarPast.closed +
+      prepPast.closed +
       staleResult.closed +
       cascaded,
     byProvider: [linear, gmail, slack],
     fireflies: fireflies.closed,
     calendarPast: calendarPast.closed,
+    prepPast: prepPast.closed,
     stale: staleResult.closed,
     cascaded,
   };
@@ -642,6 +656,121 @@ export async function reconcileCalendarPastEvents(
       .eq("user_id", userId)
       .eq("id", it.id);
     if (!error) closedIds.push(it.id);
+  }
+
+  return { closed: closedIds.length, closedIds };
+}
+
+/**
+ * Close "Prep for X" S2D items where the referenced meeting has already
+ * passed.
+ *
+ * Sister to reconcileCalendarPastEvents: that pass closes items whose
+ * source_type IS calendar, this one catches items that REFERENCE a
+ * calendar event via linked_sources but were sourced elsewhere (e.g.
+ * Gmail invite + Slack thread that all got dedupped into one prep
+ * S2D item — its source_type might be gmail, but linked_sources
+ * carries the calendar event id).
+ *
+ * Match criteria:
+ *   - Title matches /^prep\b/i  ("Prep for X", "Prep agenda for Y",
+ *     "Prep slides for Z", etc.)
+ *   - At least one calendar event referenced (either via source_type
+ *     or via a linked_sources entry with source_type='calendar')
+ *   - EVERY referenced calendar event has end_at < now()
+ *
+ * The "every" condition prevents closing a prep item that references
+ * multiple instances of a recurring meeting where only the past one
+ * has happened — the future instance keeps it alive.
+ */
+export async function reconcilePastPrepItems(
+  userId: string
+): Promise<{ closed: number; closedIds: string[] }> {
+  const supabase = createSupabaseServiceClient();
+  const closedIds: string[] = [];
+
+  const { data: items } = await supabase
+    .from("s2d_items")
+    .select("id, title, source_type, source_thread_id, linked_sources")
+    .eq("user_id", userId)
+    .neq("status", "done")
+    .ilike("title", "prep%");
+  if (!items || items.length === 0) return { closed: 0, closedIds: [] };
+
+  // For each candidate item, gather all calendar event external_ids it
+  // references — from source_thread_id (if source_type='calendar') and
+  // from any linked_sources entry whose source_type='calendar'.
+  type Candidate = { id: string; title: string; eventExternalIds: string[] };
+  const candidates: Candidate[] = [];
+  for (const it of items) {
+    const eventExternalIds: string[] = [];
+    if (it.source_type === "calendar" && it.source_thread_id) {
+      eventExternalIds.push(it.source_thread_id);
+    }
+    const links = Array.isArray(it.linked_sources) ? it.linked_sources : [];
+    for (const ls of links) {
+      const link = ls as { source_type?: string; source_thread_id?: string };
+      if (link.source_type === "calendar" && link.source_thread_id) {
+        eventExternalIds.push(link.source_thread_id);
+      }
+    }
+    if (eventExternalIds.length > 0) {
+      candidates.push({ id: it.id, title: it.title, eventExternalIds });
+    }
+  }
+  if (candidates.length === 0) return { closed: 0, closedIds: [] };
+
+  // Batch-fetch the calendar events.
+  const allExternalIds = Array.from(
+    new Set(candidates.flatMap((c) => c.eventExternalIds))
+  );
+  const { data: events } = await supabase
+    .from("calendar_events")
+    .select("external_id, end_at, title")
+    .eq("user_id", userId)
+    .in("external_id", allExternalIds);
+
+  const endByExternalId = new Map<
+    string,
+    { end_at: number; title: string | null }
+  >();
+  for (const e of events ?? []) {
+    if (e.end_at)
+      endByExternalId.set(e.external_id, {
+        end_at: new Date(e.end_at).getTime(),
+        title: e.title ?? null,
+      });
+  }
+
+  const nowMs = Date.now();
+  for (const c of candidates) {
+    // Only close if EVERY referenced event has ended. A prep item that
+    // references both a past and a future instance of a recurring meeting
+    // keeps the open one alive.
+    const knownEvents = c.eventExternalIds
+      .map((extId) => endByExternalId.get(extId))
+      .filter((v): v is { end_at: number; title: string | null } => v != null);
+    if (knownEvents.length === 0) continue; // events not synced, can't judge
+    const allPast = knownEvents.every((e) => e.end_at < nowMs);
+    if (!allPast) continue;
+
+    const latest = knownEvents.reduce((a, b) => (a.end_at > b.end_at ? a : b));
+    const hoursAgo = Math.round((nowMs - latest.end_at) / 3_600_000);
+    const ageLabel =
+      hoursAgo < 24 ? `${hoursAgo}h ago` : `${Math.round(hoursAgo / 24)}d ago`;
+    const meetingLabel = latest.title ? ` "${latest.title.slice(0, 60)}"` : "";
+
+    const { error } = await supabase
+      .from("s2d_items")
+      .update({
+        status: "done",
+        done_at: new Date().toISOString(),
+        outcome: `Auto-closed: prep item — referenced meeting${meetingLabel} ended ${ageLabel}`,
+        resolved_via: "auto_past_meeting",
+      })
+      .eq("user_id", userId)
+      .eq("id", c.id);
+    if (!error) closedIds.push(c.id);
   }
 
   return { closed: closedIds.length, closedIds };
