@@ -490,6 +490,7 @@ export async function reconcileAllStatuses(userId: string): Promise<{
   total: number;
   byProvider: ReconcileResult[];
   fireflies: number;
+  calendarPast: number;
   stale: number;
   cascaded: number;
 }> {
@@ -504,6 +505,15 @@ export async function reconcileAllStatuses(userId: string): Promise<{
     fireflies = await reconcileFirefliesByMeetingAge(30, userId);
   } catch (err) {
     console.warn("[reconcile] fireflies age check failed:", err);
+  }
+
+  // Auto-close S2D items whose backing calendar event has already ended.
+  // Cheap (single join, no LLM call) so it runs every pass.
+  let calendarPast = { closed: 0, closedIds: [] as string[] };
+  try {
+    calendarPast = await reconcileCalendarPastEvents(userId);
+  } catch (err) {
+    console.warn("[reconcile] calendar past-event sweep failed:", err);
   }
 
   let staleResult: { closed: number; closedIds: string[]; details: string[] } = {
@@ -522,6 +532,7 @@ export async function reconcileAllStatuses(userId: string): Promise<{
     ...gmail.closedIds,
     ...slack.closedIds,
     ...fireflies.closedIds,
+    ...calendarPast.closedIds,
     ...staleResult.closedIds,
   ];
   let cascaded = 0;
@@ -540,10 +551,12 @@ export async function reconcileAllStatuses(userId: string): Promise<{
       gmail.closed +
       slack.closed +
       fireflies.closed +
+      calendarPast.closed +
       staleResult.closed +
       cascaded,
     byProvider: [linear, gmail, slack],
     fireflies: fireflies.closed,
+    calendarPast: calendarPast.closed,
     stale: staleResult.closed,
     cascaded,
   };
@@ -554,6 +567,86 @@ export async function reconcileAllStatuses(userId: string): Promise<{
  * than `maxAgeDays` days ago. Action items from old meetings have either
  * been resolved in some other channel or quietly dropped.
  */
+/**
+ * Close S2D items whose backing calendar event has already ended.
+ *
+ * The triage prompt guards against CREATING items for past events, but
+ * nothing closes an item after time elapses. Result: meeting_backed
+ * (and other calendar-sourced) items linger on the board long after
+ * the meeting actually happened — e.g., MASH-924 "Victor / Sidd 1:1 —
+ * today 4:30pm" sitting in To Do at 9pm.
+ *
+ * Logic:
+ *   - Pull all open S2D items with source_type='calendar' for this user
+ *   - Join on calendar_events.external_id = source_thread_id
+ *   - For any whose end_at < now(), mark done with a "meeting ended"
+ *     outcome and resolved_via='auto_past_meeting'
+ *
+ * Doesn't touch items whose source_type is gmail/slack but happen to
+ * mention a past meeting in the description — those need the ai-staleness
+ * text-pattern pass. We only handle the case where Mashi created the
+ * item directly from the calendar event, where the linkage is reliable.
+ */
+export async function reconcileCalendarPastEvents(
+  userId: string
+): Promise<{ closed: number; closedIds: string[] }> {
+  const supabase = createSupabaseServiceClient();
+  const closedIds: string[] = [];
+
+  const { data: items } = await supabase
+    .from("s2d_items")
+    .select("id, title, source_thread_id")
+    .eq("user_id", userId)
+    .eq("source_type", "calendar")
+    .neq("status", "done");
+  if (!items || items.length === 0) return { closed: 0, closedIds: [] };
+
+  const externalIds = items
+    .map((i) => i.source_thread_id)
+    .filter((s): s is string => !!s);
+  if (externalIds.length === 0) return { closed: 0, closedIds: [] };
+
+  const { data: events } = await supabase
+    .from("calendar_events")
+    .select("external_id, end_at, title")
+    .eq("user_id", userId)
+    .in("external_id", externalIds);
+
+  const endByExternalId = new Map<string, number>();
+  for (const e of events ?? []) {
+    if (e.end_at) endByExternalId.set(e.external_id, new Date(e.end_at).getTime());
+  }
+
+  const nowMs = Date.now();
+  for (const it of items) {
+    if (!it.source_thread_id) continue;
+    const endMs = endByExternalId.get(it.source_thread_id);
+    if (endMs == null) continue;
+    if (endMs >= nowMs) continue; // event hasn't ended yet
+
+    const minsAgo = Math.round((nowMs - endMs) / 60_000);
+    const ageLabel =
+      minsAgo < 60
+        ? `${minsAgo} min ago`
+        : minsAgo < 1440
+          ? `${Math.round(minsAgo / 60)}h ago`
+          : `${Math.round(minsAgo / 1440)}d ago`;
+    const { error } = await supabase
+      .from("s2d_items")
+      .update({
+        status: "done",
+        done_at: new Date().toISOString(),
+        outcome: `Auto-closed: backing calendar event ended ${ageLabel}`,
+        resolved_via: "auto_past_meeting",
+      })
+      .eq("user_id", userId)
+      .eq("id", it.id);
+    if (!error) closedIds.push(it.id);
+  }
+
+  return { closed: closedIds.length, closedIds };
+}
+
 export async function reconcileFirefliesByMeetingAge(
   maxAgeDays: number,
   userId: string
