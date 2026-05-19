@@ -2,7 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { useSprintStore } from "@/store/sprint-store";
-import { PlannerPrioritize } from "./planner-prioritize";
+// Swipe-based prioritize is the default; the legacy list-based
+// PlannerPrioritize is still on disk if we want to bring it back as
+// an opt-in toggle.
+import { PlannerPrioritizeSwipe } from "./planner-prioritize-swipe";
 import { PlannerSchedule } from "./planner-schedule";
 import { PlannerReview } from "./planner-review";
 import { SprintActiveMode } from "./sprint-active-mode";
@@ -53,7 +56,7 @@ export function SprintPage() {
   if (phase === "prioritize" || phase === "schedule" || phase === "review") {
     return (
       <div ref={stageWrapRef} className="flex h-full flex-1 flex-col min-h-0">
-        {phase === "prioritize" && <PlannerPrioritize />}
+        {phase === "prioritize" && <PlannerPrioritizeSwipe />}
         {phase === "schedule" && <PlannerSchedule />}
         {phase === "review" && <PlannerReview />}
       </div>
