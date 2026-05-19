@@ -181,6 +181,11 @@ export async function syncGCalConnection(connectionId: string): Promise<{
               0,
               10
             )}`,
+            // Best-effort meeting URL — could be Meet/Zoom/Webex from the
+            // event description. Not an "open this event in Calendar" deep
+            // link (we don't capture htmlLink yet) but it's the most useful
+            // single-click action for a calendar-sourced item.
+            source_url: pickMeetingUrl(e),
             company_id: conn.company_id,
             content: triageInput,
             existing_items,

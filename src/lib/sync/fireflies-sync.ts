@@ -186,6 +186,10 @@ export async function syncFirefliesConnection(connectionId: string): Promise<{
               source_label: `Fireflies · ${t.title ?? "(untitled)"} · ${
                 t.dateString ?? ""
               }`,
+              // Direct link to the transcript page on Fireflies. Constructable
+              // from external_id alone but populating at create time means
+              // the chip never has to derive it.
+              source_url: `https://app.fireflies.ai/view/${encodeURIComponent(t.id)}`,
               company_id: conn.company_id,
               content: triageInput,
               existing_items,

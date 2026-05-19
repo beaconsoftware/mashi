@@ -163,6 +163,7 @@ export async function syncLinearConnection(connectionId: string): Promise<{
             source_type: "linear",
             source_thread_id: it.id,
             source_label: `Linear · ${it.identifier} · ${conn.account_label}`,
+            source_url: it.url, // full https://linear.app/.../issue/MAP-N — the source_thread_id is just the UUID
             company_id: conn.company_id,
             content: triageInput,
             existing_items,

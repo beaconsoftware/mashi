@@ -102,6 +102,14 @@ export interface TriageUnit {
   source_thread_id: string;
   /** Used in the source_label for any new S2D items created. */
   source_label: string;
+  /**
+   * Deep link to the original source (Linear issue URL, calendar event
+   * URL, Fireflies meeting URL, etc.). Passed through to s2d_items.source_url
+   * on create so the review card's Sources section can render a clickable
+   * chip without having to re-derive the URL client-side. null when we
+   * don't have a stable deep link for this source type.
+   */
+  source_url: string | null;
   /** Company this unit belongs to. May be null if we can't tell. */
   company_id: string | null;
   /** The actual content the agent reasons over. Source-specific shape. */

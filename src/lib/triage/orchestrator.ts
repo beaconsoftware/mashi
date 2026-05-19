@@ -247,6 +247,7 @@ async function applyOperation(
       source_id: `${unit.source_thread_id}:${slug(op.title)}`,
       source_thread_id: unit.source_thread_id,
       source_label: unit.source_label,
+      source_url: unit.source_url,
       company_id: unit.company_id,
       delegated_to: op.delegated_to ?? null,
       queue_reason: status === "in_queue" ? op.queue_reason ?? null : null,

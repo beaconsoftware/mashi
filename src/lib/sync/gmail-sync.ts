@@ -184,6 +184,11 @@ export async function syncGmailConnection(connectionId: string): Promise<{
             source_type: "gmail",
             source_thread_id: threadId,
             source_label: `Gmail · ${thread.subject || "(no subject)"} · ${conn.account_label}`,
+            // Pre-built thread deep link. deriveSourceUrl can build the
+            // same one client-side from just threadId, but populating
+            // source_url at create time means the chip is always linked
+            // even before any client-side derivation.
+            source_url: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(threadId)}`,
             company_id: conn.company_id,
             content: thread,
             existing_items,

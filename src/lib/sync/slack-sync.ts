@@ -189,6 +189,12 @@ export async function syncSlackConnection(connectionId: string): Promise<{
             source_type: "slack",
             source_thread_id,
             source_label: `Slack · ${slice.conversation_label} · ${slice.date} · ${conn.account_label}`,
+            // Slack channel redirect — opens the channel in the user's
+            // logged-in workspace. Doesn't deep-link to the specific
+            // message (we'd need workspace + ts for a permalink, and
+            // we don't capture that yet) but it's the best single-click
+            // option for a slack day-slice.
+            source_url: `https://slack.com/app_redirect?channel=${encodeURIComponent(slice.conversation_id)}`,
             company_id: conn.company_id,
             content: slice,
             existing_items,
