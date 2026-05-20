@@ -15,6 +15,7 @@ import {
   X,
   MessageSquare,
   BellOff,
+  AlertTriangle,
 } from "lucide-react";
 import { useS2DStore } from "@/store/s2d-store";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
@@ -53,6 +54,15 @@ export function SprintActiveMode() {
 
   // Tick to drive the live timer
   const [, force] = useState(0);
+  // Inline failure banner — surfaces save failures from the PATCH so a
+  // network blip on Done doesn't silently roll back the cache.
+  const [banner, setBanner] = useState<{ kind: "err"; msg: string } | null>(null);
+  // Auto-dismiss banner after 8s.
+  useEffect(() => {
+    if (!banner) return;
+    const id = setTimeout(() => setBanner(null), 8000);
+    return () => clearTimeout(id);
+  }, [banner]);
   useEffect(() => {
     if (paused) return;
     const id = setInterval(() => force((x) => x + 1), 1000);
@@ -86,29 +96,62 @@ export function SprintActiveMode() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentItem?.id]);
 
-  function markDoneAndAdvance() {
-    if (currentItem) {
-      updateItem.mutate({
+  // mutateAsync + try/catch so a failed PATCH doesn't silently advance the
+  // cursor past an item whose status was rolled back. Without this guard,
+  // pressing Done on a network blip leaves the item in To Do but the user
+  // never sees it — they think the work was saved.
+  async function markDoneAndAdvance() {
+    if (!currentItem) {
+      advance("done");
+      return;
+    }
+    const ticket = currentItem.ticket_number;
+    try {
+      await updateItem.mutateAsync({
         id: currentItem.id,
         patch: { status: "done", outcome: "Completed in sprint", resolved_via: "manual" },
       });
+      advance("done");
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't save MASH-${ticket}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
     }
-    advance("done");
   }
-  function skip() {
-    if (currentItem) {
-      updateItem.mutate({
+  async function skip() {
+    if (!currentItem) {
+      advance("skipped");
+      return;
+    }
+    const ticket = currentItem.ticket_number;
+    try {
+      await updateItem.mutateAsync({
         id: currentItem.id,
         patch: { status: "todo" }, // back to todo, not done
       });
+      advance("skipped");
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't skip MASH-${ticket}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
     }
-    advance("skipped");
   }
-  function snooze() {
-    if (currentItem) {
-      const t = new Date();
-      t.setHours(t.getHours() + 4);
-      updateItem.mutate({
+  async function snooze() {
+    if (!currentItem) {
+      advance("skipped");
+      return;
+    }
+    const ticket = currentItem.ticket_number;
+    const t = new Date();
+    t.setHours(t.getHours() + 4);
+    try {
+      await updateItem.mutateAsync({
         id: currentItem.id,
         patch: {
           status: "in_queue",
@@ -116,8 +159,15 @@ export function SprintActiveMode() {
           queue_reason: "Snoozed mid-sprint",
         },
       });
+      advance("skipped");
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't snooze MASH-${ticket}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
     }
-    advance("skipped");
   }
 
   // Keyboard shortcuts (active phase only — minimized state shouldn't capture)
@@ -270,6 +320,21 @@ export function SprintActiveMode() {
           </Button>
         </div>
       </div>
+
+      {banner && (
+        <div className="border-b border-destructive/40 bg-destructive/10 px-6 py-2">
+          <div className="mx-auto flex max-w-4xl items-start gap-2 text-[12px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">{banner.msg}</span>
+            <button
+              onClick={() => setBanner(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid flex-1 grid-cols-1 gap-6 p-8 md:grid-cols-[1fr_320px]">
         {/* Center stage */}

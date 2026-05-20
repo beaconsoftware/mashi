@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
   DndContext,
@@ -11,6 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { AlertTriangle, X } from "lucide-react";
 import { S2DColumn } from "@/components/s2d/s2d-column";
 import { S2DItemCard } from "@/components/s2d/s2d-item-card";
 import { S2DItemSheet } from "@/components/s2d/s2d-item-sheet";
@@ -89,6 +90,14 @@ export function S2DBoard() {
   }, [filteredItems]);
 
   const [activeItem, setActiveItem] = useState<S2DItem | null>(null);
+  // Inline banner — surfaces drag/drop save failures so a network blip
+  // doesn't silently roll back the cache after the card has snapped.
+  const [banner, setBanner] = useState<{ kind: "err"; msg: string } | null>(null);
+  useEffect(() => {
+    if (!banner) return;
+    const id = setTimeout(() => setBanner(null), 8000);
+    return () => clearTimeout(id);
+  }, [banner]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -149,9 +158,22 @@ export function S2DBoard() {
     }
     if (patch.status === "done") {
       patch.done_at = new Date().toISOString();
+      // Without these, drag-to-Done rows end up with null outcome/resolved_via,
+      // which makes the sheet's outcome line blank and breaks analytics that
+      // bucket closes by resolved_via.
+      patch.outcome = "Closed from board";
+      patch.resolved_via = "manual";
     }
 
-    updateItem.mutate({ id: item.id, patch });
+    const ticket = item.ticket_number;
+    updateItem.mutateAsync({ id: item.id, patch }).catch((err) => {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't move MASH-${ticket}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
+    });
   }
 
   if (isLoading) {
@@ -186,6 +208,18 @@ export function S2DBoard() {
           totalCount={items.length}
           filteredCount={filteredItems.length}
         />
+        {banner && (
+          <div className="mx-4 mt-2 flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-2 text-[12px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">{banner.msg}</span>
+            <button
+              onClick={() => setBanner(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
           <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
             <ReviewColumn items={reviewItems} />

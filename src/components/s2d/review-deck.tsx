@@ -18,6 +18,7 @@ import {
   Loader2,
   ExternalLink,
   Link as LinkIcon,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { S2DItem, Pathway, Priority, S2DStatus } from "@/types";
@@ -66,6 +67,14 @@ export function ReviewDeck({ items, open, onClose }: Props) {
     Record<string, { priority?: Priority; pathway?: Pathway; status?: S2DStatus }>
   >({});
   const [justifying, setJustifying] = useState(false);
+  // Inline banner — surfaces failed swipe PATCHes so a network blip doesn't
+  // silently roll back the cache while the cursor keeps advancing.
+  const [banner, setBanner] = useState<{ kind: "err"; msg: string } | null>(null);
+  useEffect(() => {
+    if (!banner) return;
+    const id = setTimeout(() => setBanner(null), 8000);
+    return () => clearTimeout(id);
+  }, [banner]);
 
   // Snapshot the deck order when opened so swipes don't reshuffle mid-session
   const deckRef = useRef<S2DItem[]>([]);
@@ -141,11 +150,14 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   const applySwipe = useCallback(
     (action: SwipeAction) => {
       if (!current) return;
+      const swipedItem = current;
+      const swipedId = swipedItem.id;
+      const ticket = swipedItem.ticket_number;
       try {
-        const o = overrides[current.id] ?? {};
-        const priority = o.priority ?? current.priority;
-        const pathway = o.pathway ?? current.pathway;
-        let status: S2DStatus = o.status ?? current.status;
+        const o = overrides[swipedId] ?? {};
+        const priority = o.priority ?? swipedItem.priority;
+        const pathway = o.pathway ?? swipedItem.pathway;
+        let status: S2DStatus = o.status ?? swipedItem.status;
 
         const patch: Partial<S2DItem> & Record<string, unknown> = {
           priority,
@@ -174,10 +186,19 @@ export function ReviewDeck({ items, open, onClose }: Props) {
           patch.resolved_via = "manual";
         }
 
-        updateItem.mutate({ id: current.id, patch });
+        // mutateAsync surfaces save failures via banner so a network blip
+        // doesn't silently roll back the cache after the card has already
+        // flown off. The optimistic onMutate keeps the swipe feeling instant.
+        updateItem.mutateAsync({ id: swipedId, patch }).catch((err) => {
+          setBanner({
+            kind: "err",
+            msg: `Couldn't save MASH-${ticket}: ${
+              err instanceof Error ? err.message : "save failed"
+            } — it's back in Review, retry from there`,
+          });
+        });
         // Drop the swiped override so the map doesn't grow unbounded
         // over a long session.
-        const swipedId = current.id;
         setOverrides((prev) => {
           if (!(swipedId in prev)) return prev;
           const { [swipedId]: _drop, ...rest } = prev;
@@ -389,6 +410,18 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   return (
     <Overlay onClose={onClose} rootRef={rootRef}>
       <div className="flex h-full w-full max-w-2xl flex-col p-6">
+        {banner && (
+          <div className="mb-3 flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-2.5 text-[12px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">{banner.msg}</span>
+            <button
+              onClick={() => setBanner(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {/* Top: progress + close */}
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">

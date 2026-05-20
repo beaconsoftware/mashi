@@ -29,6 +29,7 @@ import {
   Sparkles,
   MessageSquare,
   Clock,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,14 @@ export function SprintActiveModeMulti() {
 
   // Tick once per second to drive the live timers.
   const [, force] = useState(0);
+  // Inline error banner — surfaces failed Done/Skip/Snooze PATCHes so the
+  // user can retry rather than silently watching the cache roll back.
+  const [banner, setBanner] = useState<{ kind: "err"; msg: string } | null>(null);
+  useEffect(() => {
+    if (!banner) return;
+    const id = setTimeout(() => setBanner(null), 8000);
+    return () => clearTimeout(id);
+  }, [banner]);
   useEffect(() => {
     if (paused) return;
     const id = setInterval(() => force((x) => x + 1), 1000);
@@ -132,34 +141,69 @@ export function SprintActiveModeMulti() {
     }
   }, [activeSlotIds, itemMap, updateItem]);
 
-  function markDone(s2dItemId: string) {
-    updateItem.mutate({
-      id: s2dItemId,
-      patch: {
-        status: "done",
-        outcome: "Completed in sprint",
-        resolved_via: "manual",
-      },
-    });
-    completeBlock(s2dItemId, "done");
+  // Await the PATCH before promoting the next queued block into the freed
+  // slot. If the save fails, surface a banner and keep the item in its
+  // current slot so the user can retry — otherwise the cache rolls back
+  // silently and the user thinks the work was saved.
+  function ticketLabel(s2dItemId: string): string {
+    const it = itemMap.get(s2dItemId);
+    return it ? `MASH-${it.ticket_number}` : "item";
   }
-  function skip(s2dItemId: string) {
-    updateItem.mutate({ id: s2dItemId, patch: { status: "todo" } });
-    completeBlock(s2dItemId, "skipped");
+  async function markDone(s2dItemId: string) {
+    try {
+      await updateItem.mutateAsync({
+        id: s2dItemId,
+        patch: {
+          status: "done",
+          outcome: "Completed in sprint",
+          resolved_via: "manual",
+        },
+      });
+      completeBlock(s2dItemId, "done");
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't save ${ticketLabel(s2dItemId)}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
+    }
   }
-  function snooze(s2dItemId: string) {
+  async function skip(s2dItemId: string) {
+    try {
+      await updateItem.mutateAsync({ id: s2dItemId, patch: { status: "todo" } });
+      completeBlock(s2dItemId, "skipped");
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't skip ${ticketLabel(s2dItemId)}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
+    }
+  }
+  async function snooze(s2dItemId: string) {
     const t = new Date();
     t.setDate(t.getDate() + 1);
     t.setHours(9, 0, 0, 0);
-    updateItem.mutate({
-      id: s2dItemId,
-      patch: {
-        status: "in_queue",
-        snoozed_until: t.toISOString(),
-        queue_reason: "Snoozed mid-sprint (24h)",
-      },
-    });
-    completeBlock(s2dItemId, "skipped");
+    try {
+      await updateItem.mutateAsync({
+        id: s2dItemId,
+        patch: {
+          status: "in_queue",
+          snoozed_until: t.toISOString(),
+          queue_reason: "Snoozed mid-sprint (24h)",
+        },
+      });
+      completeBlock(s2dItemId, "skipped");
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't snooze ${ticketLabel(s2dItemId)}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
+    }
   }
 
   // Keyboard: 1/2/3 = Done on slot N; q/w/e = Skip on slot N; space = pause
@@ -248,6 +292,21 @@ export function SprintActiveModeMulti() {
           </Button>
         </div>
       </div>
+
+      {banner && (
+        <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2">
+          <div className="flex items-start gap-2 text-[12px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">{banner.msg}</span>
+            <button
+              onClick={() => setBanner(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Active slots — 3 columns side by side on wide, stacked on narrow */}
       <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-3">
