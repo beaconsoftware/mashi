@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useS2DItems, useUpdateS2DItem } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
@@ -63,6 +63,29 @@ export function SprintComplete() {
   );
   const [saving, setSaving] = useState(false);
 
+  // Past-sprint aggregate — fetched lazily so the recap renders fast.
+  // null while loading, undefined if endpoint isn't available, else the
+  // computed aggregate over recent sessions.
+  const [aggregate, setAggregate] = useState<{
+    total_sessions: number;
+    total_done: number;
+    total_planned: number;
+    completion_rate: number | null;
+    total_focus_min: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/sprint/session?limit=10")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!cancelled && j?.aggregate) setAggregate(j.aggregate);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const rootRef = useRef<HTMLDivElement | null>(null);
   const sparkleRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLOListElement | null>(null);
@@ -119,6 +142,40 @@ export function SprintComplete() {
         }
       }
       await Promise.allSettled(work);
+
+      // Persist the sprint to sprint_sessions for performance tracking.
+      // Fire-and-forget — failure doesn't block the exit flow, since the
+      // session record is for after-the-fact analysis only.
+      try {
+        const plannedItems = blocks
+          .map((b) => {
+            const it = itemMap.get(b.s2dItemId);
+            return {
+              s2d_item_id: b.s2dItemId,
+              title: it?.title ?? null,
+              pathway: it?.pathway ?? null,
+              priority: it?.priority ?? null,
+              est_minutes: b.durationMin,
+            };
+          });
+        const results = blocks.map((b) => ({
+          s2d_item_id: b.s2dItemId,
+          status: (b.status === "done" ? "done" : "skipped") as "done" | "skipped",
+          actual_min: b.durationMin, // proxy — true wall-clock per-block isn't captured today
+        }));
+        await fetch("/api/sprint/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            started_at: sprintStartedAt ?? new Date(Date.now() - elapsedMin * 60_000).toISOString(),
+            completed_at: new Date().toISOString(),
+            planned_items: plannedItems,
+            results,
+          }),
+        });
+      } catch {
+        // Ignore — local-only is fine if the session POST fails.
+      }
     } finally {
       setSaving(false);
     }
@@ -141,6 +198,24 @@ export function SprintComplete() {
         <p className="text-sm text-muted-foreground">
           {done} done · {skipped} skipped · {elapsedMin}m elapsed
         </p>
+
+        {aggregate && aggregate.total_sessions > 0 && (
+          <div className="mx-auto inline-flex items-center gap-3 rounded-md border border-border/30 bg-secondary/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+            <span>
+              Last {aggregate.total_sessions} sprint
+              {aggregate.total_sessions === 1 ? "" : "s"}:
+            </span>
+            {aggregate.completion_rate != null && (
+              <span className="font-mono text-foreground/85">
+                {Math.round(aggregate.completion_rate * 100)}% completion
+              </span>
+            )}
+            <span>·</span>
+            <span className="font-mono text-foreground/85">
+              {Math.round(aggregate.total_focus_min / 60)}h focus
+            </span>
+          </div>
+        )}
 
         {/* Per-item recap with disposition controls for skipped items. */}
         <ol ref={listRef} className="space-y-1.5 text-left">
