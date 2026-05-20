@@ -1075,7 +1075,7 @@ function BenchCard({
     attributes,
     listeners,
   } = useDraggable({ id: `queue:${block.s2dItemId}` });
-  // Deck-card hover: bigger lift, sheen sweep, cursor-tracked tilt.
+  // Deck-card hover: lift, scale, cursor-tracked tilt, pathway glow.
   // Halo color is the pathway's own CSS var so the glow matches the
   // badge — cosmetic continuity with the rest of the app's pathway
   // language. ref is composed with DnD setNodeRefs below.
@@ -1092,8 +1092,8 @@ function BenchCard({
     deckRef.current = el;
   };
   // Hover-card pattern: open popover on hover-with-intent (~280ms) so
-  // a quick mouseover doesn't trigger. The sheen + tilt feel instant
-  // while the popover waits for clear hover intent.
+  // a quick mouseover doesn't trigger. Lift + tilt feel instant while
+  // the popover waits for clear hover intent.
   const [open, setOpen] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   function startHover() {
@@ -1116,8 +1116,9 @@ function BenchCard({
           onMouseMove={onMove}
           onMouseLeave={endHover}
           className={cn(
-            // overflow-hidden clips the sheen sweep at the card edges;
-            // will-change-transform hints the compositor for the tilt.
+            // overflow-hidden keeps the pathway gradient + content
+            // clipped to the rounded corners; will-change-transform
+            // hints the compositor for the tilt.
             "relative shrink-0 select-none overflow-hidden rounded-xl border bg-card text-[11px] will-change-transform",
             // Border uses pathway tint instead of generic border so the
             // resting card already announces what kind of work it is.
@@ -1134,21 +1135,6 @@ function BenchCard({
             backgroundImage: `linear-gradient(165deg, transparent 40%, ${glow} 200%)`,
           }}
         >
-          {/* Sheen overlay — animates left→right on hover via GSAP. The
-              gradient is a thin diagonal band; the GSAP tween moves it
-              across the card and fades it. Pointer-events-none so it
-              doesn't eat clicks on the underlying content. */}
-          <span
-            data-sheen
-            aria-hidden
-            className="pointer-events-none absolute inset-0 z-20"
-            style={{
-              background:
-                "linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.06) 50%, transparent 60%)",
-              transform: "translateX(-120%)",
-            }}
-          />
-
           {/* Top stat bar — drag handle + priority + ticket + duration */}
           <div className="relative z-10 flex items-center gap-1.5 border-b border-white/5 bg-black/20 px-2.5 py-1.5">
             <button
@@ -1392,18 +1378,6 @@ function DoneCard({
               : "linear-gradient(165deg, transparent 40%, hsl(var(--muted-foreground) / 0.10) 200%)",
           }}
         >
-          {/* Sheen sweep on hover */}
-          <span
-            data-sheen
-            aria-hidden
-            className="pointer-events-none absolute inset-0 z-20"
-            style={{
-              background:
-                "linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.06) 50%, transparent 60%)",
-              transform: "translateX(-120%)",
-            }}
-          />
-
           {/* Top stat bar */}
           <div className="relative z-10 flex items-center gap-1.5 border-b border-white/5 bg-black/20 px-2.5 py-1.5">
             {isDone ? (

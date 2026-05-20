@@ -76,9 +76,6 @@ export function useMagneticHover<T extends HTMLElement = HTMLDivElement>(opts?: 
  *   - Cursor-tracking parallax tilt (rotateX/rotateY based on pointer
  *     position relative to the card center), capped to ±tiltMax degrees.
  *     Hold-still feels solid; sweep feels physical.
- *   - One-shot sheen sweep across the card on enter. The card MUST contain
- *     a child with [data-sheen]; the parent must be overflow-hidden so
- *     the sheen clips at the edges.
  *
  * Usage:
  *
@@ -87,7 +84,6 @@ export function useMagneticHover<T extends HTMLElement = HTMLDivElement>(opts?: 
  *     lift: 8,
  *   });
  *   <div ref={ref} onMouseEnter={onEnter} onMouseMove={onMove} onMouseLeave={onLeave}>
- *     <span data-sheen className="..." />
  *     ...
  *   </div>
  *
@@ -97,6 +93,11 @@ export function useMagneticHover<T extends HTMLElement = HTMLDivElement>(opts?: 
  *
  * Heavier than useMagneticHover and uses 3D transforms, so reserve it
  * for cards the user is meant to interact with as a focal element.
+ *
+ * (Earlier versions included a sheen sweep via a [data-sheen] child
+ * element. Removed — the lift + glow + tilt carry the "card picked up"
+ * feel cleanly, and the sheen was either too aggressive or got stuck
+ * visible across re-renders.)
  */
 export function useDeckCardHover<T extends HTMLElement = HTMLDivElement>(opts?: {
   shadow?: string;
@@ -126,19 +127,6 @@ export function useDeckCardHover<T extends HTMLElement = HTMLDivElement>(opts?: 
         duration: 0.28,
         ease: "power3.out",
       });
-      // Sheen sweep — subtle pass across, dialed down so the lift +
-      // glow + tilt do the heavy lifting and the sheen is just a hint
-      // of "this surface has a finish". Kill prior tweens so a rapid
-      // hover doesn't queue multiple sweeps.
-      const sheen = el.querySelector("[data-sheen]");
-      if (sheen) {
-        gsap.killTweensOf(sheen);
-        gsap.fromTo(
-          sheen,
-          { xPercent: -110, opacity: 0.6 },
-          { xPercent: 110, opacity: 0, duration: 0.55, ease: "power2.out" }
-        );
-      }
     });
   }
 
