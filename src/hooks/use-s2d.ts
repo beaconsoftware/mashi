@@ -3,9 +3,35 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Company, S2DItem, S2DStatus } from "@/types";
+import type { ContextResp } from "@/lib/s2d/claude-prompt";
 
 const S2D_KEY = ["s2d_items"] as const;
 const COMPANIES_KEY = ["companies"] as const;
+const S2D_CONTEXT_KEY = (id: string) => ["s2d_context", id] as const;
+
+/**
+ * Fetch + cache the full source-aware context bundle for one S2D item.
+ * Backed by /api/s2d/[id]/context. Used by sprint-active-mode to surface
+ * source previews per slot without the user opening the side panel.
+ *
+ * staleTime 60s — context is heavy enough that we don't want to refetch
+ * every render, but fresh enough to be useful if a new sync just landed.
+ * Keep the query enabled-gated so we only fetch when a consumer mounts
+ * (e.g. the slot is active or the bench card is hover-expanded).
+ */
+export function useS2DItemContext(id: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: S2D_CONTEXT_KEY(id ?? "__noop"),
+    queryFn: async (): Promise<ContextResp> => {
+      if (!id) throw new Error("missing id");
+      const res = await fetch(`/api/s2d/${id}/context`);
+      if (!res.ok) throw new Error(`context fetch failed: ${res.status}`);
+      return res.json();
+    },
+    enabled: enabled && !!id,
+    staleTime: 60_000,
+  });
+}
 
 interface S2DRow {
   id: string;

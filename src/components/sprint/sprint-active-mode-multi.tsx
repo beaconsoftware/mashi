@@ -31,6 +31,10 @@ import {
   Clock,
   AlertTriangle,
   GripVertical,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Undo2,
+  CheckCheck,
 } from "lucide-react";
 import {
   DndContext,
@@ -45,6 +49,11 @@ import {
 } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   useSprintStore,
   blockLiveElapsedMs,
   MAX_PARALLEL_SLOTS,
@@ -55,7 +64,9 @@ import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
 import { SprintContextPackage } from "@/components/sprint/sprint-context-package";
+import { SprintItemContext } from "@/components/sprint/sprint-item-context";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
+import { useMagneticHover } from "@/lib/animation/interactions";
 import { cn } from "@/lib/utils";
 import type { S2DItem } from "@/types";
 
@@ -74,6 +85,7 @@ export function SprintActiveModeMulti() {
   const moveSlotToQueue = useSprintStore((s) => s.moveSlotToQueue);
   const fillEmptySlot = useSprintStore((s) => s.fillEmptySlot);
   const reorderQueue = useSprintStore((s) => s.reorderQueue);
+  const reopenBlockStore = useSprintStore((s) => s.reopenBlock);
 
   const updateItem = useUpdateS2DItem();
   const { data: items } = useS2DItems();
@@ -347,6 +359,150 @@ export function SprintActiveModeMulti() {
     }
   }
 
+  /**
+   * Park an active item on the Bench. Two steps that must both succeed
+   * for the move to feel coherent: PATCH s2d_items to 'todo' so the
+   * persistent row reflects the move, then call moveSlotToQueue. If
+   * any pending Bench items are present, we additionally fill the
+   * freed slot with the head of the queue so we don't waste display
+   * real estate.
+   */
+  async function sendToBench(s2dItemId: string) {
+    try {
+      await updateItem.mutateAsync({ id: s2dItemId, patch: { status: "todo" } });
+      // Compute the head-of-queue BEFORE we mutate so the slot index
+      // is stable when we go to fill.
+      const head = queuedBlocks[0]?.s2dItemId;
+      const slotIdx = activeSlotIds.indexOf(s2dItemId);
+      moveSlotToQueue(s2dItemId);
+      if (head && slotIdx >= 0) {
+        fillEmptySlot(slotIdx, head);
+      }
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't bench ${ticketLabel(s2dItemId)}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
+    }
+  }
+
+  /**
+   * Pull a Bench item into an active slot. If a slot is free, fill it;
+   * otherwise swap with the active slot whose live elapsed is highest
+   * (user's clearly pivoting away from that one). Persistent row goes
+   * to in_progress, and if a slot was displaced, that row goes back to
+   * 'todo'.
+   */
+  async function pullFromBench(s2dItemId: string) {
+    const willSwap = activeSlotIds.length >= MAX_PARALLEL_SLOTS;
+    let displacedId: string | null = null;
+    if (willSwap) {
+      let longest = -1;
+      for (const aid of activeSlotIds) {
+        const ab = blocks.find((b) => b.s2dItemId === aid);
+        if (!ab) continue;
+        const live = blockLiveElapsedMs(ab, paused);
+        if (live > longest) {
+          longest = live;
+          displacedId = aid;
+        }
+      }
+    }
+    try {
+      await updateItem.mutateAsync({
+        id: s2dItemId,
+        patch: { status: "in_progress" },
+      });
+      if (willSwap && displacedId) {
+        try {
+          await updateItem.mutateAsync({
+            id: displacedId,
+            patch: { status: "todo" },
+          });
+        } catch (err) {
+          setBanner({
+            kind: "err",
+            msg: `Pulled ${ticketLabel(s2dItemId)} but couldn't bench ${ticketLabel(displacedId)}: ${
+              err instanceof Error ? err.message : "save failed"
+            }`,
+          });
+          // Continue with the in-memory swap regardless — the displaced
+          // row's persistent status will be one sync behind.
+        }
+        swapSlotWithQueued(displacedId, s2dItemId);
+      } else {
+        // Append to the active row (end). fillEmptySlot clamps the idx.
+        fillEmptySlot(activeSlotIds.length, s2dItemId);
+      }
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't pull ${ticketLabel(s2dItemId)}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
+    }
+  }
+
+  /**
+   * Mark a Bench item Done directly without first pulling it into a
+   * slot. completeBlock handles both the bench case (where the item
+   * isn't in activeSlotIds) and the legacy auto-promote.
+   */
+  async function markBenchDone(s2dItemId: string) {
+    try {
+      await updateItem.mutateAsync({
+        id: s2dItemId,
+        patch: {
+          status: "done",
+          outcome: "Completed in sprint",
+          resolved_via: "manual",
+        },
+      });
+      completeBlock(s2dItemId, "done");
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't save ${ticketLabel(s2dItemId)}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
+    }
+  }
+
+  /**
+   * Un-finish a done or skipped block. target='active' takes a slot if
+   * one is free, otherwise lands on the bench. target='bench' always
+   * parks. Persistent row is reverted to in_progress / todo and the
+   * outcome + resolved_via are cleared (PATCH server-side also resets
+   * done_at).
+   */
+  async function reopen(s2dItemId: string, target: "active" | "bench") {
+    const slotsFree = activeSlotIds.length < MAX_PARALLEL_SLOTS;
+    const willLandOnSlot = target === "active" && slotsFree;
+    const desiredStatus = willLandOnSlot ? "in_progress" : "todo";
+    try {
+      await updateItem.mutateAsync({
+        id: s2dItemId,
+        patch: {
+          status: desiredStatus,
+          outcome: null,
+          resolved_via: null,
+        },
+      });
+      reopenBlockStore(s2dItemId, target);
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: `Couldn't reopen ${ticketLabel(s2dItemId)}: ${
+          err instanceof Error ? err.message : "save failed"
+        } — try again`,
+      });
+    }
+  }
+
   // Keyboard: 1/2/3 = Done on slot N; q/w/e = Skip on slot N; space = pause
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -491,23 +647,35 @@ export function SprintActiveModeMulti() {
                 onDone={() => markDone(block.s2dItemId)}
                 onSkip={() => skip(block.s2dItemId)}
                 onSnooze={() => snooze(block.s2dItemId)}
+                onBench={() => sendToBench(block.s2dItemId)}
                 onOpen={() => setDetailItemId(block.s2dItemId)}
               />
             );
           })}
         </div>
 
-        {/* Queue dock — always rendered (even when empty) so a slot can
-            be dragged here to return its item to the queue. */}
-        <QueueDock
+        {/* Bench (formerly "Up next" — items selected for this sprint that
+            aren't in an active slot). Always rendered so a slot can be
+            dragged here to send it back. */}
+        <BenchStrip
           blocks={queuedBlocks}
           itemMap={itemMap}
           draggingId={draggingId}
+          activeSlotsFull={activeSlotIds.length >= MAX_PARALLEL_SLOTS}
+          onPull={pullFromBench}
+          onMarkDone={markBenchDone}
+          onOpen={(id) => setDetailItemId(id)}
         />
 
         {/* Done strip */}
         {completedBlocks.length > 0 && (
-          <CompletedStrip blocks={completedBlocks} itemMap={itemMap} />
+          <DoneStrip
+            blocks={completedBlocks}
+            itemMap={itemMap}
+            activeSlotsFull={activeSlotIds.length >= MAX_PARALLEL_SLOTS}
+            onReopen={reopen}
+            onOpen={(id) => setDetailItemId(id)}
+          />
         )}
 
         <DragOverlay dropAnimation={null}>
@@ -597,6 +765,7 @@ function SlotCard({
   onDone,
   onSkip,
   onSnooze,
+  onBench,
   onOpen,
 }: {
   slotIdx: number;
@@ -607,6 +776,7 @@ function SlotCard({
   onDone: () => void;
   onSkip: () => void;
   onSnooze: () => void;
+  onBench: () => void;
   onOpen: () => void;
 }) {
   const elapsedMs = blockLiveElapsedMs(block, paused);
@@ -714,10 +884,12 @@ function SlotCard({
           />
         </div>
 
-        {/* Context package — collapsed by default so 3 slots fit on screen.
-            User opens detail panel via the link below for full context. */}
-        <div className="mt-3 flex-1">
+        {/* Context package — pathway-specific call-to-action (draft a
+            reply, copy Claude prompt, etc.) followed by source-aware
+            context so the user can stay heads-down in the slot. */}
+        <div className="mt-3 flex-1 space-y-2">
           <SprintContextPackage item={item} />
+          <SprintItemContext item={item} enabled />
         </div>
 
         {/* Footer actions */}
@@ -729,6 +901,16 @@ function SlotCard({
           <Button size="sm" variant="outline" onClick={onSkip} className="gap-1.5">
             <SkipForward className="h-3.5 w-3.5" />
             Skip <span className="ml-1 font-mono text-[10px] opacity-60">{skipKey}</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onBench}
+            className="gap-1.5 text-muted-foreground"
+            title="Park on the Bench and pull the next item in"
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+            Bench
           </Button>
           <Button
             size="sm"
@@ -776,24 +958,39 @@ function EmptySlot({
       </span>
       <span className="text-[11px] text-muted-foreground">
         {hasMoreInQueue
-          ? "Drop a queued item here, or finish a slot to auto-fill."
-          : "Empty — queue is clear."}
+          ? "Drop a Bench item here, or finish a slot to auto-fill."
+          : "Empty — Bench is clear."}
       </span>
     </div>
   );
 }
 
-function QueueDock({
+/**
+ * Bench (formerly "Up next"): items selected for this sprint that aren't
+ * in an active slot. Each card lifts on hover and reveals a popover
+ * with full preview + source context + action buttons (Pull to slot,
+ * Mark done, Detail). Drag-and-drop is preserved — drag handle lives
+ * on the card itself so a click flow doesn't fight the drag flow.
+ */
+function BenchStrip({
   blocks,
   itemMap,
   draggingId,
+  activeSlotsFull,
+  onPull,
+  onMarkDone,
+  onOpen,
 }: {
   blocks: SprintBlock[];
   itemMap: Map<string, S2DItem>;
   draggingId: string | null;
+  activeSlotsFull: boolean;
+  onPull: (id: string) => void;
+  onMarkDone: (id: string) => void;
+  onOpen: (id: string) => void;
 }) {
-  // Whole dock is a fallback drop target — landing on the dock (not on a
-  // specific item) appends to the end of the queue.
+  // Whole strip is a fallback drop target — landing on the strip (not
+  // on a specific card) appends to the end.
   const { setNodeRef: setDockRef, isOver: isDockOver } = useDroppable({
     id: "queue",
   });
@@ -806,12 +1003,18 @@ function QueueDock({
         isDockOver && "bg-primary/5"
       )}
     >
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-        Up next ({blocks.length})
+      <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <ArrowDownToLine className="h-3 w-3" />
+        Bench <span className="font-mono opacity-70">{blocks.length}</span>
+        {!empty && (
+          <span className="ml-2 normal-case text-[10px] opacity-60">
+            Hover a card to preview and pull
+          </span>
+        )}
       </div>
       {empty ? (
         <div className="rounded border border-dashed border-border/30 px-3 py-2 text-[11px] text-muted-foreground">
-          Queue is empty. Drag a slot here to send it back.
+          Bench is empty. Drag a slot here to park it.
         </div>
       ) : (
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -819,11 +1022,15 @@ function QueueDock({
             const it = itemMap.get(b.s2dItemId);
             if (!it) return null;
             return (
-              <QueueCard
+              <BenchCard
                 key={b.s2dItemId}
                 block={b}
                 item={it}
                 isDragging={draggingId === `queue:${b.s2dItemId}`}
+                activeSlotsFull={activeSlotsFull}
+                onPull={() => onPull(b.s2dItemId)}
+                onMarkDone={() => onMarkDone(b.s2dItemId)}
+                onOpen={() => onOpen(b.s2dItemId)}
               />
             );
           })}
@@ -833,14 +1040,22 @@ function QueueDock({
   );
 }
 
-function QueueCard({
+function BenchCard({
   block,
   item,
   isDragging,
+  activeSlotsFull,
+  onPull,
+  onMarkDone,
+  onOpen,
 }: {
   block: SprintBlock;
   item: S2DItem;
   isDragging: boolean;
+  activeSlotsFull: boolean;
+  onPull: () => void;
+  onMarkDone: () => void;
+  onOpen: () => void;
 }) {
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `queue:${block.s2dItemId}`,
@@ -850,36 +1065,134 @@ function QueueCard({
     attributes,
     listeners,
   } = useDraggable({ id: `queue:${block.s2dItemId}` });
+  // Magnetic lift on hover, halo + 2px rise — same primitive used on
+  // the S2D board / cockpit tiles so the app's hover feel stays
+  // consistent. ref is also wired through DnD set*Ref below.
+  const { ref: magRef, onEnter, onLeave } = useMagneticHover<HTMLDivElement>({
+    intensity: "soft",
+  });
   const composedRef = (el: HTMLDivElement | null) => {
     setDropRef(el);
     setDragRef(el);
+    magRef.current = el;
   };
+  // Hover-card pattern: open popover on hover-with-intent (~220ms) so
+  // a quick mouseover doesn't trigger. Stays open while pointer is in
+  // the popover too (the popover's own onMouseEnter cancels close).
+  const [open, setOpen] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function startHover() {
+    onEnter();
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setOpen(true), 220);
+  }
+  function endHover() {
+    onLeave();
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setOpen(false), 120);
+  }
+
   return (
-    <div
-      ref={composedRef}
-      {...listeners}
-      {...attributes}
-      className={cn(
-        "shrink-0 cursor-grab touch-none rounded-md border border-border/30 bg-card/60 px-3 py-2 text-[11px] transition-colors active:cursor-grabbing",
-        isOver && "ring-2 ring-primary/60",
-        isDragging && "opacity-50"
-      )}
-      title="Drag to reorder or promote to a slot"
-    >
-      <div className="flex items-center gap-1.5">
-        <GripVertical className="h-2.5 w-2.5 text-muted-foreground" />
-        <span className="font-mono text-[9px] text-muted-foreground">
-          MASH-{item.ticket_number}
-        </span>
-        <PriorityDot priority={item.priority} />
-        <span className="font-mono text-[9px] text-muted-foreground">
-          {block.durationMin}m
-        </span>
-      </div>
-      <div className="line-clamp-1 max-w-[260px] pt-0.5 text-foreground/85">
-        {item.title}
-      </div>
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div
+          ref={composedRef}
+          onMouseEnter={startHover}
+          onMouseLeave={endHover}
+          className={cn(
+            "relative shrink-0 select-none rounded-md border border-border/30 bg-card/70 px-3 py-2 text-[11px] transition-colors hover:border-primary/40",
+            isOver && "ring-2 ring-primary/60",
+            isDragging && "opacity-50"
+          )}
+          style={{ minWidth: 220, maxWidth: 280 }}
+        >
+          {/* Grip handle is the drag affordance — drag from here, click
+              anywhere else on the card to open the popover preview. */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              {...listeners}
+              {...attributes}
+              className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
+              title="Drag to reorder or promote to a slot"
+              aria-label="Drag bench item"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="h-2.5 w-2.5" />
+            </button>
+            <PriorityDot priority={item.priority} />
+            <span className="font-mono text-[9px] text-muted-foreground">
+              MASH-{item.ticket_number}
+            </span>
+            <PathwayBadge pathway={item.pathway} compact />
+            <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+              {block.durationMin}m
+            </span>
+          </div>
+          <div className="mt-1 line-clamp-2 text-foreground/90 leading-snug">
+            {item.title}
+          </div>
+        </div>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={8}
+        onMouseEnter={() => {
+          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          setOpen(true);
+        }}
+        onMouseLeave={endHover}
+        className="w-[380px] space-y-2 p-3"
+      >
+        <div className="flex items-center gap-2">
+          <PriorityDot priority={item.priority} />
+          <span className="font-mono text-[10px] text-muted-foreground">
+            MASH-{item.ticket_number}
+          </span>
+          <PathwayBadge pathway={item.pathway} compact />
+          {item.company && <CompanyBadge company={item.company} />}
+          <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+            {block.durationMin}m planned
+          </span>
+        </div>
+        <div className="text-[13px] font-medium leading-snug text-foreground">
+          {item.title}
+        </div>
+        {item.description && (
+          <p className="line-clamp-3 text-[11px] text-muted-foreground">
+            {item.description}
+          </p>
+        )}
+        {/* Lazy-fetched source context — gated on `open` so we don't
+            burn API calls for cards the user never hovers. */}
+        <SprintItemContext item={item} enabled={open} />
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <Button size="sm" onClick={onPull} className="gap-1.5">
+            <ArrowUpFromLine className="h-3.5 w-3.5" />
+            {activeSlotsFull ? "Swap into slot" : "Pull to slot"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onMarkDone}
+            className="gap-1.5"
+          >
+            <CheckCheck className="h-3.5 w-3.5" />
+            Mark done
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onOpen}
+            className="ml-auto gap-1.5 text-muted-foreground"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Detail
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -914,46 +1227,198 @@ function DragGhost({
   );
 }
 
-function CompletedStrip({
+/**
+ * Done: completed (or skipped) blocks. Each card lifts on hover and
+ * reveals a popover with the outcome + reopen affordances. Un-finishing
+ * goes through the PATCH endpoint so done_at + outcome + resolved_via
+ * get cleared server-side.
+ */
+function DoneStrip({
   blocks,
   itemMap,
+  activeSlotsFull,
+  onReopen,
+  onOpen,
 }: {
   blocks: SprintBlock[];
   itemMap: Map<string, S2DItem>;
+  activeSlotsFull: boolean;
+  onReopen: (id: string, target: "active" | "bench") => void;
+  onOpen: (id: string) => void;
 }) {
   return (
     <div className="shrink-0 border-t border-border/30 px-4 py-2">
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-        Done this sprint ({blocks.length})
+      <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <CheckCheck className="h-3 w-3" />
+        Done <span className="font-mono opacity-70">{blocks.length}</span>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {blocks.map((b) => {
           const it = itemMap.get(b.s2dItemId);
           if (!it) return null;
           return (
-            <div
+            <DoneCard
               key={b.s2dItemId}
-              className={cn(
-                "shrink-0 rounded-md border px-2.5 py-1 text-[10px]",
-                b.status === "done"
-                  ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-200/85"
-                  : "border-border/30 bg-card/50 text-muted-foreground"
-              )}
-            >
-              {b.status === "done" ? (
-                <Check className="mr-1 inline-block h-2.5 w-2.5" />
-              ) : (
-                <SkipForward className="mr-1 inline-block h-2.5 w-2.5" />
-              )}
-              MASH-{it.ticket_number}
-              <span className="ml-1 line-clamp-1 inline-block max-w-[180px] align-middle">
-                {it.title}
-              </span>
-            </div>
+              block={b}
+              item={it}
+              activeSlotsFull={activeSlotsFull}
+              onReopen={(target) => onReopen(b.s2dItemId, target)}
+              onOpen={() => onOpen(b.s2dItemId)}
+            />
           );
         })}
       </div>
     </div>
+  );
+}
+
+function DoneCard({
+  block,
+  item,
+  activeSlotsFull,
+  onReopen,
+  onOpen,
+}: {
+  block: SprintBlock;
+  item: S2DItem;
+  activeSlotsFull: boolean;
+  onReopen: (target: "active" | "bench") => void;
+  onOpen: () => void;
+}) {
+  const isDone = block.status === "done";
+  const { ref, onEnter, onLeave } = useMagneticHover<HTMLDivElement>({
+    intensity: "soft",
+  });
+  const [open, setOpen] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function startHover() {
+    onEnter();
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setOpen(true), 220);
+  }
+  function endHover() {
+    onLeave();
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => setOpen(false), 120);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div
+          ref={ref}
+          onMouseEnter={startHover}
+          onMouseLeave={endHover}
+          className={cn(
+            "relative shrink-0 cursor-pointer select-none rounded-md border px-3 py-2 text-[11px] transition-colors",
+            isDone
+              ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-400/60"
+              : "border-border/40 bg-card/50 hover:border-border"
+          )}
+          style={{ minWidth: 200, maxWidth: 260 }}
+        >
+          <div className="flex items-center gap-1.5">
+            {isDone ? (
+              <Check className="h-3 w-3 text-emerald-400" />
+            ) : (
+              <SkipForward className="h-3 w-3 text-muted-foreground" />
+            )}
+            <span
+              className={cn(
+                "font-mono text-[9px]",
+                isDone ? "text-emerald-300/85" : "text-muted-foreground"
+              )}
+            >
+              MASH-{item.ticket_number}
+            </span>
+            <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+              {block.durationMin}m
+            </span>
+          </div>
+          <div
+            className={cn(
+              "mt-0.5 line-clamp-2 leading-snug",
+              isDone ? "text-emerald-200/90" : "text-muted-foreground"
+            )}
+          >
+            {item.title}
+          </div>
+        </div>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={8}
+        onMouseEnter={() => {
+          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          setOpen(true);
+        }}
+        onMouseLeave={endHover}
+        className="w-[360px] space-y-2 p-3"
+      >
+        <div className="flex items-center gap-2">
+          {isDone ? (
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+          ) : (
+            <SkipForward className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+          <span className="font-mono text-[10px] text-muted-foreground">
+            MASH-{item.ticket_number}
+          </span>
+          <PathwayBadge pathway={item.pathway} compact />
+          {item.company && <CompanyBadge company={item.company} />}
+          <span className="ml-auto rounded bg-secondary/60 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">
+            {isDone ? "done" : "skipped"}
+          </span>
+        </div>
+        <div className="text-[13px] font-medium leading-snug text-foreground">
+          {item.title}
+        </div>
+        {item.outcome && (
+          <div className="rounded border border-border/40 bg-secondary/30 p-2 text-[11px] text-foreground/85">
+            <div className="mb-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">
+              Outcome
+            </div>
+            {item.outcome}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onReopen("active")}
+            className="gap-1.5"
+            title={
+              activeSlotsFull
+                ? "All slots full — will land on the Bench"
+                : "Send back into an active slot"
+            }
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Reopen to slot
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onReopen("bench")}
+            className="gap-1.5 text-muted-foreground"
+            title="Reopen but park on the Bench"
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+            Reopen to Bench
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onOpen}
+            className="ml-auto gap-1.5 text-muted-foreground"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Detail
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

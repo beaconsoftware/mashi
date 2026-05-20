@@ -146,6 +146,18 @@ interface SprintState {
    * positions in the full blocks array.
    */
   reorderQueue: (nextQueuedOrder: string[]) => void;
+  /**
+   * Un-finish a done or skipped block. target="active" routes through
+   * the slot row when there's room (else lands on the bench);
+   * target="bench" always lands on the bench. The block's accumulatedMs
+   * is preserved so the user can see how long they'd spent before
+   * closing.
+   *
+   * Out-of-band: caller is responsible for reverting the s2d_items row's
+   * status column (PATCH /api/s2d/[id]) so the persistent board
+   * reflects the move. Store has no DB awareness.
+   */
+  reopenBlock: (s2dItemId: string, target: "active" | "bench") => void;
 
   pause: () => void;
   resume: () => void;
@@ -482,6 +494,41 @@ export const useSprintStore = create<SprintState>()(
           return { ...s, blocks: rebuilt };
         }),
 
+      reopenBlock: (s2dItemId, target) =>
+        set((s) => {
+          const idx = s.blocks.findIndex((b) => b.s2dItemId === s2dItemId);
+          if (idx < 0) return s;
+          const block = s.blocks[idx];
+          if (block.status !== "done" && block.status !== "skipped") return s;
+
+          const now = Date.now();
+          const canSlot =
+            target === "active" && s.activeSlotIds.length < MAX_PARALLEL_SLOTS;
+
+          // Clear terminal status. Preserve accumulatedMs so the user can
+          // see how long they'd spent before closing — useful for "I
+          // closed this too early" recoveries.
+          const updatedBlocks = s.blocks.map((b, i) =>
+            i === idx
+              ? {
+                  ...b,
+                  status: undefined,
+                  activatedAtMs: canSlot && !s.paused ? now : null,
+                }
+              : b
+          );
+
+          if (canSlot) {
+            return {
+              ...s,
+              blocks: updatedBlocks,
+              activeSlotIds: [...s.activeSlotIds, s2dItemId],
+            };
+          }
+          // Falls onto the bench. User can drag/pull into a slot afterwards.
+          return { ...s, blocks: updatedBlocks };
+        }),
+
       pause: () =>
         set((s) => {
           if (s.paused) return s;
@@ -540,6 +587,10 @@ export const useSprintStore = create<SprintState>()(
     {
       name: "mashi.sprint",
       // Persist enough to resume an active sprint after reload
+      // Persist enough to resume an active sprint after reload. activeSlotIds
+      // is required — without it, a reload mid-sprint loses the user's
+      // parked-on-bench distinction and the recovery effect re-promotes
+      // bench items into slots unintentionally.
       partialize: (s) => ({
         phase: s.phase,
         selectedItemIds: s.selectedItemIds,
@@ -549,6 +600,7 @@ export const useSprintStore = create<SprintState>()(
         blockStartedAtMs: s.blockStartedAtMs,
         blockElapsedMsAccum: s.blockElapsedMsAccum,
         activeIndex: s.activeIndex,
+        activeSlotIds: s.activeSlotIds,
         paused: s.paused,
         sprintStartedAt: s.sprintStartedAt,
       }),
