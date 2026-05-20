@@ -12,6 +12,7 @@ import {
   X,
   RefreshCw,
   ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -479,9 +480,10 @@ function ProviderRow({
                     return (
                       <a
                         href={`/api/connect/${c.provider}`}
-                        className="inline-flex h-6 items-center gap-1 rounded-md border border-destructive/50 bg-destructive/15 px-2 text-[11px] font-medium text-destructive hover:bg-destructive/25"
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-destructive bg-destructive/15 px-2.5 text-[11px] font-semibold text-destructive shadow-sm hover:bg-destructive/25"
                         title={c.last_sync_error ?? "Reconnect this workspace"}
                       >
+                        <KeyRound className="h-3 w-3" />
                         Reauth now
                       </a>
                     );
@@ -490,9 +492,10 @@ function ProviderRow({
                     return (
                       <a
                         href={`/api/connect/${c.provider}`}
-                        className="inline-flex h-6 items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/15 px-2 text-[11px] font-medium text-amber-400 hover:bg-amber-500/25"
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-amber-500 bg-amber-500/15 px-2.5 text-[11px] font-semibold text-amber-300 shadow-sm hover:bg-amber-500/25"
                         title={`Refresh token before ${shortDate(c.expires_at!)}`}
                       >
+                        <KeyRound className="h-3 w-3" />
                         Reauth
                       </a>
                     );
