@@ -429,54 +429,103 @@ function ProviderRow({
                     </option>
                   ))}
                 </select>
-                {c.last_sync_status === "needs_reauth" ? (
-                  <span className="rounded border border-destructive/40 bg-destructive/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-destructive">
-                    needs reauth
-                  </span>
-                ) : isExpiringSoon(c.expires_at) ? (
-                  <span
-                    className="rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-400"
-                    title={`Token expires ${shortDate(c.expires_at!)}`}
-                  >
-                    expiring soon
-                  </span>
-                ) : (
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {c.last_synced_at ? `synced ${shortDate(c.last_synced_at)}` : "not synced"}
-                  </span>
-                )}
-                {c.last_sync_status === "needs_reauth" ? (
-                  <a
-                    href={`/api/connect/${c.provider}`}
-                    className="inline-flex h-6 items-center gap-1 rounded-md border border-destructive/50 bg-destructive/10 px-2 text-[11px] text-destructive hover:bg-destructive/20"
-                    title={c.last_sync_error ?? "Reconnect this workspace"}
-                  >
-                    Reconnect
-                  </a>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onSync(c.id, meta.key)}
-                    disabled={syncingIds.has(c.id)}
-                    aria-label="Sync now"
-                    className="h-6 w-6"
-                    title="Sync now"
-                  >
-                    <RefreshCw
-                      className={cn(
-                        "h-3.5 w-3.5",
-                        syncingIds.has(c.id) && "animate-spin"
-                      )}
-                    />
-                  </Button>
-                )}
+                {(() => {
+                  // Three visual states with a clear primary CTA on each:
+                  //   needs_reauth  → red "Reauth now" pill (provider rejected the token)
+                  //   expiring_soon → amber "Reauth" pill (token will expire within 7 days)
+                  //   healthy       → quiet "synced N ago" timestamp
+                  const needsReauth = c.last_sync_status === "needs_reauth";
+                  const expiringSoon = !needsReauth && isExpiringSoon(c.expires_at);
+
+                  if (needsReauth) {
+                    return (
+                      <span
+                        className="rounded border border-destructive/40 bg-destructive/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-destructive"
+                        title={c.last_sync_error ?? undefined}
+                      >
+                        needs reauth
+                      </span>
+                    );
+                  }
+                  if (expiringSoon) {
+                    return (
+                      <span
+                        className="rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-400"
+                        title={`Token expires ${shortDate(c.expires_at!)}`}
+                      >
+                        expiring soon
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {c.last_synced_at ? `synced ${shortDate(c.last_synced_at)}` : "not synced"}
+                    </span>
+                  );
+                })()}
+                {(() => {
+                  // PRIMARY action: changes based on connection health.
+                  //  - needs_reauth → loud "Reauth now" red button
+                  //  - expiring_soon → amber "Reauth" button (proactive,
+                  //    user can refresh before it dies)
+                  //  - healthy → "Sync now" refresh icon
+                  // Either way the destructive Disconnect button is still
+                  // present below, just visually demoted so the primary
+                  // affordance for a stale connection is to FIX it, not
+                  // to remove it.
+                  const needsReauth = c.last_sync_status === "needs_reauth";
+                  const expiringSoon = !needsReauth && isExpiringSoon(c.expires_at);
+                  if (needsReauth) {
+                    return (
+                      <a
+                        href={`/api/connect/${c.provider}`}
+                        className="inline-flex h-6 items-center gap-1 rounded-md border border-destructive/50 bg-destructive/15 px-2 text-[11px] font-medium text-destructive hover:bg-destructive/25"
+                        title={c.last_sync_error ?? "Reconnect this workspace"}
+                      >
+                        Reauth now
+                      </a>
+                    );
+                  }
+                  if (expiringSoon) {
+                    return (
+                      <a
+                        href={`/api/connect/${c.provider}`}
+                        className="inline-flex h-6 items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/15 px-2 text-[11px] font-medium text-amber-400 hover:bg-amber-500/25"
+                        title={`Refresh token before ${shortDate(c.expires_at!)}`}
+                      >
+                        Reauth
+                      </a>
+                    );
+                  }
+                  return (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onSync(c.id, meta.key)}
+                      disabled={syncingIds.has(c.id)}
+                      aria-label="Sync now"
+                      className="h-6 w-6"
+                      title="Sync now"
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          syncingIds.has(c.id) && "animate-spin"
+                        )}
+                      />
+                    </Button>
+                  );
+                })()}
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => onDisconnect(c.id)}
                   aria-label="Disconnect"
-                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                  // Quieter by default — only goes red on hover. The
+                  // primary CTA for a stale connection is Reauth (above),
+                  // not Disconnect.
+                  className="h-6 w-6 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                  title="Disconnect this account"
                 >
                   <Unplug className="h-3.5 w-3.5" />
                 </Button>
