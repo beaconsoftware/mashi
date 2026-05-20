@@ -39,12 +39,13 @@ import {
   type SprintBlock,
 } from "@/store/sprint-store";
 import { useS2DItems, useUpdateS2DItem } from "@/hooks/use-s2d";
-import { useS2DStore } from "@/store/s2d-store";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
 import { SprintContextPackage } from "@/components/sprint/sprint-context-package";
+import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 import { cn } from "@/lib/utils";
+import type { S2DItem } from "@/types";
 
 export function SprintActiveModeMulti() {
   const blocks = useSprintStore((s) => s.blocks);
@@ -59,7 +60,12 @@ export function SprintActiveModeMulti() {
 
   const updateItem = useUpdateS2DItem();
   const { data: items } = useS2DItems();
-  const setSelected = useS2DStore((s) => s.setSelectedItem);
+
+  // Detail panel is mounted INSIDE this overlay (the global S2DItemSheet
+  // lives on /s2d only, so its store doesn't surface here). We track the
+  // open item locally — sprint focus shouldn't context-switch to a side
+  // route, and embedding keeps the other slots visible.
+  const [detailItemId, setDetailItemId] = useState<string | null>(null);
 
   // Tick once per second to drive the live timers.
   const [, force] = useState(0);
@@ -216,6 +222,12 @@ export function SprintActiveModeMulti() {
         paused ? resume() : pause();
       } else if (e.key === "Escape") {
         e.preventDefault();
+        // Detail panel takes Esc first — closing it is the obviously-
+        // intended action, not "exit the whole sprint".
+        if (detailItemId) {
+          setDetailItemId(null);
+          return;
+        }
         if (confirm("Exit sprint? Progress on active items is saved.")) exitSprint();
       } else if (e.key >= "1" && e.key <= "3") {
         const idx = parseInt(e.key, 10) - 1;
@@ -236,7 +248,7 @@ export function SprintActiveModeMulti() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSlotIds, paused]);
+  }, [activeSlotIds, paused, detailItemId]);
 
   const total = blocks.length;
   const done = completedBlocks.filter((b) => b.status === "done").length;
@@ -342,7 +354,7 @@ export function SprintActiveModeMulti() {
               onDone={() => markDone(block.s2dItemId)}
               onSkip={() => skip(block.s2dItemId)}
               onSnooze={() => snooze(block.s2dItemId)}
-              onOpen={() => setSelected(block.s2dItemId)}
+              onOpen={() => setDetailItemId(block.s2dItemId)}
             />
           );
         })}
@@ -357,7 +369,75 @@ export function SprintActiveModeMulti() {
       {completedBlocks.length > 0 && (
         <CompletedStrip blocks={completedBlocks} itemMap={itemMap} />
       )}
+
+      {/* Inline detail panel — slides in from the right inside the sprint
+          overlay so the user can still see the other slots & queue. */}
+      {detailItemId && (
+        <DetailPanel
+          item={itemMap.get(detailItemId) ?? null}
+          onClose={() => setDetailItemId(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function DetailPanel({
+  item,
+  onClose,
+}: {
+  item: S2DItem | null;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      {/* Backdrop — click to close. z-index above the slots but below
+          any future modals. */}
+      <div
+        className="fixed inset-0 z-[110] bg-background/70 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <aside
+        role="dialog"
+        aria-label="Item detail"
+        className="fixed right-0 top-0 z-[120] flex h-full w-full max-w-xl flex-col border-l border-border/40 bg-background shadow-2xl"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-border/30 px-4 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            {item && (
+              <>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  MASH-{item.ticket_number}
+                </span>
+                <PathwayBadge pathway={item.pathway} compact />
+                <PriorityDot priority={item.priority} />
+                <span className="line-clamp-1 text-[13px] font-semibold">
+                  {item.title}
+                </span>
+              </>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onClose}
+            className="gap-1.5"
+            title="Close (Esc)"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {item ? (
+            <ItemContextPanel item={item} />
+          ) : (
+            <div className="text-[12px] text-muted-foreground">
+              Item not in cache.
+            </div>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }
 
