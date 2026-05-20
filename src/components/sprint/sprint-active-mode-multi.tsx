@@ -30,7 +30,19 @@ import {
   MessageSquare,
   Clock,
   AlertTriangle,
+  GripVertical,
 } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import {
   useSprintStore,
@@ -57,6 +69,11 @@ export function SprintActiveModeMulti() {
   const resume = useSprintStore((s) => s.resume);
   const minimize = useSprintStore((s) => s.minimize);
   const exitSprint = useSprintStore((s) => s.exitSprint);
+  const reorderActiveSlots = useSprintStore((s) => s.reorderActiveSlots);
+  const swapSlotWithQueued = useSprintStore((s) => s.swapSlotWithQueued);
+  const moveSlotToQueue = useSprintStore((s) => s.moveSlotToQueue);
+  const fillEmptySlot = useSprintStore((s) => s.fillEmptySlot);
+  const reorderQueue = useSprintStore((s) => s.reorderQueue);
 
   const updateItem = useUpdateS2DItem();
   const { data: items } = useS2DItems();
@@ -66,6 +83,14 @@ export function SprintActiveModeMulti() {
   // open item locally — sprint focus shouldn't context-switch to a side
   // route, and embedding keeps the other slots visible.
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
+
+  // DnD state — track the id being dragged so the overlay can render a
+  // ghost of the source. Activation distance of 6px avoids hijacking
+  // clicks on the slot's buttons.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
 
   // Tick once per second to drive the live timers.
   const [, force] = useState(0);
@@ -155,6 +180,116 @@ export function SprintActiveModeMulti() {
     const it = itemMap.get(s2dItemId);
     return it ? `MASH-${it.ticket_number}` : "item";
   }
+
+  // ── DnD ───────────────────────────────────────────────────────────
+  //
+  // Draggables: `slot:<itemId>` and `queue:<itemId>`.
+  // Droppables: `slot:<idx>` (0..MAX-1) and `queue:<itemId>` + `queue` (end).
+  //
+  // Resolution by drop target (in priority order):
+  //   - slot → slot (same id): no-op
+  //   - slot → slot (different idx): reorderActiveSlots (swap positions)
+  //   - slot → queue or queue-position: moveSlotToQueue
+  //   - queue → slot (occupied): swapSlotWithQueued
+  //   - queue → slot (empty): fillEmptySlot
+  //   - queue → queue-position: reorderQueue
+  //
+  // We don't auto-fill empty slots when a slot moves to queue — that's
+  // intentional; the user can drag to refill or click Done/Skip on a
+  // sibling slot to trigger the queue promotion via completeBlock.
+  function onDragStart(e: DragStartEvent) {
+    setDraggingId(String(e.active.id));
+  }
+  function onDragEnd(e: DragEndEvent) {
+    const activeId = String(e.active.id);
+    setDraggingId(null);
+    if (!e.over) return;
+    const overId = String(e.over.id);
+    if (activeId === overId) return;
+
+    // ── slot → ? ────────────────────────────────────────────────────
+    if (activeId.startsWith("slot:")) {
+      const fromItemId = activeId.slice(5);
+      const fromIdx = activeSlotIds.indexOf(fromItemId);
+      if (fromIdx < 0) return;
+
+      if (overId.startsWith("slot:")) {
+        const toIdx = parseInt(overId.slice(5), 10);
+        if (Number.isNaN(toIdx) || toIdx === fromIdx) return;
+        // Swap positions in activeSlotIds — clamp toIdx to the
+        // current active count so dragging to an empty slot index
+        // just moves to the end of the active row.
+        const clamped = Math.max(0, Math.min(toIdx, activeSlotIds.length - 1));
+        const next = activeSlotIds.slice();
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(clamped, 0, moved);
+        reorderActiveSlots(next);
+        return;
+      }
+      if (overId === "queue" || overId.startsWith("queue:")) {
+        moveSlotToQueue(fromItemId);
+        return;
+      }
+      return;
+    }
+
+    // ── queue → ? ───────────────────────────────────────────────────
+    if (activeId.startsWith("queue:")) {
+      const fromItemId = activeId.slice(6);
+
+      if (overId.startsWith("slot:")) {
+        const toIdx = parseInt(overId.slice(5), 10);
+        if (Number.isNaN(toIdx)) return;
+        const occupantId = activeSlotIds[toIdx];
+        if (occupantId) {
+          swapSlotWithQueued(occupantId, fromItemId);
+        } else {
+          fillEmptySlot(toIdx, fromItemId);
+        }
+        return;
+      }
+      if (overId.startsWith("queue:")) {
+        const targetItemId = overId.slice(6);
+        if (targetItemId === fromItemId) return;
+        // Compute the new queued order: pull fromItemId out, insert
+        // before targetItemId.
+        const queuedIds = queuedBlocks.map((b) => b.s2dItemId);
+        const next = queuedIds.filter((id) => id !== fromItemId);
+        const insertAt = next.indexOf(targetItemId);
+        if (insertAt < 0) {
+          next.push(fromItemId);
+        } else {
+          next.splice(insertAt, 0, fromItemId);
+        }
+        reorderQueue(next);
+        return;
+      }
+      // Dropped on the queue dock itself (no specific position) → end.
+      if (overId === "queue") {
+        const queuedIds = queuedBlocks.map((b) => b.s2dItemId);
+        const next = queuedIds.filter((id) => id !== fromItemId);
+        next.push(fromItemId);
+        reorderQueue(next);
+        return;
+      }
+    }
+  }
+
+  // The block being dragged (for the DragOverlay ghost).
+  const draggingBlock = useMemo(() => {
+    if (!draggingId) return null;
+    const id = draggingId.startsWith("slot:")
+      ? draggingId.slice(5)
+      : draggingId.startsWith("queue:")
+        ? draggingId.slice(6)
+        : null;
+    if (!id) return null;
+    const block = blocks.find((b) => b.s2dItemId === id);
+    if (!block) return null;
+    const item = itemMap.get(id) ?? null;
+    return { block, item };
+  }, [draggingId, blocks, itemMap]);
+
   async function markDone(s2dItemId: string) {
     try {
       await updateItem.mutateAsync({
@@ -320,55 +455,67 @@ export function SprintActiveModeMulti() {
         </div>
       )}
 
-      {/* Active slots — 3 columns side by side on wide, stacked on narrow */}
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-3">
-        {Array.from({ length: MAX_PARALLEL_SLOTS }).map((_, slotIdx) => {
-          const block = activeBlocks[slotIdx];
-          if (!block) {
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        {/* Active slots — 3 columns side by side on wide, stacked on narrow */}
+        <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-3">
+          {Array.from({ length: MAX_PARALLEL_SLOTS }).map((_, slotIdx) => {
+            const block = activeBlocks[slotIdx];
+            if (!block) {
+              return (
+                <EmptySlot
+                  key={`empty-${slotIdx}`}
+                  slotIdx={slotIdx}
+                  hasMoreInQueue={queuedBlocks.length > 0}
+                />
+              );
+            }
+            const item = itemMap.get(block.s2dItemId);
+            if (!item) {
+              return (
+                <div
+                  key={block.s2dItemId}
+                  className="rounded-xl border border-border/30 bg-card/60 p-4 text-[12px] text-muted-foreground"
+                >
+                  MASH item missing from cache (id {block.s2dItemId.slice(0, 8)})
+                </div>
+              );
+            }
             return (
-              <EmptySlot
-                key={`empty-${slotIdx}`}
+              <SlotCard
+                key={block.s2dItemId}
                 slotIdx={slotIdx}
-                hasMoreInQueue={queuedBlocks.length > 0}
+                block={block}
+                item={item}
+                paused={paused}
+                isDragging={draggingId === `slot:${block.s2dItemId}`}
+                onDone={() => markDone(block.s2dItemId)}
+                onSkip={() => skip(block.s2dItemId)}
+                onSnooze={() => snooze(block.s2dItemId)}
+                onOpen={() => setDetailItemId(block.s2dItemId)}
               />
             );
-          }
-          const item = itemMap.get(block.s2dItemId);
-          if (!item) {
-            return (
-              <div
-                key={block.s2dItemId}
-                className="rounded-xl border border-border/30 bg-card/60 p-4 text-[12px] text-muted-foreground"
-              >
-                MASH item missing from cache (id {block.s2dItemId.slice(0, 8)})
-              </div>
-            );
-          }
-          return (
-            <SlotCard
-              key={block.s2dItemId}
-              slotIdx={slotIdx}
-              block={block}
-              item={item}
-              paused={paused}
-              onDone={() => markDone(block.s2dItemId)}
-              onSkip={() => skip(block.s2dItemId)}
-              onSnooze={() => snooze(block.s2dItemId)}
-              onOpen={() => setDetailItemId(block.s2dItemId)}
-            />
-          );
-        })}
-      </div>
+          })}
+        </div>
 
-      {/* Queue dock */}
-      {queuedBlocks.length > 0 && (
-        <QueueDock blocks={queuedBlocks} itemMap={itemMap} />
-      )}
+        {/* Queue dock — always rendered (even when empty) so a slot can
+            be dragged here to return its item to the queue. */}
+        <QueueDock
+          blocks={queuedBlocks}
+          itemMap={itemMap}
+          draggingId={draggingId}
+        />
 
-      {/* Done strip */}
-      {completedBlocks.length > 0 && (
-        <CompletedStrip blocks={completedBlocks} itemMap={itemMap} />
-      )}
+        {/* Done strip */}
+        {completedBlocks.length > 0 && (
+          <CompletedStrip blocks={completedBlocks} itemMap={itemMap} />
+        )}
+
+        <DragOverlay dropAnimation={null}>
+          {draggingBlock && draggingBlock.item ? (
+            <DragGhost block={draggingBlock.block} item={draggingBlock.item} paused={paused} />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* Inline detail panel — slides in from the right inside the sprint
           overlay so the user can still see the other slots & queue. */}
@@ -446,6 +593,7 @@ function SlotCard({
   block,
   item,
   paused,
+  isDragging,
   onDone,
   onSkip,
   onSnooze,
@@ -453,8 +601,9 @@ function SlotCard({
 }: {
   slotIdx: number;
   block: SprintBlock;
-  item: import("@/types").S2DItem;
+  item: S2DItem;
   paused: boolean;
+  isDragging: boolean;
   onDone: () => void;
   onSkip: () => void;
   onSnooze: () => void;
@@ -470,19 +619,49 @@ function SlotCard({
   const slotKey = `${slotIdx + 1}`;
   const skipKey = ["q", "w", "e"][slotIdx];
 
+  // DnD: the slot is both a drop target (so queue items / other slots
+  // can land on it at position slotIdx) and a draggable source (via the
+  // grip handle in the header).
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `slot:${slotIdx}`,
+  });
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+  } = useDraggable({ id: `slot:${block.s2dItemId}` });
+  const composedRef = (el: HTMLDivElement | null) => {
+    setDropRef(el);
+    setDragRef(el);
+  };
+
   return (
     <div
+      ref={composedRef}
       className={cn(
         "flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-md transition-colors",
         overrunMs > 0
           ? "border-destructive/60"
           : paused
             ? "border-border/40"
-            : "border-primary/40"
+            : "border-primary/40",
+        isOver && "ring-2 ring-primary/60",
+        isDragging && "opacity-50"
       )}
     >
-      {/* Slot header strip */}
+      {/* Slot header strip — also the drag handle so card body remains
+          clickable for Done/Skip/Detail buttons. */}
       <div className="flex items-center gap-2 border-b border-border/30 bg-secondary/30 px-3 py-1.5">
+        <button
+          type="button"
+          {...listeners}
+          {...attributes}
+          className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
+          title="Drag to reorder or swap with queue"
+          aria-label="Drag slot"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
         <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-primary">
           {slotKey}
         </span>
@@ -583,14 +762,21 @@ function EmptySlot({
   slotIdx: number;
   hasMoreInQueue: boolean;
 }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `slot:${slotIdx}` });
   return (
-    <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/30 bg-card/30 p-6 text-center">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/30 bg-card/30 p-6 text-center transition-colors",
+        isOver && "border-primary/60 bg-primary/5"
+      )}
+    >
       <span className="rounded bg-secondary/40 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
         slot {slotIdx + 1}
       </span>
       <span className="text-[11px] text-muted-foreground">
         {hasMoreInQueue
-          ? "Finish another slot to pull the next item in."
+          ? "Drop a queued item here, or finish a slot to auto-fill."
           : "Empty — queue is clear."}
       </span>
     </div>
@@ -600,39 +786,129 @@ function EmptySlot({
 function QueueDock({
   blocks,
   itemMap,
+  draggingId,
 }: {
   blocks: SprintBlock[];
-  itemMap: Map<string, import("@/types").S2DItem>;
+  itemMap: Map<string, S2DItem>;
+  draggingId: string | null;
 }) {
+  // Whole dock is a fallback drop target — landing on the dock (not on a
+  // specific item) appends to the end of the queue.
+  const { setNodeRef: setDockRef, isOver: isDockOver } = useDroppable({
+    id: "queue",
+  });
+  const empty = blocks.length === 0;
   return (
-    <div className="shrink-0 border-t border-border/30 bg-secondary/20 px-4 py-2">
+    <div
+      ref={setDockRef}
+      className={cn(
+        "shrink-0 border-t border-border/30 bg-secondary/20 px-4 py-2 transition-colors",
+        isDockOver && "bg-primary/5"
+      )}
+    >
       <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
         Up next ({blocks.length})
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {blocks.map((b) => {
-          const it = itemMap.get(b.s2dItemId);
-          if (!it) return null;
-          return (
-            <div
-              key={b.s2dItemId}
-              className="shrink-0 rounded-md border border-border/30 bg-card/60 px-3 py-2 text-[11px]"
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono text-[9px] text-muted-foreground">
-                  MASH-{it.ticket_number}
-                </span>
-                <PriorityDot priority={it.priority} />
-                <span className="font-mono text-[9px] text-muted-foreground">
-                  {b.durationMin}m
-                </span>
-              </div>
-              <div className="line-clamp-1 max-w-[260px] pt-0.5 text-foreground/85">
-                {it.title}
-              </div>
-            </div>
-          );
-        })}
+      {empty ? (
+        <div className="rounded border border-dashed border-border/30 px-3 py-2 text-[11px] text-muted-foreground">
+          Queue is empty. Drag a slot here to send it back.
+        </div>
+      ) : (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {blocks.map((b) => {
+            const it = itemMap.get(b.s2dItemId);
+            if (!it) return null;
+            return (
+              <QueueCard
+                key={b.s2dItemId}
+                block={b}
+                item={it}
+                isDragging={draggingId === `queue:${b.s2dItemId}`}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QueueCard({
+  block,
+  item,
+  isDragging,
+}: {
+  block: SprintBlock;
+  item: S2DItem;
+  isDragging: boolean;
+}) {
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `queue:${block.s2dItemId}`,
+  });
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+  } = useDraggable({ id: `queue:${block.s2dItemId}` });
+  const composedRef = (el: HTMLDivElement | null) => {
+    setDropRef(el);
+    setDragRef(el);
+  };
+  return (
+    <div
+      ref={composedRef}
+      {...listeners}
+      {...attributes}
+      className={cn(
+        "shrink-0 cursor-grab touch-none rounded-md border border-border/30 bg-card/60 px-3 py-2 text-[11px] transition-colors active:cursor-grabbing",
+        isOver && "ring-2 ring-primary/60",
+        isDragging && "opacity-50"
+      )}
+      title="Drag to reorder or promote to a slot"
+    >
+      <div className="flex items-center gap-1.5">
+        <GripVertical className="h-2.5 w-2.5 text-muted-foreground" />
+        <span className="font-mono text-[9px] text-muted-foreground">
+          MASH-{item.ticket_number}
+        </span>
+        <PriorityDot priority={item.priority} />
+        <span className="font-mono text-[9px] text-muted-foreground">
+          {block.durationMin}m
+        </span>
+      </div>
+      <div className="line-clamp-1 max-w-[260px] pt-0.5 text-foreground/85">
+        {item.title}
+      </div>
+    </div>
+  );
+}
+
+function DragGhost({
+  block,
+  item,
+  paused,
+}: {
+  block: SprintBlock;
+  item: S2DItem;
+  paused: boolean;
+}) {
+  const elapsedMs = blockLiveElapsedMs(block, paused);
+  const totalMs = block.durationMin * 60_000;
+  const remainingMs = Math.max(0, totalMs - elapsedMs);
+  return (
+    <div className="pointer-events-none rounded-md border border-primary/40 bg-card px-3 py-2 text-[11px] shadow-2xl">
+      <div className="flex items-center gap-1.5">
+        <GripVertical className="h-2.5 w-2.5 text-muted-foreground" />
+        <span className="font-mono text-[9px] text-muted-foreground">
+          MASH-{item.ticket_number}
+        </span>
+        <PriorityDot priority={item.priority} />
+        <span className="font-mono text-[9px] text-muted-foreground">
+          {fmtMs(remainingMs)}
+        </span>
+      </div>
+      <div className="line-clamp-1 max-w-[260px] pt-0.5 text-foreground/85">
+        {item.title}
       </div>
     </div>
   );
@@ -643,7 +919,7 @@ function CompletedStrip({
   itemMap,
 }: {
   blocks: SprintBlock[];
-  itemMap: Map<string, import("@/types").S2DItem>;
+  itemMap: Map<string, S2DItem>;
 }) {
   return (
     <div className="shrink-0 border-t border-border/30 px-4 py-2">

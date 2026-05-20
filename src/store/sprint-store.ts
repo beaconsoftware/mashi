@@ -110,6 +110,43 @@ interface SprintState {
    * next queued block into the empty slot if any remain.
    */
   completeBlock: (s2dItemId: string, mark: "done" | "skipped") => void;
+
+  // ── Multi-active slot rearrangement ────────────────────────────────
+  /**
+   * Replace activeSlotIds atomically. Callers MUST pass a permutation
+   * of the current activeSlotIds (same set, just reordered). Used for
+   * drag-to-reorder within the active row. Per-block timers are
+   * unaffected — only display order changes.
+   */
+  reorderActiveSlots: (nextActiveSlotIds: string[]) => void;
+  /**
+   * Atomic swap: the slot occupied by slotId is replaced with queuedId.
+   * Settles the outgoing block's live elapsed into accumulatedMs and
+   * nulls its activatedAtMs (it becomes queued again with its prior
+   * accumulated time preserved). The incoming block starts a fresh
+   * activatedAtMs (or null if paused) and accumulatedMs reset to 0.
+   */
+  swapSlotWithQueued: (slotId: string, queuedId: string) => void;
+  /**
+   * Move an active-slot block back to the queue. Slot is emptied; no
+   * auto-promotion (manual move ≠ Done/Skip — don't surprise the user).
+   * Outgoing block's elapsed is settled into accumulatedMs.
+   */
+  moveSlotToQueue: (slotId: string) => void;
+  /**
+   * Pull a queued block into a specific empty slot index. activeSlotIds
+   * grows to include the queuedId at that position. Block's
+   * activatedAtMs starts now (or null if paused).
+   */
+  fillEmptySlot: (slotIdx: number, queuedId: string) => void;
+  /**
+   * Reorder the queued portion of blocks[]. Pass the new order of
+   * queued ids (only ids of blocks that are pending AND not in active
+   * slots). Done/skipped blocks and active-slot blocks keep their
+   * positions in the full blocks array.
+   */
+  reorderQueue: (nextQueuedOrder: string[]) => void;
+
   pause: () => void;
   resume: () => void;
   minimize: () => void;
@@ -297,6 +334,152 @@ export const useSprintStore = create<SprintState>()(
             blocks: updatedBlocks,
             activeSlotIds: nextActiveSlotIds,
           };
+        }),
+
+      reorderActiveSlots: (nextActiveSlotIds) =>
+        set((s) => {
+          // Defensive: must be the same set, just permuted. Anything
+          // else would either lose a slot or pull in a non-active id.
+          const cur = new Set(s.activeSlotIds);
+          if (
+            nextActiveSlotIds.length !== s.activeSlotIds.length ||
+            !nextActiveSlotIds.every((id) => cur.has(id))
+          ) {
+            return s;
+          }
+          return { ...s, activeSlotIds: nextActiveSlotIds };
+        }),
+
+      swapSlotWithQueued: (slotId, queuedId) =>
+        set((s) => {
+          const slotIdx = s.activeSlotIds.indexOf(slotId);
+          if (slotIdx < 0) return s;
+          const outIdx = s.blocks.findIndex((b) => b.s2dItemId === slotId);
+          const inIdx = s.blocks.findIndex((b) => b.s2dItemId === queuedId);
+          if (outIdx < 0 || inIdx < 0) return s;
+          if (s.activeSlotIds.includes(queuedId)) return s;
+          const inBlock = s.blocks[inIdx];
+          if (inBlock.status === "done" || inBlock.status === "skipped") return s;
+
+          const now = Date.now();
+          const outBlock = s.blocks[outIdx];
+          const liveDelta =
+            !s.paused && outBlock.activatedAtMs != null
+              ? now - outBlock.activatedAtMs
+              : 0;
+
+          const updatedBlocks = s.blocks.map((b, i) => {
+            if (i === outIdx) {
+              // Outgoing → back to queued state. Preserve accumulated.
+              return {
+                ...b,
+                activatedAtMs: null,
+                accumulatedMs: (b.accumulatedMs ?? 0) + liveDelta,
+              };
+            }
+            if (i === inIdx) {
+              // Incoming → fresh timer in the slot.
+              return {
+                ...b,
+                activatedAtMs: s.paused ? null : now,
+                accumulatedMs: 0,
+              };
+            }
+            return b;
+          });
+
+          const nextActiveSlotIds = s.activeSlotIds.slice();
+          nextActiveSlotIds[slotIdx] = queuedId;
+
+          return { ...s, blocks: updatedBlocks, activeSlotIds: nextActiveSlotIds };
+        }),
+
+      moveSlotToQueue: (slotId) =>
+        set((s) => {
+          const slotIdx = s.activeSlotIds.indexOf(slotId);
+          if (slotIdx < 0) return s;
+          const outIdx = s.blocks.findIndex((b) => b.s2dItemId === slotId);
+          if (outIdx < 0) return s;
+
+          const now = Date.now();
+          const outBlock = s.blocks[outIdx];
+          const liveDelta =
+            !s.paused && outBlock.activatedAtMs != null
+              ? now - outBlock.activatedAtMs
+              : 0;
+
+          const updatedBlocks = s.blocks.map((b, i) =>
+            i === outIdx
+              ? {
+                  ...b,
+                  activatedAtMs: null,
+                  accumulatedMs: (b.accumulatedMs ?? 0) + liveDelta,
+                }
+              : b
+          );
+          const nextActiveSlotIds = s.activeSlotIds.filter((id) => id !== slotId);
+          return { ...s, blocks: updatedBlocks, activeSlotIds: nextActiveSlotIds };
+        }),
+
+      fillEmptySlot: (slotIdx, queuedId) =>
+        set((s) => {
+          if (s.activeSlotIds.includes(queuedId)) return s;
+          if (s.activeSlotIds.length >= MAX_PARALLEL_SLOTS) return s;
+          const inIdx = s.blocks.findIndex((b) => b.s2dItemId === queuedId);
+          if (inIdx < 0) return s;
+          const inBlock = s.blocks[inIdx];
+          if (inBlock.status === "done" || inBlock.status === "skipped") return s;
+
+          const now = Date.now();
+          const updatedBlocks = s.blocks.map((b, i) =>
+            i === inIdx
+              ? {
+                  ...b,
+                  activatedAtMs: s.paused ? null : now,
+                  accumulatedMs: 0,
+                }
+              : b
+          );
+
+          // Clamp insertion index within [0, activeSlotIds.length].
+          const idx = Math.max(0, Math.min(slotIdx, s.activeSlotIds.length));
+          const nextActiveSlotIds = s.activeSlotIds.slice();
+          nextActiveSlotIds.splice(idx, 0, queuedId);
+
+          return { ...s, blocks: updatedBlocks, activeSlotIds: nextActiveSlotIds };
+        }),
+
+      reorderQueue: (nextQueuedOrder) =>
+        set((s) => {
+          const queuedIds = new Set(
+            s.blocks
+              .filter(
+                (b) =>
+                  b.status !== "done" &&
+                  b.status !== "skipped" &&
+                  !s.activeSlotIds.includes(b.s2dItemId)
+              )
+              .map((b) => b.s2dItemId)
+          );
+          if (
+            nextQueuedOrder.length !== queuedIds.size ||
+            !nextQueuedOrder.every((id) => queuedIds.has(id))
+          ) {
+            return s;
+          }
+          // Rebuild blocks[]: walk the original order; whenever we hit
+          // a queued slot, pop the next id from nextQueuedOrder.
+          const cursor = nextQueuedOrder.slice();
+          const blockById = new Map(s.blocks.map((b) => [b.s2dItemId, b]));
+          const rebuilt = s.blocks.map((b) => {
+            if (queuedIds.has(b.s2dItemId)) {
+              const nextId = cursor.shift();
+              if (!nextId) return b;
+              return blockById.get(nextId) ?? b;
+            }
+            return b;
+          });
+          return { ...s, blocks: rebuilt };
         }),
 
       pause: () =>
