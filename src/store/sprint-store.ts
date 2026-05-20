@@ -39,7 +39,23 @@ export interface SprintBlock {
   calendarEventId?: string | null;
   /** "done" / "skipped" once the user advances past it during active mode. */
   status?: "pending" | "done" | "skipped";
+  /**
+   * Multi-active (parallel) mode timing. When a block enters an active
+   * slot, activatedAtMs is set to Date.now(). Pause nulls it and
+   * accumulates the elapsed delta into accumulatedMs. Resume sets it
+   * again. Live elapsed time =
+   *   accumulatedMs + (activatedAtMs ? now - activatedAtMs : 0)
+   * Queued blocks have both fields null/0.
+   */
+  activatedAtMs?: number | null;
+  accumulatedMs?: number;
 }
+
+/**
+ * Max items that can be in active slots simultaneously in parallel mode.
+ * User asked for 3.
+ */
+export const MAX_PARALLEL_SLOTS = 3;
 
 interface SprintState {
   phase: SprintPhase;
@@ -55,14 +71,21 @@ interface SprintState {
   /** Calendar account to push events into. Resolved from connected_accounts when null. */
   calendarAccountId: string | null;
 
-  // Active sprint state
-  /** Wall-clock ms when current block timer started (or last resumed). */
+  // Active sprint state — LEGACY serial fields (kept while we migrate
+  // off them; nothing should be reading these in the new multi-active UI).
   blockStartedAtMs: number | null;
-  /** ms accumulated on current block from prior runs (used after pause/resume). */
   blockElapsedMsAccum: number;
-  /** Index into blocks[] of the current active block. */
   activeIndex: number;
-  /** When true, timer is paused. */
+
+  // Active sprint state — multi-active (parallel) mode:
+  /**
+   * s2dItemIds currently occupying an active slot, in display order.
+   * Length is bounded by MAX_PARALLEL_SLOTS. Each id corresponds to a
+   * block in `blocks` whose status is still 'pending'.
+   */
+  activeSlotIds: string[];
+
+  /** When true, ALL active-slot timers are paused. */
   paused: boolean;
   /** ISO of when the whole sprint started. */
   sprintStartedAt: string | null;
@@ -79,8 +102,14 @@ interface SprintState {
 
   /** Move from review → active. */
   startSprint: () => void;
-  /** Advance to next block. Marks current as done by default. */
+  /** Advance to next block. LEGACY serial — not used in multi-active mode. */
   advance: (mark: "done" | "skipped") => void;
+  /**
+   * Complete a specific block by s2dItemId in multi-active mode.
+   * Marks the block done/skipped, frees its slot, and promotes the
+   * next queued block into the empty slot if any remain.
+   */
+  completeBlock: (s2dItemId: string, mark: "done" | "skipped") => void;
   pause: () => void;
   resume: () => void;
   minimize: () => void;
@@ -99,6 +128,7 @@ const INITIAL: Pick<
   | "blockStartedAtMs"
   | "blockElapsedMsAccum"
   | "activeIndex"
+  | "activeSlotIds"
   | "paused"
   | "sprintStartedAt"
 > = {
@@ -110,6 +140,7 @@ const INITIAL: Pick<
   blockStartedAtMs: null,
   blockElapsedMsAccum: 0,
   activeIndex: 0,
+  activeSlotIds: [],
   paused: false,
   sprintStartedAt: null,
 };
@@ -156,10 +187,27 @@ export const useSprintStore = create<SprintState>()(
       startSprint: () => {
         const s = get();
         if (s.blocks.length === 0) return;
+        const now = Date.now();
+        // Activate the first MAX_PARALLEL_SLOTS pending blocks.
+        const toActivate: string[] = [];
+        const updatedBlocks = s.blocks.map((b) => {
+          if (b.status === "done" || b.status === "skipped") return b;
+          if (toActivate.length >= MAX_PARALLEL_SLOTS) return b;
+          toActivate.push(b.s2dItemId);
+          return {
+            ...b,
+            status: "pending" as const,
+            activatedAtMs: now,
+            accumulatedMs: 0,
+          };
+        });
         set({
           phase: "active",
+          blocks: updatedBlocks,
+          activeSlotIds: toActivate,
+          // Legacy fields kept zeroed so any straggler reads don't blow up.
           activeIndex: 0,
-          blockStartedAtMs: Date.now(),
+          blockStartedAtMs: now,
           blockElapsedMsAccum: 0,
           paused: false,
           sprintStartedAt: new Date().toISOString(),
@@ -195,13 +243,81 @@ export const useSprintStore = create<SprintState>()(
           };
         }),
 
+      completeBlock: (s2dItemId, mark) =>
+        set((s) => {
+          const idx = s.blocks.findIndex((b) => b.s2dItemId === s2dItemId);
+          if (idx < 0) return s;
+          const block = s.blocks[idx];
+          if (block.status === "done" || block.status === "skipped") return s;
+
+          const now = Date.now();
+          // Settle any live elapsed time on the finishing block — useful
+          // for performance tracking even though the slot is going away.
+          const liveDelta =
+            !s.paused && block.activatedAtMs != null
+              ? now - block.activatedAtMs
+              : 0;
+
+          // Pick the next queued block (first non-done, non-skipped, not
+          // already in an active slot) to promote into the freed slot.
+          const queuedIdx = s.blocks.findIndex(
+            (b, i) =>
+              i !== idx &&
+              b.status !== "done" &&
+              b.status !== "skipped" &&
+              !s.activeSlotIds.includes(b.s2dItemId)
+          );
+
+          const updatedBlocks = s.blocks.map((b, i) => {
+            if (i === idx) {
+              return {
+                ...b,
+                status: mark,
+                activatedAtMs: null,
+                accumulatedMs: (b.accumulatedMs ?? 0) + liveDelta,
+              };
+            }
+            if (i === queuedIdx) {
+              return {
+                ...b,
+                activatedAtMs: s.paused ? null : now,
+                accumulatedMs: 0,
+              };
+            }
+            return b;
+          });
+
+          const nextActiveSlotIds = s.activeSlotIds.filter((id) => id !== s2dItemId);
+          if (queuedIdx >= 0) {
+            nextActiveSlotIds.push(s.blocks[queuedIdx].s2dItemId);
+          }
+
+          return {
+            ...s,
+            blocks: updatedBlocks,
+            activeSlotIds: nextActiveSlotIds,
+          };
+        }),
+
       pause: () =>
         set((s) => {
-          if (s.paused || s.blockStartedAtMs == null) return s;
-          const since = Date.now() - s.blockStartedAtMs;
+          if (s.paused) return s;
+          const now = Date.now();
+          // Accumulate live elapsed into every active slot before freezing.
+          const updatedBlocks = s.blocks.map((b) => {
+            if (!s.activeSlotIds.includes(b.s2dItemId)) return b;
+            if (b.activatedAtMs == null) return b;
+            return {
+              ...b,
+              accumulatedMs: (b.accumulatedMs ?? 0) + (now - b.activatedAtMs),
+              activatedAtMs: null,
+            };
+          });
           return {
+            ...s,
+            blocks: updatedBlocks,
             paused: true,
-            blockElapsedMsAccum: s.blockElapsedMsAccum + since,
+            // Legacy field for any straggler readers.
             blockStartedAtMs: null,
           };
         }),
@@ -209,9 +325,16 @@ export const useSprintStore = create<SprintState>()(
       resume: () =>
         set((s) => {
           if (!s.paused) return s;
+          const now = Date.now();
+          const updatedBlocks = s.blocks.map((b) => {
+            if (!s.activeSlotIds.includes(b.s2dItemId)) return b;
+            return { ...b, activatedAtMs: now };
+          });
           return {
+            ...s,
+            blocks: updatedBlocks,
             paused: false,
-            blockStartedAtMs: Date.now(),
+            blockStartedAtMs: now,
           };
         }),
 
@@ -261,4 +384,18 @@ export function liveElapsedMs(s: {
 }): number {
   if (s.paused || s.blockStartedAtMs == null) return s.blockElapsedMsAccum;
   return s.blockElapsedMsAccum + (Date.now() - s.blockStartedAtMs);
+}
+
+/**
+ * Per-block live elapsed for multi-active mode. Combines accumulated
+ * paused-time with the live delta from activatedAtMs. Works regardless
+ * of how many slots are active concurrently.
+ */
+export function blockLiveElapsedMs(
+  block: Pick<SprintBlock, "activatedAtMs" | "accumulatedMs">,
+  paused: boolean
+): number {
+  const accum = block.accumulatedMs ?? 0;
+  if (paused || block.activatedAtMs == null) return accum;
+  return accum + (Date.now() - block.activatedAtMs);
 }

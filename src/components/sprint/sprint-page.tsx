@@ -8,7 +8,10 @@ import { useSprintStore } from "@/store/sprint-store";
 import { PlannerPrioritizeShell } from "./planner-prioritize-shell";
 import { PlannerSchedule } from "./planner-schedule";
 import { PlannerReview } from "./planner-review";
-import { SprintActiveMode } from "./sprint-active-mode";
+// Multi-active is the default sprint experience now (up to 3 items in
+// parallel slots with a rolling queue dock). The legacy single-focus
+// SprintActiveMode is kept on disk if we ever want a "focus mode" toggle.
+import { SprintActiveModeMulti } from "./sprint-active-mode-multi";
 import { SprintComplete } from "./sprint-complete";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Play } from "lucide-react";
@@ -25,7 +28,8 @@ export function SprintPage() {
   const phase = useSprintStore((s) => s.phase);
   const enterPlanner = useSprintStore((s) => s.enterPlanner);
   const blocks = useSprintStore((s) => s.blocks);
-  const activeIndex = useSprintStore((s) => s.activeIndex);
+  // activeIndex (legacy serial cursor) no longer consumed here — the
+  // multi-active mode derives completion from per-block status.
 
   // If user hits /sprint while a sprint is minimized, surface the full UI
   useEffect(() => {
@@ -64,9 +68,14 @@ export function SprintPage() {
   }
 
   if (phase === "active" || phase === "minimized") {
-    // Sprint complete: activeIndex past the end of blocks[]
-    if (activeIndex >= blocks.length) return <SprintComplete />;
-    return <SprintActiveMode />;
+    // Sprint complete check, multi-active aware: every block has settled
+    // (status done/skipped). Empty blocks → also "complete" (nothing to
+    // do; the SprintComplete screen handles that no-ops gracefully).
+    const allSettled =
+      blocks.length === 0 ||
+      blocks.every((b) => b.status === "done" || b.status === "skipped");
+    if (allSettled) return <SprintComplete />;
+    return <SprintActiveModeMulti />;
   }
 
   return null;
