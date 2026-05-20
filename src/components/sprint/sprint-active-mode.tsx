@@ -19,6 +19,7 @@ import {
 import { useS2DStore } from "@/store/s2d-store";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
+import { SprintContextPackage } from "@/components/sprint/sprint-context-package";
 import { cn } from "@/lib/utils";
 
 /**
@@ -327,6 +328,12 @@ export function SprintActiveMode() {
               <MessageSquare className="h-3 w-3" />
               Open detail / talk to Mashi
             </button>
+          </div>
+
+          {/* Pathway-aware action package — pre-built so the user can
+              just execute without context-switching. */}
+          <div className="mt-6 w-full max-w-2xl">
+            <SprintContextPackage item={currentItem} />
           </div>
         </div>
 
