@@ -37,7 +37,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useS2DItems, useUpdateS2DItem } from "@/hooks/use-s2d";
+import { useUpdateS2DItem } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
 import { gsap, EASE, DUR } from "@/lib/animation";
 import { SourceIcon } from "@/components/shared/source-icon";
@@ -53,52 +53,33 @@ import { cn } from "@/lib/utils";
 
 type SwipeAction = "add" | "skip" | "backlog" | "snooze";
 
-const PRIORITY_ORDER: Record<string, number> = {
-  urgent: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
+interface Props {
+  /**
+   * Items already filtered + sorted by the parent shell. Receiving them
+   * via props (rather than fetching internally) means the empty-deck bug
+   * can't recur — loading and empty states are handled one level up.
+   */
+  eligibleItems: S2DItem[];
+}
 
-export function PlannerPrioritizeSwipe() {
-  const { data: items = [] } = useS2DItems();
+export function PlannerPrioritizeSwipe({ eligibleItems }: Props) {
   const updateItem = useUpdateS2DItem();
   const selected = useSprintStore((s) => s.selectedItemIds);
   const toggle = useSprintStore((s) => s.toggleSelected);
   const setPhase = useSprintStore((s) => s.setPhase);
   const exit = useSprintStore((s) => s.exitSprint);
 
-  // Deck content: open items not yet in today's sprint, ordered by
-  // priority then recency. Snapshot ONCE when items first arrive
-  // (TanStack Query starts with `[]` while loading), then never
-  // reshuffles during the session.
-  //
-  // Previous version had `[]` deps so the effect ran on mount with
-  // items still `[]` (TanStack hadn't fetched yet) and never re-ran —
-  // user saw "Deck cleared" even with hundreds of open items.
+  // Snapshot the deck order once so swipes don't reshuffle if TanStack
+  // refetches mid-session. The eligibleItems prop is already filtered
+  // + sorted by the shell, so we just freeze the reference.
   const deckRef = useRef<S2DItem[]>([]);
-  const [snapshotReady, setSnapshotReady] = useState(false);
+  const initialisedRef = useRef(false);
   const [cursor, setCursor] = useState(0);
 
-  useEffect(() => {
-    if (snapshotReady) return; // one-time only
-    if (items.length === 0) return; // wait for TanStack to populate
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const eligible = items
-      .filter((it) => it.status !== "done")
-      .filter((it) => it.sprint_date !== todayIso); // not already in today's sprint
-    eligible.sort((a, b) => {
-      const pa = PRIORITY_ORDER[a.priority] ?? 9;
-      const pb = PRIORITY_ORDER[b.priority] ?? 9;
-      if (pa !== pb) return pa - pb;
-      const ta = new Date(a.created_at).getTime();
-      const tb = new Date(b.created_at).getTime();
-      return tb - ta; // newer first within priority
-    });
-    deckRef.current = eligible;
-    setCursor(0);
-    setSnapshotReady(true);
-  }, [items, snapshotReady]);
+  if (!initialisedRef.current && eligibleItems.length > 0) {
+    deckRef.current = eligibleItems.slice();
+    initialisedRef.current = true;
+  }
 
   const remaining = deckRef.current.length - cursor;
   const current = deckRef.current[cursor];
@@ -259,16 +240,6 @@ export function PlannerPrioritizeSwipe() {
     }
     setPhase("schedule");
   }, [selected.length, setPhase, exit]);
-
-  // Loading state — TanStack Query hasn't populated items yet.
-  // Without this we'd flash the "Deck cleared" screen for a frame.
-  if (!snapshotReady) {
-    return (
-      <div className="flex h-full items-center justify-center text-[12px] text-muted-foreground">
-        Loading your open items…
-      </div>
-    );
-  }
 
   // Done-screen when we run out of items
   if (!current) {

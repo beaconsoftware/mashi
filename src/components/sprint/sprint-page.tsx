@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { useSprintStore } from "@/store/sprint-store";
-// Swipe-based prioritize is the default; the legacy list-based
-// PlannerPrioritize is still on disk if we want to bring it back as
-// an opt-in toggle.
-import { PlannerPrioritizeSwipe } from "./planner-prioritize-swipe";
+// PlannerPrioritizeShell wraps both Card (swipe deck) and List views
+// with a toggle. Both views read the same source data via the shell
+// and switch via localStorage persistence.
+import { PlannerPrioritizeShell } from "./planner-prioritize-shell";
 import { PlannerSchedule } from "./planner-schedule";
 import { PlannerReview } from "./planner-review";
 import { SprintActiveMode } from "./sprint-active-mode";
@@ -56,7 +56,7 @@ export function SprintPage() {
   if (phase === "prioritize" || phase === "schedule" || phase === "review") {
     return (
       <div ref={stageWrapRef} className="flex h-full flex-1 flex-col min-h-0">
-        {phase === "prioritize" && <PlannerPrioritizeSwipe />}
+        {phase === "prioritize" && <PlannerPrioritizeShell />}
         {phase === "schedule" && <PlannerSchedule />}
         {phase === "review" && <PlannerReview />}
       </div>
