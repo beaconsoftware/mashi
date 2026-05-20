@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useS2DItems, useUpdateS2DItem } from "@/hooks/use-s2d";
-import { useSprintStore } from "@/store/sprint-store";
+import { blockLiveElapsedMs, useSprintStore } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
 import {
   Sparkles,
@@ -51,6 +51,30 @@ export function SprintComplete() {
   const elapsedMin = sprintStartedAt
     ? Math.round((Date.now() - new Date(sprintStartedAt).getTime()) / 60_000)
     : totalMin;
+
+  /**
+   * Actual focused minutes per block, from accumulated active-slot time.
+   * In parallel mode each slot keeps its own timer, so totals can exceed
+   * wall-clock elapsedMin — that's correct: it reflects attention spent,
+   * not calendar time. Skipped blocks still report whatever time they
+   * accumulated in a slot before being moved out.
+   *
+   * Memoized on sprintStartedAt so the snapshot stays stable across
+   * renders (Date.now() inside would re-tick every render).
+   */
+  const actualMinById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const b of blocks) {
+      const ms = blockLiveElapsedMs(b, false);
+      map.set(b.s2dItemId, Math.max(0, Math.round(ms / 60_000)));
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks, sprintStartedAt]);
+  const totalActualMin = useMemo(
+    () => Array.from(actualMinById.values()).reduce((s, v) => s + v, 0),
+    [actualMinById]
+  );
 
   // Per-skipped-item disposition. Default: keep in todo.
   type Disposition = "todo" | "backlog" | "snooze";
@@ -190,7 +214,7 @@ export function SprintComplete() {
         const results = blocks.map((b) => ({
           s2d_item_id: b.s2dItemId,
           status: (b.status === "done" ? "done" : "skipped") as "done" | "skipped",
-          actual_min: b.durationMin, // proxy — true wall-clock per-block isn't captured today
+          actual_min: actualMinById.get(b.s2dItemId) ?? 0,
         }));
         await fetch("/api/sprint/session", {
           method: "POST",
@@ -204,6 +228,28 @@ export function SprintComplete() {
         });
       } catch {
         // Ignore — local-only is fine if the session POST fails.
+      }
+
+      // Update each block's calendar event to reflect actual time spent.
+      // PATCH-shrink done blocks, DELETE skipped ones. Fire-and-forget —
+      // calendar drift is a soft failure (the s2d_items + sprint_sessions
+      // record is the source of truth), but we want it best-effort.
+      try {
+        await fetch("/api/sprint/finalize-events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blocks: blocks.map((b) => ({
+              s2dItemId: b.s2dItemId,
+              status: (b.status === "done" ? "done" : "skipped") as
+                | "done"
+                | "skipped",
+              actualMin: actualMinById.get(b.s2dItemId) ?? 0,
+            })),
+          }),
+        });
+      } catch {
+        // Ignore — calendar update failure shouldn't block sprint exit.
       }
     } finally {
       setSaving(false);
@@ -237,7 +283,10 @@ export function SprintComplete() {
         )}
         <h1 className="text-xl font-semibold">Sprint complete</h1>
         <p className="text-sm text-muted-foreground">
-          {done} done · {skipped} skipped · {elapsedMin}m elapsed
+          {done} done · {skipped} skipped · {elapsedMin}m elapsed ·{" "}
+          <span title="Sum of per-block focus time. Can exceed elapsed in parallel mode (multiple slots running at once).">
+            {totalActualMin}m focus
+          </span>
         </p>
 
         {aggregate && aggregate.total_sessions > 0 && (
@@ -281,9 +330,28 @@ export function SprintComplete() {
                   MASH-{it.ticket_number}
                 </span>
                 <span className="line-clamp-1 flex-1">{it.title}</span>
-                <span className="w-10 text-right font-mono text-[10px] text-muted-foreground">
-                  {b.durationMin}m
-                </span>
+                {(() => {
+                  const actual = actualMinById.get(b.s2dItemId) ?? 0;
+                  const planned = b.durationMin;
+                  const over = actual > planned;
+                  const under = actual > 0 && actual < planned;
+                  return (
+                    <span
+                      className="w-16 text-right font-mono text-[10px] text-muted-foreground"
+                      title={`Actual ${actual}m of planned ${planned}m`}
+                    >
+                      <span
+                        className={cn(
+                          over && "text-amber-300",
+                          under && "text-emerald-300"
+                        )}
+                      >
+                        {actual}m
+                      </span>
+                      <span className="opacity-50">/{planned}m</span>
+                    </span>
+                  );
+                })()}
                 {isDone ? (
                   <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
                     done
@@ -312,7 +380,8 @@ export function SprintComplete() {
 
         <p className="text-[10px] text-muted-foreground">
           Done items are already closed. For everything else, pick where it goes —
-          defaults to staying in To Do.
+          defaults to staying in To Do. Calendar events for done blocks resize to
+          your actual focus time; skipped blocks are removed.
         </p>
 
         <div className="flex justify-center gap-2 pt-2">
