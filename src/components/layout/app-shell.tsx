@@ -2,6 +2,7 @@
 
 import { Sidebar } from "@/components/layout/sidebar";
 import { ChatPanel } from "@/components/chat/chat-panel";
+import { ConnectionHealthAlert } from "@/components/layout/connection-health-alert";
 // ChatSummonPill removed from the always-visible UI — the pulsing
 // bottom-right "Summon Mashi" pill kept reading like the copilot was
 // opening by default. The ChatToggleButton in the top bar is the
@@ -18,6 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col">
+          <ConnectionHealthAlert />
           <SyncStatusBar />
           {children}
         </main>

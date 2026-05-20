@@ -69,11 +69,20 @@ export function PlannerPrioritizeSwipe() {
   const exit = useSprintStore((s) => s.exitSprint);
 
   // Deck content: open items not yet in today's sprint, ordered by
-  // priority then recency. Snapshot on mount so swipes don't reshuffle.
+  // priority then recency. Snapshot ONCE when items first arrive
+  // (TanStack Query starts with `[]` while loading), then never
+  // reshuffles during the session.
+  //
+  // Previous version had `[]` deps so the effect ran on mount with
+  // items still `[]` (TanStack hadn't fetched yet) and never re-ran —
+  // user saw "Deck cleared" even with hundreds of open items.
   const deckRef = useRef<S2DItem[]>([]);
+  const [snapshotReady, setSnapshotReady] = useState(false);
   const [cursor, setCursor] = useState(0);
 
   useEffect(() => {
+    if (snapshotReady) return; // one-time only
+    if (items.length === 0) return; // wait for TanStack to populate
     const todayIso = new Date().toISOString().slice(0, 10);
     const eligible = items
       .filter((it) => it.status !== "done")
@@ -88,8 +97,8 @@ export function PlannerPrioritizeSwipe() {
     });
     deckRef.current = eligible;
     setCursor(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setSnapshotReady(true);
+  }, [items, snapshotReady]);
 
   const remaining = deckRef.current.length - cursor;
   const current = deckRef.current[cursor];
@@ -250,6 +259,16 @@ export function PlannerPrioritizeSwipe() {
     }
     setPhase("schedule");
   }, [selected.length, setPhase, exit]);
+
+  // Loading state — TanStack Query hasn't populated items yet.
+  // Without this we'd flash the "Deck cleared" screen for a frame.
+  if (!snapshotReady) {
+    return (
+      <div className="flex h-full items-center justify-center text-[12px] text-muted-foreground">
+        Loading your open items…
+      </div>
+    );
+  }
 
   // Done-screen when we run out of items
   if (!current) {

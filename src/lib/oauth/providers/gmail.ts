@@ -91,7 +91,26 @@ export const GmailOAuthProvider: OAuthProvider = {
         refresh_token: refreshToken,
       }),
     });
-    if (!res.ok) throw new Error(`Google refresh failed: ${res.status}`);
+    if (!res.ok) {
+      // Surface Google's actual error code + description rather than
+      // burying everything as "400". The body is JSON like
+      //   { "error": "invalid_grant",
+      //     "error_description": "Token has been expired or revoked." }
+      // which is exactly what we need to route this to needs_reauth
+      // instead of generic 'error'.
+      const text = await res.text().catch(() => "");
+      let parsed: { error?: string; error_description?: string } = {};
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        /* not JSON — fall through with raw text in the message */
+      }
+      const code = parsed.error ?? "";
+      const desc = parsed.error_description ?? text.slice(0, 200);
+      throw new Error(
+        `Google refresh failed: ${res.status}${code ? ` ${code}` : ""}${desc ? ` — ${desc}` : ""}`
+      );
+    }
     const j = (await res.json()) as {
       access_token: string;
       token_type: string;

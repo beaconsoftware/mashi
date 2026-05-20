@@ -49,7 +49,16 @@ export function looksLikeAuthFailure(msg: string): boolean {
     m.includes("invalid_grant") ||
     m.includes("token expired") ||
     m.includes("token_expired") ||
-    m.includes("authentication required")
+    m.includes("token has been expired or revoked") ||
+    m.includes("authentication required") ||
+    // Google + others return 400 on a permanently-rejected refresh token.
+    // The bare status code can also be in the message ("refresh failed: 400").
+    // We pair "400" with refresh/grant/revoke context to avoid catching
+    // unrelated 400s (e.g. validation failures).
+    (m.includes("400") &&
+      (m.includes("refresh") ||
+        m.includes("invalid_grant") ||
+        m.includes("revoked")))
   );
 }
 
