@@ -66,7 +66,8 @@ import { CompanyBadge } from "@/components/shared/company-badge";
 import { SprintContextPackage } from "@/components/sprint/sprint-context-package";
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
-import { useMagneticHover } from "@/lib/animation/interactions";
+import { useDeckCardHover } from "@/lib/animation/interactions";
+import { PATHWAY_META } from "@/types";
 import { cn } from "@/lib/utils";
 import type { S2DItem } from "@/types";
 
@@ -999,7 +1000,7 @@ function BenchStrip({
     <div
       ref={setDockRef}
       className={cn(
-        "shrink-0 border-t border-border/30 bg-secondary/20 px-4 py-2 transition-colors",
+        "shrink-0 border-t border-border/30 bg-secondary/20 px-4 pt-2 pb-2 transition-colors",
         isDockOver && "bg-primary/5"
       )}
     >
@@ -1008,7 +1009,7 @@ function BenchStrip({
         Bench <span className="font-mono opacity-70">{blocks.length}</span>
         {!empty && (
           <span className="ml-2 normal-case text-[10px] opacity-60">
-            Hover a card to preview and pull
+            Hover to preview · drag to slot · click to pull
           </span>
         )}
       </div>
@@ -1017,23 +1018,32 @@ function BenchStrip({
           Bench is empty. Drag a slot here to park it.
         </div>
       ) : (
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {blocks.map((b) => {
-            const it = itemMap.get(b.s2dItemId);
-            if (!it) return null;
-            return (
-              <BenchCard
-                key={b.s2dItemId}
-                block={b}
-                item={it}
-                isDragging={draggingId === `queue:${b.s2dItemId}`}
-                activeSlotsFull={activeSlotsFull}
-                onPull={() => onPull(b.s2dItemId)}
-                onMarkDone={() => onMarkDone(b.s2dItemId)}
-                onOpen={() => onOpen(b.s2dItemId)}
-              />
-            );
-          })}
+        // Two-layer overflow trick: the outer is overflow-visible so card
+        // lifts (transform: translateY(-Npx)) aren't clipped. The inner
+        // is overflow-x-auto for horizontal scroll, with generous vertical
+        // padding so the lift stays inside its bounds. Without the
+        // padding, the magnetic shadow gets sliced off at the strip's
+        // top edge — that was the user-visible "Bench is cutting off"
+        // bug from the redesign feedback.
+        <div className="-mx-1 overflow-x-auto overflow-y-visible">
+          <div className="flex items-end gap-3 px-1 pt-10 pb-6">
+            {blocks.map((b) => {
+              const it = itemMap.get(b.s2dItemId);
+              if (!it) return null;
+              return (
+                <BenchCard
+                  key={b.s2dItemId}
+                  block={b}
+                  item={it}
+                  isDragging={draggingId === `queue:${b.s2dItemId}`}
+                  activeSlotsFull={activeSlotsFull}
+                  onPull={() => onPull(b.s2dItemId)}
+                  onMarkDone={() => onMarkDone(b.s2dItemId)}
+                  onOpen={() => onOpen(b.s2dItemId)}
+                />
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -1065,26 +1075,31 @@ function BenchCard({
     attributes,
     listeners,
   } = useDraggable({ id: `queue:${block.s2dItemId}` });
-  // Magnetic lift on hover, halo + 2px rise — same primitive used on
-  // the S2D board / cockpit tiles so the app's hover feel stays
-  // consistent. ref is also wired through DnD set*Ref below.
-  const { ref: magRef, onEnter, onLeave } = useMagneticHover<HTMLDivElement>({
-    intensity: "soft",
+  // Deck-card hover: bigger lift, sheen sweep, cursor-tracked tilt.
+  // Halo color is the pathway's own CSS var so the glow matches the
+  // badge — cosmetic continuity with the rest of the app's pathway
+  // language. ref is composed with DnD setNodeRefs below.
+  const pathwayMeta = PATHWAY_META[item.pathway];
+  const glow = `var(${pathwayMeta.colorVar})`;
+  const { ref: deckRef, onEnter, onMove, onLeave } = useDeckCardHover<HTMLDivElement>({
+    shadow: `0 18px 44px -12px ${glow}, 0 0 0 1px ${glow}`,
+    lift: 10,
+    scale: 1.05,
   });
   const composedRef = (el: HTMLDivElement | null) => {
     setDropRef(el);
     setDragRef(el);
-    magRef.current = el;
+    deckRef.current = el;
   };
-  // Hover-card pattern: open popover on hover-with-intent (~220ms) so
-  // a quick mouseover doesn't trigger. Stays open while pointer is in
-  // the popover too (the popover's own onMouseEnter cancels close).
+  // Hover-card pattern: open popover on hover-with-intent (~280ms) so
+  // a quick mouseover doesn't trigger. The sheen + tilt feel instant
+  // while the popover waits for clear hover intent.
   const [open, setOpen] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   function startHover() {
     onEnter();
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = setTimeout(() => setOpen(true), 220);
+    hoverTimerRef.current = setTimeout(() => setOpen(true), 280);
   }
   function endHover() {
     onLeave();
@@ -1098,39 +1113,81 @@ function BenchCard({
         <div
           ref={composedRef}
           onMouseEnter={startHover}
+          onMouseMove={onMove}
           onMouseLeave={endHover}
           className={cn(
-            "relative shrink-0 select-none rounded-md border border-border/30 bg-card/70 px-3 py-2 text-[11px] transition-colors hover:border-primary/40",
+            // overflow-hidden clips the sheen sweep at the card edges;
+            // will-change-transform hints the compositor for the tilt.
+            "relative shrink-0 select-none overflow-hidden rounded-xl border bg-card text-[11px] will-change-transform",
+            // Border uses pathway tint instead of generic border so the
+            // resting card already announces what kind of work it is.
+            "border-border/40 hover:border-transparent",
             isOver && "ring-2 ring-primary/60",
-            isDragging && "opacity-50"
+            isDragging && "opacity-40"
           )}
-          style={{ minWidth: 220, maxWidth: 280 }}
+          style={{
+            width: 224,
+            height: 168,
+            // Subtle pathway-tinted gradient bottom-to-top so the card
+            // has visual depth at rest. Strength is low (0.10) — accent,
+            // not statement.
+            backgroundImage: `linear-gradient(165deg, transparent 40%, ${glow} 200%)`,
+          }}
         >
-          {/* Grip handle is the drag affordance — drag from here, click
-              anywhere else on the card to open the popover preview. */}
-          <div className="flex items-center gap-1.5">
+          {/* Sheen overlay — animates left→right on hover via GSAP. The
+              gradient is a thin diagonal band; the GSAP tween moves it
+              across the card and fades it. Pointer-events-none so it
+              doesn't eat clicks on the underlying content. */}
+          <span
+            data-sheen
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-20"
+            style={{
+              background:
+                "linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.16) 50%, transparent 65%)",
+              transform: "translateX(-120%)",
+            }}
+          />
+
+          {/* Top stat bar — drag handle + priority + ticket + duration */}
+          <div className="relative z-10 flex items-center gap-1.5 border-b border-white/5 bg-black/20 px-2.5 py-1.5">
             <button
               type="button"
               {...listeners}
               {...attributes}
-              className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
+              className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-white/10 active:cursor-grabbing"
               title="Drag to reorder or promote to a slot"
               aria-label="Drag bench item"
               onMouseDown={(e) => e.stopPropagation()}
             >
-              <GripVertical className="h-2.5 w-2.5" />
+              <GripVertical className="h-3 w-3" />
             </button>
             <PriorityDot priority={item.priority} />
             <span className="font-mono text-[9px] text-muted-foreground">
               MASH-{item.ticket_number}
             </span>
-            <PathwayBadge pathway={item.pathway} compact />
-            <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+            <span className="ml-auto rounded bg-black/30 px-1.5 py-0.5 font-mono text-[9px] text-foreground/85">
               {block.durationMin}m
             </span>
           </div>
-          <div className="mt-1 line-clamp-2 text-foreground/90 leading-snug">
-            {item.title}
+
+          {/* Body — pathway badge as "rarity stripe", title, company */}
+          <div className="relative z-10 flex h-[calc(100%-32px)] flex-col p-2.5">
+            <div className="flex items-center gap-2">
+              <PathwayBadge pathway={item.pathway} compact />
+            </div>
+            <div className="mt-1.5 line-clamp-3 text-[12px] font-medium leading-snug text-foreground/95">
+              {item.title}
+            </div>
+            <div className="mt-auto flex items-center gap-1.5 pt-1">
+              {item.company ? (
+                <CompanyBadge company={item.company} />
+              ) : (
+                <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60">
+                  no company
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </PopoverTrigger>
@@ -1247,26 +1304,30 @@ function DoneStrip({
   onOpen: (id: string) => void;
 }) {
   return (
-    <div className="shrink-0 border-t border-border/30 px-4 py-2">
+    <div className="shrink-0 border-t border-border/30 px-4 pt-2 pb-2">
       <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
         <CheckCheck className="h-3 w-3" />
         Done <span className="font-mono opacity-70">{blocks.length}</span>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {blocks.map((b) => {
-          const it = itemMap.get(b.s2dItemId);
-          if (!it) return null;
-          return (
-            <DoneCard
-              key={b.s2dItemId}
-              block={b}
-              item={it}
-              activeSlotsFull={activeSlotsFull}
-              onReopen={(target) => onReopen(b.s2dItemId, target)}
-              onOpen={() => onOpen(b.s2dItemId)}
-            />
-          );
-        })}
+      {/* Two-layer overflow so card lifts don't clip — same pattern as
+          the Bench strip. */}
+      <div className="-mx-1 overflow-x-auto overflow-y-visible">
+        <div className="flex items-end gap-3 px-1 pt-10 pb-6">
+          {blocks.map((b) => {
+            const it = itemMap.get(b.s2dItemId);
+            if (!it) return null;
+            return (
+              <DoneCard
+                key={b.s2dItemId}
+                block={b}
+                item={it}
+                activeSlotsFull={activeSlotsFull}
+                onReopen={(target) => onReopen(b.s2dItemId, target)}
+                onOpen={() => onOpen(b.s2dItemId)}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -1286,15 +1347,22 @@ function DoneCard({
   onOpen: () => void;
 }) {
   const isDone = block.status === "done";
-  const { ref, onEnter, onLeave } = useMagneticHover<HTMLDivElement>({
-    intensity: "soft",
+  // Done cards use emerald glow; skipped use muted. Matches the badge
+  // language elsewhere in the app (S2D sheet, sprint complete recap).
+  const glow = isDone
+    ? "rgb(16 185 129 / 0.55)"
+    : "hsl(var(--muted-foreground) / 0.35)";
+  const { ref, onEnter, onMove, onLeave } = useDeckCardHover<HTMLDivElement>({
+    shadow: `0 18px 44px -12px ${glow}, 0 0 0 1px ${glow}`,
+    lift: 10,
+    scale: 1.05,
   });
   const [open, setOpen] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   function startHover() {
     onEnter();
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = setTimeout(() => setOpen(true), 220);
+    hoverTimerRef.current = setTimeout(() => setOpen(true), 280);
   }
   function endHover() {
     onLeave();
@@ -1308,16 +1376,36 @@ function DoneCard({
         <div
           ref={ref}
           onMouseEnter={startHover}
+          onMouseMove={onMove}
           onMouseLeave={endHover}
           className={cn(
-            "relative shrink-0 cursor-pointer select-none rounded-md border px-3 py-2 text-[11px] transition-colors",
+            "relative shrink-0 cursor-pointer select-none overflow-hidden rounded-xl border text-[11px] will-change-transform",
             isDone
-              ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-400/60"
-              : "border-border/40 bg-card/50 hover:border-border"
+              ? "border-emerald-500/30 bg-emerald-500/5 hover:border-transparent"
+              : "border-border/40 bg-card/50 hover:border-transparent"
           )}
-          style={{ minWidth: 200, maxWidth: 260 }}
+          style={{
+            width: 224,
+            height: 168,
+            backgroundImage: isDone
+              ? "linear-gradient(165deg, transparent 40%, rgb(16 185 129 / 0.18) 200%)"
+              : "linear-gradient(165deg, transparent 40%, hsl(var(--muted-foreground) / 0.10) 200%)",
+          }}
         >
-          <div className="flex items-center gap-1.5">
+          {/* Sheen sweep on hover */}
+          <span
+            data-sheen
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-20"
+            style={{
+              background:
+                "linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.16) 50%, transparent 65%)",
+              transform: "translateX(-120%)",
+            }}
+          />
+
+          {/* Top stat bar */}
+          <div className="relative z-10 flex items-center gap-1.5 border-b border-white/5 bg-black/20 px-2.5 py-1.5">
             {isDone ? (
               <Check className="h-3 w-3 text-emerald-400" />
             ) : (
@@ -1331,17 +1419,37 @@ function DoneCard({
             >
               MASH-{item.ticket_number}
             </span>
-            <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+            <span className="ml-auto rounded bg-black/30 px-1.5 py-0.5 font-mono text-[9px] text-foreground/85">
               {block.durationMin}m
             </span>
           </div>
-          <div
-            className={cn(
-              "mt-0.5 line-clamp-2 leading-snug",
-              isDone ? "text-emerald-200/90" : "text-muted-foreground"
-            )}
-          >
-            {item.title}
+
+          {/* Body */}
+          <div className="relative z-10 flex h-[calc(100%-32px)] flex-col p-2.5">
+            <div className="flex items-center gap-1.5">
+              <PathwayBadge pathway={item.pathway} compact />
+              <span
+                className={cn(
+                  "ml-auto rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider",
+                  isDone
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : "bg-secondary/60 text-muted-foreground"
+                )}
+              >
+                {isDone ? "done" : "skipped"}
+              </span>
+            </div>
+            <div
+              className={cn(
+                "mt-1.5 line-clamp-3 text-[12px] font-medium leading-snug",
+                isDone ? "text-emerald-200/95" : "text-muted-foreground"
+              )}
+            >
+              {item.title}
+            </div>
+            <div className="mt-auto flex items-center gap-1.5 pt-1">
+              {item.company && <CompanyBadge company={item.company} />}
+            </div>
           </div>
         </div>
       </PopoverTrigger>
