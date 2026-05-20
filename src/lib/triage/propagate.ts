@@ -92,8 +92,11 @@ export async function propagateClosures(
       alreadyCascadedIds.add(lid);
       const target = candidates.find((o) => o.id === lid);
       // .neq("status","done") avoids overwriting a manual close that may
-      // have landed since the candidate pool was loaded — would otherwise
-      // replace the user's outcome with the cascaded one.
+      // have landed since the candidate pool was loaded.
+      // .lt("updated_at", recentTouchIso) skips items the user touched in
+      // the last 24h — they might have just intentionally re-opened, in
+      // which case cascading a close on top would defeat their intent.
+      const recentTouchIso = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
       const { error } = await supabase
         .from("s2d_items")
         .update({
@@ -104,7 +107,8 @@ export async function propagateClosures(
         })
         .eq("user_id", userId)
         .eq("id", lid)
-        .neq("status", "done");
+        .neq("status", "done")
+        .lt("updated_at", recentTouchIso);
       if (!error) {
         cascaded++;
         details.push(`${target?.title ?? lid} ← linked to "${c.title.slice(0, 60)}"`);

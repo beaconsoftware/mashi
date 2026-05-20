@@ -40,6 +40,27 @@ function silenceCutoffMs(pathway: string): number {
   }
 }
 
+/**
+ * User-touched-recently cutoff. The reconcilers all gate their auto-close
+ * UPDATEs on .lt("updated_at", recentTouchCutoff()) so that if the user
+ * just re-opened, edited, or otherwise touched an item, we don't
+ * immediately auto-close it on the next pass. Catches the case where:
+ *
+ *   1. user manually re-opens a done item to status='todo'
+ *   2. silence-reconciler runs and sees the underlying thread is still
+ *      silent (because no new messages arrived)
+ *   3. without the guard, the item is auto-closed again right away
+ *
+ * 24h gives the user a full day to act on a recently-touched item before
+ * background closure kicks back in. The trade-off is that auto-closes
+ * land a cycle late after any triage-driven update too (which also
+ * bumps updated_at), but that's acceptable — the close just waits one
+ * pass and we don't get repeated overrides of user intent.
+ */
+function recentTouchCutoff(): string {
+  return new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+}
+
 function outcomeForSilence(pathway: string, days: number): string {
   switch (pathway) {
     case "meeting_backed":
@@ -119,7 +140,8 @@ export async function reconcileLinearStatuses(userId: string): Promise<Reconcile
             })
             .eq("user_id", userId)
             .eq("id", g.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
           details.push(`${g.title} → ${state.name}`);
           closedIds.push(g.id);
           continue;
@@ -141,7 +163,8 @@ export async function reconcileLinearStatuses(userId: string): Promise<Reconcile
             })
             .eq("user_id", userId)
             .eq("id", g.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
           details.push(`${g.title} → stale ${Math.round(ageMs / 86_400_000)}d`);
           closedIds.push(g.id);
         }
@@ -290,7 +313,8 @@ export async function reconcileGmailReplies(userId: string): Promise<ReconcileRe
             })
             .eq("user_id", userId)
             .eq("id", it.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
           details.push(`${it.title} → you replied`);
           closedIds.push(it.id);
           continue;
@@ -314,7 +338,8 @@ export async function reconcileGmailReplies(userId: string): Promise<ReconcileRe
             })
             .eq("user_id", userId)
             .eq("id", it.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
           details.push(`${it.title} → quiet ${days}d (${it.pathway})`);
           closedIds.push(it.id);
         }
@@ -443,7 +468,8 @@ export async function reconcileSlackReplies(userId: string): Promise<ReconcileRe
             })
             .eq("user_id", userId)
             .eq("id", it.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
           details.push(`${it.title} → you replied`);
           closedIds.push(it.id);
           break;
@@ -463,7 +489,8 @@ export async function reconcileSlackReplies(userId: string): Promise<ReconcileRe
             })
             .eq("user_id", userId)
             .eq("id", it.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
           details.push(`${it.title} → quiet ${days}d (${it.pathway})`);
           closedIds.push(it.id);
           break;
@@ -661,7 +688,8 @@ export async function reconcileCalendarPastEvents(
       })
       .eq("user_id", userId)
       .eq("id", it.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
     if (!error) closedIds.push(it.id);
   }
 
@@ -777,7 +805,8 @@ export async function reconcilePastPrepItems(
       })
       .eq("user_id", userId)
       .eq("id", c.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
     if (!error) closedIds.push(c.id);
   }
 
@@ -830,7 +859,8 @@ export async function reconcileFirefliesByMeetingAge(
         })
         .eq("user_id", userId)
         .eq("id", it.id)
-            .neq("status", "done");
+            .neq("status", "done")
+            .lt("updated_at", recentTouchCutoff());
       if (!error) closedIds.push(it.id);
     }
   }

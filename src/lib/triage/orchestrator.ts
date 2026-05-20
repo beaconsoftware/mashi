@@ -333,8 +333,13 @@ async function applyOperation(
 
   if (op.op === "close") {
     if (op.confidence === "auto") {
-      // .neq("status","done") prevents double-close, which would otherwise
-      // overwrite a manual outcome with the agent's auto_detected one.
+      // .neq("status","done") prevents double-close (would overwrite manual
+      // outcome). .lt("updated_at", recentTouchIso) prevents auto-closing
+      // an item the user just touched — gives them a 24h grace window
+      // even when fresh content suggests closure.
+      const recentTouchIso = new Date(
+        Date.now() - 24 * 3600 * 1000
+      ).toISOString();
       const { error } = await supabase
         .from("s2d_items")
         .update({
@@ -345,7 +350,8 @@ async function applyOperation(
         })
         .eq("id", op.s2d_item_id)
         .eq("user_id", userId)
-        .neq("status", "done");
+        .neq("status", "done")
+        .lt("updated_at", recentTouchIso);
       if (error) throw error;
       return { created: 0, updated: 0, closed: 1 };
     } else {

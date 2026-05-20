@@ -58,6 +58,11 @@ export async function aiStalenessReview(userId: string): Promise<{
         if (!target) continue;
         // .neq("status","done") so we don't overwrite a user's manual
         // outcome with our stale auto-close one if they beat us to it.
+        // .lt("updated_at", recentTouchIso) skips items the user touched
+        // in the last 24h — e.g. they manually re-opened a stale-looking
+        // item, which they shouldn't have to defend from being re-closed
+        // on the next reconcile pass.
+        const recentTouchIso = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
         const { error } = await supabase
           .from("s2d_items")
           .update({
@@ -68,7 +73,8 @@ export async function aiStalenessReview(userId: string): Promise<{
           })
           .eq("user_id", userId)
           .eq("id", sid.id)
-          .neq("status", "done");
+          .neq("status", "done")
+          .lt("updated_at", recentTouchIso);
         if (!error) {
           closedIds.push(sid.id);
           details.push(`${target.title.slice(0, 60)} → ${sid.reason}`);

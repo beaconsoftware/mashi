@@ -10,6 +10,8 @@ import {
   Check,
   SkipForward,
   Loader2,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { useGSAP } from "@gsap/react";
 import { heroEntry, staggerEntry, gsap, EASE } from "@/lib/animation";
@@ -62,6 +64,10 @@ export function SprintComplete() {
     }
   );
   const [saving, setSaving] = useState(false);
+  // Inline banner — surfaces disposition save failures so the user knows
+  // which rows are still stuck at their pre-sprint state rather than
+  // confidently navigating away on "Save & back to board".
+  const [banner, setBanner] = useState<{ kind: "err"; msg: string } | null>(null);
 
   // Past-sprint aggregate — fetched lazily so the recap renders fast.
   // null while loading, undefined if endpoint isn't available, else the
@@ -109,39 +115,62 @@ export function SprintComplete() {
 
   async function saveAndExit(target: "board" | "plan-another") {
     setSaving(true);
+    setBanner(null);
     try {
       // Apply each skipped item's chosen disposition. Done items already
       // have status='done' from active-mode's markDone — skip them here.
-      const work: Promise<unknown>[] = [];
+      // We track the item id per work entry so a Promise.allSettled
+      // rejection can be reported by ticket rather than silently dropped.
+      const work: Array<{ id: string; ticket: number | null; promise: Promise<unknown> }> = [];
       for (const b of blocks) {
         if (b.status === "done") continue;
         const disp = dispositions[b.s2dItemId];
         if (!disp || disp === "todo") continue; // already at "todo" from advance(skipped)
+        const it = itemMap.get(b.s2dItemId);
+        const ticket = it?.ticket_number ?? null;
 
         if (disp === "backlog") {
-          work.push(
-            updateItem.mutateAsync({
+          work.push({
+            id: b.s2dItemId,
+            ticket,
+            promise: updateItem.mutateAsync({
               id: b.s2dItemId,
               patch: { status: "backlog" },
-            })
-          );
+            }),
+          });
         } else if (disp === "snooze") {
           const t = new Date();
           t.setDate(t.getDate() + 1);
           t.setHours(9, 0, 0, 0);
-          work.push(
-            updateItem.mutateAsync({
+          work.push({
+            id: b.s2dItemId,
+            ticket,
+            promise: updateItem.mutateAsync({
               id: b.s2dItemId,
               patch: {
                 status: "in_queue",
                 snoozed_until: t.toISOString(),
                 queue_reason: "Snoozed at sprint complete (24h)",
               },
-            })
-          );
+            }),
+          });
         }
       }
-      await Promise.allSettled(work);
+      const results = await Promise.allSettled(work.map((w) => w.promise));
+      const failed = results
+        .map((r, i) => (r.status === "rejected" ? work[i] : null))
+        .filter((w): w is { id: string; ticket: number | null; promise: Promise<unknown> } => w != null);
+      if (failed.length > 0) {
+        const labels = failed
+          .map((f) => (f.ticket != null ? `MASH-${f.ticket}` : f.id.slice(0, 8)))
+          .join(", ");
+        setBanner({
+          kind: "err",
+          msg: `${failed.length} disposition${failed.length === 1 ? "" : "s"} failed to save (${labels}) — those rows are still in their pre-sprint state.`,
+        });
+        setSaving(false);
+        return; // don't navigate away — user needs to see which rows are stuck
+      }
 
       // Persist the sprint to sprint_sessions for performance tracking.
       // Fire-and-forget — failure doesn't block the exit flow, since the
@@ -194,6 +223,18 @@ export function SprintComplete() {
         >
           <Sparkles className="h-5 w-5 text-primary" />
         </div>
+        {banner && (
+          <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-2.5 text-left text-[12px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1">{banner.msg}</span>
+            <button
+              onClick={() => setBanner(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         <h1 className="text-xl font-semibold">Sprint complete</h1>
         <p className="text-sm text-muted-foreground">
           {done} done · {skipped} skipped · {elapsedMin}m elapsed

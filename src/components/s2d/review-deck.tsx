@@ -114,11 +114,33 @@ export function ReviewDeck({ items, open, onClose }: Props) {
       .finally(() => setJustifying(false));
   }, [open]);
 
-  const remaining = deckRef.current.length - cursor;
-  // Use the live row from items (so updated review_justification etc. flows
-  // through), falling back to the snapshot if the row was deleted upstream
-  // for any reason.
-  const currentSnapshot = deckRef.current[cursor];
+  // The deck's snapshot is pinned on open so swipes don't reshuffle mid-
+  // session, but if a background sync closes an item or flips its
+  // needs_review flag while the user is mid-deck, we need to skip past it
+  // — otherwise an "approve" swipe writes status="<override>" against a
+  // row that's already status="done", overwriting the auto-close outcome.
+  // Build the list of snapshot indices that are still actionable. The
+  // cursor walks this list rather than the raw snapshot — so a
+  // background-closed item is silently skipped instead of stalling the
+  // deck on a stale card.
+  const validIndices = useMemo(() => {
+    return deckRef.current
+      .map((it, i) => {
+        const live = liveItemsById.get(it.id);
+        // Keep snapshot fallback if the live row is missing (could be a
+        // race where the row hasn't refetched yet); otherwise filter out
+        // anything already closed or no-longer flagged for review.
+        if (!live) return i;
+        if (live.status === "done") return null;
+        if (live.needs_review !== true) return null;
+        return i;
+      })
+      .filter((i): i is number => i != null);
+  }, [liveItemsById]);
+  const remaining = Math.max(0, validIndices.length - cursor);
+  const currentSnapshotIndex = validIndices[cursor];
+  const currentSnapshot =
+    currentSnapshotIndex != null ? deckRef.current[currentSnapshotIndex] : undefined;
   const current = currentSnapshot
     ? liveItemsById.get(currentSnapshot.id) ?? currentSnapshot
     : undefined;
@@ -425,12 +447,14 @@ export function ReviewDeck({ items, open, onClose }: Props) {
         {/* Top: progress + close */}
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
-            {cursor + 1} / {deckRef.current.length}
+            {Math.min(cursor + 1, validIndices.length)} / {validIndices.length}
           </span>
           <div className="h-1 flex-1 overflow-hidden rounded-full bg-secondary/40">
             <div
               className="h-full bg-primary transition-all"
-              style={{ width: `${((cursor + 1) / deckRef.current.length) * 100}%` }}
+              style={{
+                width: `${validIndices.length === 0 ? 100 : (Math.min(cursor + 1, validIndices.length) / validIndices.length) * 100}%`,
+              }}
             />
           </div>
           {justifying && (
