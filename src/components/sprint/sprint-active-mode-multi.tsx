@@ -68,6 +68,37 @@ export function SprintActiveModeMulti() {
     return () => clearInterval(id);
   }, [paused]);
 
+  // Migration / recovery: if the user is in active phase but activeSlotIds
+  // is empty (sprint started before multi-active shipped, or any state
+  // corruption), auto-fill the first MAX_PARALLEL_SLOTS pending blocks
+  // into slots. Without this, an in-flight sprint from the old serial UI
+  // would render as "all slots empty" and the user would lose visibility
+  // into what they were working on.
+  useEffect(() => {
+    if (activeSlotIds.length > 0) return;
+    const firstPending = blocks
+      .filter((b) => b.status !== "done" && b.status !== "skipped")
+      .slice(0, MAX_PARALLEL_SLOTS)
+      .map((b) => b.s2dItemId);
+    if (firstPending.length === 0) return;
+    // Inline-set via the store: each block needs activatedAtMs and
+    // accumulatedMs initialized, then activeSlotIds populated.
+    const now = Date.now();
+    useSprintStore.setState((s) => ({
+      ...s,
+      activeSlotIds: firstPending,
+      blocks: s.blocks.map((b) =>
+        firstPending.includes(b.s2dItemId)
+          ? {
+              ...b,
+              activatedAtMs: s.paused ? null : now,
+              accumulatedMs: b.accumulatedMs ?? 0,
+            }
+          : b
+      ),
+    }));
+  }, [activeSlotIds, blocks]);
+
   const itemMap = useMemo(
     () => new Map((items ?? []).map((i) => [i.id, i])),
     [items]
