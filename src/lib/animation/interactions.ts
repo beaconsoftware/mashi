@@ -126,15 +126,17 @@ export function useDeckCardHover<T extends HTMLElement = HTMLDivElement>(opts?: 
         duration: 0.28,
         ease: "power3.out",
       });
-      // Sheen sweep — start at -120%, end at +120%. Killing prior tweens
-      // so spam-hovering doesn't queue up multiple sweeps.
+      // Sheen sweep — subtle pass across, dialed down so the lift +
+      // glow + tilt do the heavy lifting and the sheen is just a hint
+      // of "this surface has a finish". Kill prior tweens so a rapid
+      // hover doesn't queue multiple sweeps.
       const sheen = el.querySelector("[data-sheen]");
       if (sheen) {
         gsap.killTweensOf(sheen);
         gsap.fromTo(
           sheen,
-          { xPercent: -120, opacity: 1 },
-          { xPercent: 120, opacity: 0.5, duration: 0.85, ease: "power2.inOut" }
+          { xPercent: -110, opacity: 0.6 },
+          { xPercent: 110, opacity: 0, duration: 0.55, ease: "power2.out" }
         );
       }
     });

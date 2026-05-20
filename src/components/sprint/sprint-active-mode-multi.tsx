@@ -1144,7 +1144,7 @@ function BenchCard({
             className="pointer-events-none absolute inset-0 z-20"
             style={{
               background:
-                "linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.16) 50%, transparent 65%)",
+                "linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.06) 50%, transparent 60%)",
               transform: "translateX(-120%)",
             }}
           />
@@ -1399,7 +1399,7 @@ function DoneCard({
             className="pointer-events-none absolute inset-0 z-20"
             style={{
               background:
-                "linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.16) 50%, transparent 65%)",
+                "linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.06) 50%, transparent 60%)",
               transform: "translateX(-120%)",
             }}
           />
