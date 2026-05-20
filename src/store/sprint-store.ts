@@ -307,15 +307,20 @@ export const useSprintStore = create<SprintState>()(
               ? now - block.activatedAtMs
               : 0;
 
-          // Pick the next queued block (first non-done, non-skipped, not
-          // already in an active slot) to promote into the freed slot.
-          const queuedIdx = s.blocks.findIndex(
-            (b, i) =>
-              i !== idx &&
-              b.status !== "done" &&
-              b.status !== "skipped" &&
-              !s.activeSlotIds.includes(b.s2dItemId)
-          );
+          // Only auto-promote when the completed block was actually in
+          // an active slot — otherwise (bench item marked Done) we'd
+          // grow activeSlotIds beyond MAX_PARALLEL_SLOTS by pushing a
+          // queued id while filter is a no-op.
+          const wasActive = s.activeSlotIds.includes(s2dItemId);
+          const queuedIdx = wasActive
+            ? s.blocks.findIndex(
+                (b, i) =>
+                  i !== idx &&
+                  b.status !== "done" &&
+                  b.status !== "skipped" &&
+                  !s.activeSlotIds.includes(b.s2dItemId)
+              )
+            : -1;
 
           const updatedBlocks = s.blocks.map((b, i) => {
             if (i === idx) {

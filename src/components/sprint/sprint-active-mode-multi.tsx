@@ -121,21 +121,30 @@ export function SprintActiveModeMulti() {
     return () => clearInterval(id);
   }, [paused]);
 
-  // Migration / recovery: if the user is in active phase but activeSlotIds
-  // is empty (sprint started before multi-active shipped, or any state
-  // corruption), auto-fill the first MAX_PARALLEL_SLOTS pending blocks
-  // into slots. Without this, an in-flight sprint from the old serial UI
-  // would render as "all slots empty" and the user would lose visibility
-  // into what they were working on.
+  // Migration / recovery: if a sprint was started before activeSlotIds
+  // was persisted (pre-ff090bd), or before multi-active shipped, the
+  // user would land here with activeSlotIds empty and no way to recover
+  // visibility into the in-flight items. We auto-fill ONCE on mount so
+  // those legacy states get a usable UI.
+  //
+  // Critically: we do NOT keep re-running on every activeSlotIds change.
+  // Empty activeSlotIds is now a valid intentional state — the user
+  // benched all 3 items and wants zero active. Continuously refilling
+  // here was the "minimum-one-task" bug from the user feedback.
+  const recoveredRef = useRef(false);
   useEffect(() => {
-    if (activeSlotIds.length > 0) return;
+    if (recoveredRef.current) return;
+    if (blocks.length === 0) return; // store not yet hydrated, wait
+    if (activeSlotIds.length > 0) {
+      recoveredRef.current = true;
+      return;
+    }
     const firstPending = blocks
       .filter((b) => b.status !== "done" && b.status !== "skipped")
       .slice(0, MAX_PARALLEL_SLOTS)
       .map((b) => b.s2dItemId);
+    recoveredRef.current = true;
     if (firstPending.length === 0) return;
-    // Inline-set via the store: each block needs activatedAtMs and
-    // accumulatedMs initialized, then activeSlotIds populated.
     const now = Date.now();
     useSprintStore.setState((s) => ({
       ...s,
@@ -361,24 +370,18 @@ export function SprintActiveModeMulti() {
   }
 
   /**
-   * Park an active item on the Bench. Two steps that must both succeed
-   * for the move to feel coherent: PATCH s2d_items to 'todo' so the
-   * persistent row reflects the move, then call moveSlotToQueue. If
-   * any pending Bench items are present, we additionally fill the
-   * freed slot with the head of the queue so we don't waste display
-   * real estate.
+   * Park an active item on the Bench. PATCHes s2d_items to 'todo' so
+   * the persistent row reflects the move, then calls moveSlotToQueue.
+   *
+   * Deliberately does NOT auto-fill the freed slot from the Bench
+   * head — the user explicitly chose to step back from this slot, and
+   * forcing a new item in defeats that intent. Zero active is a valid
+   * state; the user can pull from the Bench when they're ready.
    */
   async function sendToBench(s2dItemId: string) {
     try {
       await updateItem.mutateAsync({ id: s2dItemId, patch: { status: "todo" } });
-      // Compute the head-of-queue BEFORE we mutate so the slot index
-      // is stable when we go to fill.
-      const head = queuedBlocks[0]?.s2dItemId;
-      const slotIdx = activeSlotIds.indexOf(s2dItemId);
       moveSlotToQueue(s2dItemId);
-      if (head && slotIdx >= 0) {
-        fillEmptySlot(slotIdx, head);
-      }
     } catch (err) {
       setBanner({
         kind: "err",
@@ -959,7 +962,7 @@ function EmptySlot({
       </span>
       <span className="text-[11px] text-muted-foreground">
         {hasMoreInQueue
-          ? "Drop a Bench item here, or finish a slot to auto-fill."
+          ? "Drop a Bench item here, or pull one in to start."
           : "Empty — Bench is clear."}
       </span>
     </div>
