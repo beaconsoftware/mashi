@@ -91,6 +91,9 @@ export async function propagateClosures(
     for (const lid of linkedIds) {
       alreadyCascadedIds.add(lid);
       const target = candidates.find((o) => o.id === lid);
+      // .neq("status","done") avoids overwriting a manual close that may
+      // have landed since the candidate pool was loaded — would otherwise
+      // replace the user's outcome with the cascaded one.
       const { error } = await supabase
         .from("s2d_items")
         .update({
@@ -100,7 +103,8 @@ export async function propagateClosures(
           resolved_via: "auto_detected",
         })
         .eq("user_id", userId)
-        .eq("id", lid);
+        .eq("id", lid)
+        .neq("status", "done");
       if (!error) {
         cascaded++;
         details.push(`${target?.title ?? lid} ← linked to "${c.title.slice(0, 60)}"`);

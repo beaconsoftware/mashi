@@ -118,7 +118,8 @@ export async function reconcileLinearStatuses(userId: string): Promise<Reconcile
               resolved_via: "auto_detected",
             })
             .eq("user_id", userId)
-            .eq("id", g.id);
+            .eq("id", g.id)
+            .neq("status", "done");
           details.push(`${g.title} → ${state.name}`);
           closedIds.push(g.id);
           continue;
@@ -139,7 +140,8 @@ export async function reconcileLinearStatuses(userId: string): Promise<Reconcile
               resolved_via: "auto_detected",
             })
             .eq("user_id", userId)
-            .eq("id", g.id);
+            .eq("id", g.id)
+            .neq("status", "done");
           details.push(`${g.title} → stale ${Math.round(ageMs / 86_400_000)}d`);
           closedIds.push(g.id);
         }
@@ -287,7 +289,8 @@ export async function reconcileGmailReplies(userId: string): Promise<ReconcileRe
               resolved_via: "auto_detected",
             })
             .eq("user_id", userId)
-            .eq("id", it.id);
+            .eq("id", it.id)
+            .neq("status", "done");
           details.push(`${it.title} → you replied`);
           closedIds.push(it.id);
           continue;
@@ -310,7 +313,8 @@ export async function reconcileGmailReplies(userId: string): Promise<ReconcileRe
               resolved_via: "auto_detected",
             })
             .eq("user_id", userId)
-            .eq("id", it.id);
+            .eq("id", it.id)
+            .neq("status", "done");
           details.push(`${it.title} → quiet ${days}d (${it.pathway})`);
           closedIds.push(it.id);
         }
@@ -438,7 +442,8 @@ export async function reconcileSlackReplies(userId: string): Promise<ReconcileRe
               resolved_via: "auto_detected",
             })
             .eq("user_id", userId)
-            .eq("id", it.id);
+            .eq("id", it.id)
+            .neq("status", "done");
           details.push(`${it.title} → you replied`);
           closedIds.push(it.id);
           break;
@@ -457,7 +462,8 @@ export async function reconcileSlackReplies(userId: string): Promise<ReconcileRe
               resolved_via: "auto_detected",
             })
             .eq("user_id", userId)
-            .eq("id", it.id);
+            .eq("id", it.id)
+            .neq("status", "done");
           details.push(`${it.title} → quiet ${days}d (${it.pathway})`);
           closedIds.push(it.id);
           break;
@@ -654,7 +660,8 @@ export async function reconcileCalendarPastEvents(
         resolved_via: "auto_past_meeting",
       })
       .eq("user_id", userId)
-      .eq("id", it.id);
+      .eq("id", it.id)
+            .neq("status", "done");
     if (!error) closedIds.push(it.id);
   }
 
@@ -769,7 +776,8 @@ export async function reconcilePastPrepItems(
         resolved_via: "auto_past_meeting",
       })
       .eq("user_id", userId)
-      .eq("id", c.id);
+      .eq("id", c.id)
+            .neq("status", "done");
     if (!error) closedIds.push(c.id);
   }
 
@@ -821,7 +829,8 @@ export async function reconcileFirefliesByMeetingAge(
           resolved_via: "auto_detected",
         })
         .eq("user_id", userId)
-        .eq("id", it.id);
+        .eq("id", it.id)
+            .neq("status", "done");
       if (!error) closedIds.push(it.id);
     }
   }

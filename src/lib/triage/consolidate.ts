@@ -97,6 +97,8 @@ export async function consolidateDuplicates(userId: string): Promise<{
         ...additionalSources,
       ];
 
+      // Guard against a race: if the canonical row was closed by the user
+      // between the cluster-load and now, we must not flip it back.
       await supabase
         .from("s2d_items")
         .update({
@@ -106,9 +108,13 @@ export async function consolidateDuplicates(userId: string): Promise<{
           last_update_at: new Date().toISOString(),
         })
         .eq("user_id", userId)
-        .eq("id", canonical.id);
+        .eq("id", canonical.id)
+        .neq("status", "done");
 
       for (const d of dupes) {
+        // .neq("status","done") avoids overwriting a manual outcome on a
+        // row the user already closed (would otherwise replace it with
+        // "Merged into ...").
         await supabase
           .from("s2d_items")
           .update({
@@ -118,7 +124,8 @@ export async function consolidateDuplicates(userId: string): Promise<{
             resolved_via: "auto_detected",
           })
           .eq("user_id", userId)
-          .eq("id", d.id);
+          .eq("id", d.id)
+          .neq("status", "done");
         merged++;
       }
 

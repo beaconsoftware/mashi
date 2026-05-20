@@ -149,6 +149,36 @@ async function applyOperation(
       excludeSourceThreadId: unit.source_thread_id,
       userId,
     });
+    // If dedup matched a row already closed, skip the create entirely —
+    // the user already resolved this work. Without this, the agent's
+    // create slips through, lands a brand-new Review card with
+    // needs_review=true, and the user sees "this came back".
+    if (match && match.was_closed) {
+      await supabase.from("triage_runs").insert({
+        user_id: userId,
+        source_type: unit.source_type,
+        source_unit_id: unit.source_thread_id,
+        model: MODELS.secondary,
+        operations: [
+          {
+            op: "dedup_skip_recreate_of_closed",
+            into_s2d_item_id: match.id,
+            into_title: match.title,
+            incoming_title: op.title,
+            rationale: match.rationale,
+          },
+        ] as unknown as Record<string, unknown>[],
+        input_summary: {
+          dedup: true,
+          skipped_recreate_of_closed: true,
+          rationale: match.rationale,
+        },
+        created_count: 0,
+        updated_count: 0,
+        closed_count: 0,
+      });
+      return { created: 0, updated: 0, closed: 0 };
+    }
     if (match) {
       const newSource = {
         source_type: unit.source_type,
@@ -194,11 +224,15 @@ async function applyOperation(
 
       // user_id scope is defense-in-depth — match.id came from a
       // user-scoped lookup upstream, but never lean on a single check.
+      // The .neq("status","done") guards against a race: if the user
+      // marked the row done between findSameWorkOpenItem and now, we
+      // must not flip it back via has_unseen_updates / pathway / etc.
       await supabase
         .from("s2d_items")
         .update(updatePatch)
         .eq("id", match.id)
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .neq("status", "done");
 
       // Audit trail — every dedup decision is logged so it's never silent
       await supabase.from("triage_runs").insert({
@@ -269,6 +303,11 @@ async function applyOperation(
       op.patch.est_minutes !== undefined ||
       op.patch.queue_reason !== undefined;
 
+    // .neq("status","done") guards a race: existing_items for this unit are
+    // loaded BEFORE the 2–6s LLM call. If the user marks the item done in
+    // that window, the agent's update op would silently re-open it. The
+    // matched row is filtered out, the UPDATE no-ops, and the audit row
+    // reports updated=0 — which is correct.
     const { error } = await supabase
       .from("s2d_items")
       .update({
@@ -286,13 +325,16 @@ async function applyOperation(
         }),
       })
       .eq("id", op.s2d_item_id)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .neq("status", "done");
     if (error) throw error;
     return { created: 0, updated: 1, closed: 0 };
   }
 
   if (op.op === "close") {
     if (op.confidence === "auto") {
+      // .neq("status","done") prevents double-close, which would otherwise
+      // overwrite a manual outcome with the agent's auto_detected one.
       const { error } = await supabase
         .from("s2d_items")
         .update({
@@ -302,7 +344,8 @@ async function applyOperation(
           resolved_via: "auto_detected",
         })
         .eq("id", op.s2d_item_id)
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .neq("status", "done");
       if (error) throw error;
       return { created: 0, updated: 0, closed: 1 };
     } else {
@@ -332,29 +375,52 @@ function slug(s: string): string {
 }
 
 /**
- * Fetch all open S2D items associated with a given source unit. Used to give
- * the triage agent context about what already exists for this thread.
+ * Fetch S2D items associated with a given source unit so the triage agent
+ * has context about what already exists for this thread.
+ *
+ * Includes both OPEN items AND items closed within the last 30 days. The
+ * recently-closed ones carry was_closed=true plus done_at/outcome so the
+ * agent can see "this work was already done, don't recreate". Without
+ * this signal a Linear-sync running over an already-closed thread would
+ * see an empty existing-items list and emit a fresh `create` op,
+ * resurrecting the same work as a brand-new ticket in Review.
  */
 export async function loadExistingForUnit(
   sourceType: string,
   sourceThreadId: string
 ): Promise<TriageUnit["existing_items"]> {
   const supabase = createSupabaseServiceClient();
+  const thirtyDaysAgoIso = new Date(
+    Date.now() - 30 * 86_400_000
+  ).toISOString();
+  // Combined query: open items always, plus done items closed in the last
+  // 30 days. Postgrest `.or` lets us express the dual condition cleanly.
   const { data } = await supabase
     .from("s2d_items")
-    .select("id, title, status, pathway, priority, created_at, linked_sources")
+    .select(
+      "id, title, status, pathway, priority, created_at, done_at, outcome, linked_sources"
+    )
     .eq("source_type", sourceType)
     .eq("source_thread_id", sourceThreadId)
-    .neq("status", "done");
+    .or(`status.neq.done,and(status.eq.done,done_at.gte.${thirtyDaysAgoIso})`);
   return (data ?? []).map((it) => {
-    const { linked_sources, ...rest } = it as typeof it & {
+    const { linked_sources, done_at, outcome, status, ...rest } = it as typeof it & {
       linked_sources?: unknown[] | null;
+      done_at?: string | null;
+      outcome?: string | null;
     };
+    const wasClosed = status === "done";
     return {
       ...rest,
+      status,
       linked_sources_count: Array.isArray(linked_sources)
         ? linked_sources.length
         : 0,
+      ...(wasClosed && {
+        was_closed: true,
+        done_at: done_at ?? null,
+        outcome: outcome ?? null,
+      }),
     };
   });
 }
@@ -380,6 +446,13 @@ interface DedupMatch {
   existing_priority: string;
   existing_pathway: string;
   rationale: string;
+  /**
+   * True when the dedup-matched row is already done. Caller skips the
+   * create entirely so we don't re-instantiate work the user just
+   * closed. Defense in depth alongside loadExistingForUnit's was_closed
+   * signal — that one only catches matches on the SAME source_thread_id.
+   */
+  was_closed?: boolean;
 }
 
 async function findSameWorkOpenItem(args: {
@@ -393,17 +466,21 @@ async function findSameWorkOpenItem(args: {
 }): Promise<DedupMatch | null> {
   const supabase = createSupabaseServiceClient();
 
-  // Candidate pool: 100 most-recent open items belonging to THIS USER.
-  // Service-role bypasses RLS, so we must filter by user_id explicitly —
-  // otherwise the dedup gate could match (and worse, mutate via
-  // linked_sources or watch-resolved closure) another tenant's row.
+  // Candidate pool: 100 most-recent items belonging to THIS USER. Includes
+  // open items AND items closed in the last 30 days — so that if the new
+  // signal is the same work as something the user just closed, we can
+  // detect it and skip the create rather than resurrecting it.
+  // Service-role bypasses RLS, so we must filter by user_id explicitly.
+  const thirtyDaysAgoIso = new Date(
+    Date.now() - 30 * 86_400_000
+  ).toISOString();
   let query = supabase
     .from("s2d_items")
     .select(
-      "id, title, description, source_type, source_thread_id, source_label, linked_sources, priority, pathway"
+      "id, title, description, status, source_type, source_thread_id, source_label, linked_sources, priority, pathway, done_at"
     )
     .eq("user_id", args.userId)
-    .neq("status", "done")
+    .or(`status.neq.done,and(status.eq.done,done_at.gte.${thirtyDaysAgoIso})`)
     .order("created_at", { ascending: false })
     .limit(100);
   if (args.companyId) {
@@ -436,6 +513,9 @@ The board tracks ONE row per unit of work — never per source event. The same p
 - Two items in the same broad project but each requiring a distinct discrete action (e.g. "Decide pricing for Q3" vs "Communicate pricing to sales" — sequential, both real)
 - Generic versions vs specific ones (e.g. "Triage Linear backlog" vs "Update MAP-412 autoship parsers" — one is meta, the other concrete)
 
+# Already-closed items in the pool
+Some items in the candidate list may show "[CLOSED]" with a done_at date. They were closed by Sidd already. If the proposed new task is the SAME work as one of those, you should STILL match it — the caller uses the match to skip the create entirely (so we don't recreate work the user just closed). Be especially careful here: only match a closed item if you're confident it's the same work, not just topically related.
+
 # Calibration
 - "Balance between noise (over-creating dups) and consolidation (wrongly merging) is paramount."
 - When confident → return the match_id.
@@ -454,11 +534,15 @@ description: ${args.description.slice(0, 500)}
 incoming_pathway: ${args.pathway}
 incoming_priority: ${args.priority}
 
-EXISTING OPEN TASKS in this company (${pool.length}):
+EXISTING TASKS in this company (${pool.length}) — includes open items AND items closed in the last 30 days:
 ${pool
   .map((c, i) => {
     const linkedCount = Array.isArray(c.linked_sources) ? c.linked_sources.length : 0;
-    return `${i + 1}. id=${c.id}
+    const closedTag =
+      c.status === "done"
+        ? ` [CLOSED ${c.done_at ? c.done_at.slice(0, 10) : ""}]`
+        : "";
+    return `${i + 1}. id=${c.id}${closedTag}
    source: ${c.source_type} (${c.source_label ?? ""})${linkedCount > 0 ? ` [+${linkedCount} linked]` : ""}
    pathway: ${c.pathway} | priority: ${c.priority}
    title: ${c.title}
@@ -492,6 +576,7 @@ Is the proposed task the same underlying work as any of these? Strict JSON only.
       existing_priority: matched.priority,
       existing_pathway: matched.pathway,
       rationale: parsed.rationale ?? "",
+      was_closed: matched.status === "done",
     };
   } catch {
     return null;

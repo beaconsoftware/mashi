@@ -99,12 +99,16 @@ For each source unit (a Gmail thread, a Slack day-slice in a DM, etc.), return Z
 - If a meeting/event date is FUTURE or AMBIGUOUS (no clear date), creating is fine.
 - If a past event clearly produced lingering action items (decisions to make, follow-ups), create THOSE concrete tasks — not "attend the meeting" itself.
 
+# Already-closed items in the existing list
+Some entries in the existing-items list may be marked *** ALREADY CLOSED *** — those are S2D items previously closed by Sidd in the last 30 days. Treat them as STRONG evidence that the underlying work is already resolved. DO NOT emit a \`create\` op that would re-instantiate that work. If the incoming content is a new signal on that same closed thread, prefer \`{ operations: [] }\` (noop) unless there's a clear NEW deliverable the closure didn't cover.
+
 # Hard rules
 - Output ONLY a JSON object matching this exact schema:
   { "rationale": "1-sentence explanation", "operations": [...] }
 - No preamble. No markdown fences. No prose outside the JSON.
 - If nothing is actionable in this unit, return { "rationale": "...", "operations": [] }.
 - Never create duplicates of existing open items shown in the input. Update or close them instead.
+- Never re-create work that an "ALREADY CLOSED" entry covers. If unsure, noop.
 - Action items addressed to other people are still Sidd's — create them with the right pathway.
 - Be specific. Real names, real companies, real dates, real numbers.`;
 }
@@ -129,6 +133,22 @@ export function buildTriageUserPrompt(unit: TriageUnit): string {
               lsc >= 3
                 ? `   linked_sources_count=${lsc} ← RECURRING SIGNAL (hit ${lsc}× across sources)\n`
                 : `   linked_sources_count=${lsc}\n`;
+            if (it.was_closed) {
+              const closedAt = it.done_at ? it.done_at.slice(0, 10) : "recently";
+              const outcome = it.outcome
+                ? ` outcome="${it.outcome.slice(0, 140)}"`
+                : "";
+              const daysAgo = it.done_at
+                ? Math.max(
+                    0,
+                    Math.round(
+                      (Date.now() - new Date(it.done_at).getTime()) / 86_400_000
+                    )
+                  )
+                : null;
+              const ago = daysAgo != null ? `${daysAgo} day${daysAgo === 1 ? "" : "s"} ago` : closedAt;
+              return `${i + 1}. id=${it.id}\n   title="${it.title}"\n   *** ALREADY CLOSED ${ago} *** (done_at=${closedAt})${outcome}\n   ← DO NOT recreate this work. Emit noop or update only.\n   pathway=${it.pathway} priority=${it.priority}\n${recurrenceNote}   created=${it.created_at}`;
+            }
             return `${i + 1}. id=${it.id}\n   title="${it.title}"\n   status=${it.status} pathway=${it.pathway} priority=${it.priority}\n${recurrenceNote}   created=${it.created_at}`;
           })
           .join("\n");

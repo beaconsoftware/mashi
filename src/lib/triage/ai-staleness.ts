@@ -56,6 +56,8 @@ export async function aiStalenessReview(userId: string): Promise<{
       for (const sid of stale) {
         const target = batch.find((b) => b.id === sid.id);
         if (!target) continue;
+        // .neq("status","done") so we don't overwrite a user's manual
+        // outcome with our stale auto-close one if they beat us to it.
         const { error } = await supabase
           .from("s2d_items")
           .update({
@@ -65,7 +67,8 @@ export async function aiStalenessReview(userId: string): Promise<{
             resolved_via: "auto_detected",
           })
           .eq("user_id", userId)
-          .eq("id", sid.id);
+          .eq("id", sid.id)
+          .neq("status", "done");
         if (!error) {
           closedIds.push(sid.id);
           details.push(`${target.title.slice(0, 60)} → ${sid.reason}`);

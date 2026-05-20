@@ -95,6 +95,19 @@ export interface ExistingS2DContext {
    * the priority decision can lean on cross-source repetition.
    */
   linked_sources_count?: number;
+  /**
+   * True when this item is already closed (status='done') but recent
+   * enough that the agent should be made aware. Without this signal,
+   * a Linear-sync re-running over an already-closed thread sees an
+   * empty existing-items list and emits a `create` op — recreating
+   * the same work the user just closed. The agent is told NOT to
+   * recreate; emit noop or skip the unit.
+   */
+  was_closed?: boolean;
+  /** When the item was closed (ISO). Only set when was_closed=true. */
+  done_at?: string | null;
+  /** Why it was closed. Only set when was_closed=true. */
+  outcome?: string | null;
 }
 
 export interface TriageUnit {
