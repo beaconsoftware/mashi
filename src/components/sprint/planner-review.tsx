@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useS2DItems } from "@/hooks/use-s2d";
-import { useSprintStore } from "@/store/sprint-store";
+import { useSprintStore, MAX_PARALLEL_SLOTS } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Play, CalendarCheck, Loader2, AlertTriangle } from "lucide-react";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import { PlannerHeader } from "./planner-prioritize";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 
 interface CalAccount {
   id: string;
@@ -154,15 +155,24 @@ export function PlannerReview() {
             {blocks.map((b, i) => {
               const it = itemMap.get(b.s2dItemId);
               if (!it) return null;
-              const start = new Date(b.startAt);
-              const end = new Date(start.getTime() + b.durationMin * 60_000);
+              // Parallel mode: first MAX_PARALLEL_SLOTS items run
+              // concurrently when the sprint starts; rest auto-promote
+              // on Done/Skip. No sequential clock times.
+              const inSlot = i < MAX_PARALLEL_SLOTS;
               return (
                 <li
                   key={b.s2dItemId}
                   className="flex items-center gap-3 rounded-md border border-border/40 bg-card p-3"
                 >
-                  <span className="font-mono text-[10px] text-muted-foreground w-6">
-                    {String(i + 1).padStart(2, "0")}
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 font-mono text-[10px]",
+                      inSlot
+                        ? "bg-primary/15 font-bold text-primary"
+                        : "bg-secondary/60 text-muted-foreground"
+                    )}
+                  >
+                    {inSlot ? `slot ${i + 1}` : `queue ${i - MAX_PARALLEL_SLOTS + 1}`}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
@@ -177,8 +187,7 @@ export function PlannerReview() {
                     </div>
                   </div>
                   <div className="text-right font-mono text-[11px] text-muted-foreground">
-                    {fmtClock(start)} – {fmtClock(end)}
-                    <div className="text-[10px]">({b.durationMin}m)</div>
+                    {b.durationMin}m budget
                   </div>
                 </li>
               );
@@ -219,6 +228,3 @@ export function PlannerReview() {
   );
 }
 
-function fmtClock(d: Date): string {
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}

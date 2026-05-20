@@ -335,7 +335,7 @@ export function PlannerPrioritize() {
           onClick={() => setPhase("schedule")}
           className="gap-1.5"
         >
-          Schedule
+          Setup
           <ArrowRight className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -537,7 +537,7 @@ export function PlannerHeader({
   void _onCancel;
   const steps: Array<{ key: typeof phase; label: string }> = [
     { key: "prioritize", label: "Prioritize" },
-    { key: "schedule", label: "Schedule" },
+    { key: "schedule", label: "Setup" },
     { key: "review", label: "Review" },
   ];
   const activeIdx = steps.findIndex((s) => s.key === phase);
