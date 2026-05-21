@@ -46,7 +46,13 @@ export function SprintComplete() {
   );
 
   const done = blocks.filter((b) => b.status === "done").length;
-  const skipped = blocks.filter((b) => b.status !== "done").length;
+  // Distinguish explicitly-skipped from never-started so the recap doesn't
+  // claim Sidd skipped work he never had a chance to start (e.g. exited
+  // the sprint manually with items still pending).
+  const skipped = blocks.filter((b) => b.status === "skipped").length;
+  const untouched = blocks.filter(
+    (b) => b.status !== "done" && b.status !== "skipped"
+  ).length;
   const totalMin = blocks.reduce((s, b) => s + b.durationMin, 0);
   const elapsedMin = sprintStartedAt
     ? Math.round((Date.now() - new Date(sprintStartedAt).getTime()) / 60_000)
@@ -283,7 +289,9 @@ export function SprintComplete() {
         )}
         <h1 className="text-xl font-semibold">Sprint complete</h1>
         <p className="text-sm text-muted-foreground">
-          {done} done · {skipped} skipped · {elapsedMin}m elapsed ·{" "}
+          {done} done · {skipped} skipped
+          {untouched > 0 ? ` · ${untouched} untouched` : ""} · {elapsedMin}m
+          elapsed ·{" "}
           <span title="Sum of per-block focus time. Can exceed elapsed in parallel mode (multiple slots running at once).">
             {totalActualMin}m focus
           </span>

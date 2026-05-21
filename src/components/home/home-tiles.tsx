@@ -60,6 +60,26 @@ function TileHeader({
   );
 }
 
+/**
+ * Tiny inline error row used by tiles that previously fire-and-forgot
+ * mutations. Surfaces mutateAsync failures without taking over the tile.
+ */
+function TileError({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
+  return (
+    <div className="flex items-start gap-1.5 rounded border border-destructive/40 bg-destructive/10 p-1.5 text-[11px] text-destructive">
+      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+      <span className="flex-1">{msg}</span>
+      <button
+        onClick={onDismiss}
+        className="text-muted-foreground hover:text-foreground"
+        aria-label="Dismiss"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 function pickNow(items: S2DItem[]): S2DItem | null {
   const rank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
   const active = items.filter(
@@ -107,6 +127,7 @@ export function NowCard({
   const setSelected = useS2DStore((s) => s.setSelectedItem);
   const router = useRouter();
   const update = useUpdateS2DItem();
+  const [error, setError] = useState<string | null>(null);
 
   const now = useMemo(() => pickNow(items), [items]);
 
@@ -116,27 +137,37 @@ export function NowCard({
     setTimeout(() => setSelected(now.id), 50);
   }
 
-  function markDone() {
+  async function markDone() {
     if (!now) return;
-    update.mutate({
-      id: now.id,
-      patch: { status: "done", outcome: "Done from cockpit", resolved_via: "manual" },
-    });
+    setError(null);
+    try {
+      await update.mutateAsync({
+        id: now.id,
+        patch: { status: "done", outcome: "Done from cockpit", resolved_via: "manual" },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't mark done");
+    }
   }
 
-  function snoozeTomorrow() {
+  async function snoozeTomorrow() {
     if (!now) return;
+    setError(null);
     const d = new Date();
     d.setDate(d.getDate() + 1);
     d.setHours(9, 0, 0, 0);
-    update.mutate({
-      id: now.id,
-      patch: {
-        status: "in_queue",
-        snoozed_until: d.toISOString(),
-        queue_reason: "Snoozed until tomorrow",
-      },
-    });
+    try {
+      await update.mutateAsync({
+        id: now.id,
+        patch: {
+          status: "in_queue",
+          snoozed_until: d.toISOString(),
+          queue_reason: "Snoozed until tomorrow",
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't snooze");
+    }
   }
 
   return (
@@ -153,6 +184,7 @@ export function NowCard({
         }
       />
       <div className="flex flex-1 flex-col gap-3 p-4">
+        {error && <TileError msg={error} onDismiss={() => setError(null)} />}
         {loading ? (
           <Skeleton className="h-full w-full" />
         ) : !now ? (
@@ -454,6 +486,7 @@ export function UpdatesTile({ items }: { items: S2DItem[] }) {
   const setSelected = useS2DStore((s) => s.setSelectedItem);
   const router = useRouter();
   const update = useUpdateS2DItem();
+  const [error, setError] = useState<string | null>(null);
 
   const unseen = items
     .filter((i) => i.has_unseen_updates && i.status !== "done")
@@ -468,8 +501,13 @@ export function UpdatesTile({ items }: { items: S2DItem[] }) {
     setTimeout(() => setSelected(id), 50);
   }
 
-  function markRead(id: string) {
-    update.mutate({ id, patch: { has_unseen_updates: false } });
+  async function markRead(id: string) {
+    setError(null);
+    try {
+      await update.mutateAsync({ id, patch: { has_unseen_updates: false } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't mark read");
+    }
   }
 
   return (
@@ -485,6 +523,11 @@ export function UpdatesTile({ items }: { items: S2DItem[] }) {
           )
         }
       />
+      {error && (
+        <div className="px-3 pt-2">
+          <TileError msg={error} onDismiss={() => setError(null)} />
+        </div>
+      )}
       {unseen.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-center text-[12px] text-muted-foreground">
           All caught up.
@@ -701,6 +744,7 @@ export function WaitingTile({ items }: { items: S2DItem[] }) {
   const router = useRouter();
   const setSelected = useS2DStore((s) => s.setSelectedItem);
   const update = useUpdateS2DItem();
+  const [error, setError] = useState<string | null>(null);
 
   const waiting = items.filter((i) => i.status === "in_queue");
 
@@ -709,15 +753,20 @@ export function WaitingTile({ items }: { items: S2DItem[] }) {
     setTimeout(() => setSelected(id), 50);
   }
 
-  function closeIt(id: string) {
-    update.mutate({
-      id,
-      patch: {
-        status: "done",
-        outcome: "Closed from cockpit — happened",
-        resolved_via: "manual",
-      },
-    });
+  async function closeIt(id: string) {
+    setError(null);
+    try {
+      await update.mutateAsync({
+        id,
+        patch: {
+          status: "done",
+          outcome: "Closed from cockpit, happened",
+          resolved_via: "manual",
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't close");
+    }
   }
 
   return (
@@ -731,6 +780,11 @@ export function WaitingTile({ items }: { items: S2DItem[] }) {
           </span>
         }
       />
+      {error && (
+        <div className="px-3 pt-2">
+          <TileError msg={error} onDismiss={() => setError(null)} />
+        </div>
+      )}
       {waiting.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-center text-[12px] text-muted-foreground">
           Nothing in queue.

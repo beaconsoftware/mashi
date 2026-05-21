@@ -43,6 +43,10 @@ export function PlannerReview() {
   const [accounts, setAccounts] = useState<CalAccount[]>([]);
   const [locking, setLocking] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // True when we auto-picked the first calendar account because the user
+  // had multiple connected but hadn't chosen one yet. Surfaces a small
+  // "Change…" hint so the silent pick doesn't surprise anyone.
+  const [autoPicked, setAutoPicked] = useState(false);
 
   const itemMap = useMemo(
     () => new Map((items ?? []).map((i) => [i.id, i])),
@@ -58,7 +62,12 @@ export function PlannerReview() {
       .then(({ data }) => {
         const rows = (data ?? []) as Array<CalAccount & { provider: string }>;
         setAccounts(rows);
-        if (rows.length > 0 && !calAccountId) setCalAccountId(rows[0].id);
+        if (rows.length > 0 && !calAccountId) {
+          setCalAccountId(rows[0].id);
+          // Only flag as auto-picked when there's >1 choice; with a single
+          // account the pick is forced and surfacing a hint would be noise.
+          if (rows.length > 1) setAutoPicked(true);
+        }
       });
   }, [calAccountId, setCalAccountId]);
 
@@ -124,11 +133,14 @@ export function PlannerReview() {
               </span>
             </label>
             {createCal && accounts.length > 0 && (
-              <div className="mt-2 flex items-center gap-2 text-[12px]">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
                 <span className="text-muted-foreground">Push to</span>
                 <select
                   value={calAccountId ?? ""}
-                  onChange={(e) => setCalAccountId(e.target.value || null)}
+                  onChange={(e) => {
+                    setCalAccountId(e.target.value || null);
+                    setAutoPicked(false);
+                  }}
                   className="rounded border border-border/40 bg-secondary px-2 py-1 text-[12px]"
                 >
                   {accounts.map((a) => (
@@ -137,6 +149,11 @@ export function PlannerReview() {
                     </option>
                   ))}
                 </select>
+                {autoPicked && (
+                  <span className="text-[11px] text-amber-500/90">
+                    Auto-picked. Switch above if this is the wrong calendar.
+                  </span>
+                )}
               </div>
             )}
             {createCal && accounts.length === 0 && (

@@ -228,15 +228,28 @@ export function ConnectionsManager({
   }
 
   async function updateCompany(id: string, companyId: string | null) {
-    const res = await fetch(`/api/connections/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ company_id: companyId }),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/connections/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: companyId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        const msg =
+          (data && typeof data.error === "string" && data.error) ||
+          `Couldn't update company (${res.status})`;
+        setBanner({ kind: "err", msg });
+        return;
+      }
       setConnections((prev) =>
         prev.map((c) => (c.id === id ? { ...c, company_id: companyId } : c))
       );
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: err instanceof Error ? err.message : "Network error updating company",
+      });
     }
   }
 

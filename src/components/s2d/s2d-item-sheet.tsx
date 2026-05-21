@@ -482,10 +482,15 @@ function FollowUpAction({ item, setBanner }: { item: S2DItem; setBanner: (b: Ban
   const [when, setWhen] = useState("");
 
   async function setReminder(date: string, label: string) {
+    // Standardised on snoozed_until — the rest of the app (Snooze popover,
+    // cockpit Snooze, sprint Snooze, planner-prioritize swipe, review-deck
+    // swipe-down) all write this column. The legacy queue_until column is
+    // still read by the list_today MCP tool via .or() for existing rows,
+    // but new writes should not split the schema.
     try {
       await updateItem.mutateAsync({
         id: item.id,
-        patch: { status: "in_queue", queue_until: date, queue_reason: `Follow up ${label}` },
+        patch: { status: "in_queue", snoozed_until: date, queue_reason: `Follow up ${label}` },
       });
       setBanner({ kind: "ok", msg: `Reminder set: ${label}` });
     } catch (err) {
@@ -542,9 +547,19 @@ function HeadsDownAction({ item, setBanner }: { item: S2DItem; setBanner: (b: Ba
   const [buildingPrompt, setBuildingPrompt] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  function startNow() {
-    updateItem.mutate({ id: item.id, patch: { status: "in_progress" } });
-    setBanner({ kind: "ok", msg: "Started, moved to In Progress" });
+  async function startNow() {
+    try {
+      await updateItem.mutateAsync({
+        id: item.id,
+        patch: { status: "in_progress" },
+      });
+      setBanner({ kind: "ok", msg: "Started, moved to In Progress" });
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: err instanceof Error ? err.message : "Couldn't start",
+      });
+    }
   }
 
   // "Start in Claude" / "Start in Claude Code" flow:
@@ -648,15 +663,22 @@ function buildGcalCreateUrl(item: S2DItem): string {
 
 function MeetingBackedAction({ item, setBanner }: { item: S2DItem; setBanner: (b: Banner) => void }) {
   const updateItem = useUpdateS2DItem();
-  function markQueued() {
-    updateItem.mutate({
-      id: item.id,
-      patch: {
-        status: "in_queue",
-        queue_reason: item.queue_reason ?? "Will discuss in upcoming meeting",
-      },
-    });
-    setBanner({ kind: "ok", msg: "Marked as queued for meeting" });
+  async function markQueued() {
+    try {
+      await updateItem.mutateAsync({
+        id: item.id,
+        patch: {
+          status: "in_queue",
+          queue_reason: item.queue_reason ?? "Will discuss in upcoming meeting",
+        },
+      });
+      setBanner({ kind: "ok", msg: "Marked as queued for meeting" });
+    } catch (err) {
+      setBanner({
+        kind: "err",
+        msg: err instanceof Error ? err.message : "Couldn't queue",
+      });
+    }
   }
   return (
     <div className="space-y-2">
