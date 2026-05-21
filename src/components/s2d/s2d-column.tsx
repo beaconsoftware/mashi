@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Plus, X, Sparkles, Loader2 } from "lucide-react";
+import { Plus, X, Sparkles, Loader2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { S2DItem, S2DStatus, Pathway, Priority } from "@/types";
 import { STATUS_META, PATHWAY_META, PRIORITY_META } from "@/types";
@@ -44,6 +44,10 @@ export function S2DColumn({ status, items }: Props) {
   const [title, setTitle] = useState("");
   const [enriching, setEnriching] = useState(false);
   const [draft, setDraft] = useState<EnrichedDraft | null>(null);
+  // Inline error — failed creates used to vanish silently, leaving the
+  // user thinking the item landed. Surface the failure right under the
+  // input so they can retry without checking the network tab.
+  const [error, setError] = useState<string | null>(null);
   const createItem = useCreateS2DItem();
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -63,6 +67,7 @@ export function S2DColumn({ status, items }: Props) {
   async function commit() {
     const t = title.trim();
     if (!t) return;
+    setError(null);
     try {
       await createItem.mutateAsync({
         title: t,
@@ -72,8 +77,8 @@ export function S2DColumn({ status, items }: Props) {
         source_type: "manual",
       });
       reset();
-    } catch {
-      // ignore — TanStack will show error state on next render if needed
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't create item");
     }
   }
 
@@ -81,6 +86,7 @@ export function S2DColumn({ status, items }: Props) {
     const t = title.trim();
     if (t.length < 3) return;
     setEnriching(true);
+    setError(null);
     try {
       const res = await fetch("/api/s2d/enrich", {
         method: "POST",
@@ -90,9 +96,14 @@ export function S2DColumn({ status, items }: Props) {
       const data = await res.json();
       if (res.ok && data.draft) {
         setDraft(data.draft as EnrichedDraft);
+      } else {
+        setError(
+          (typeof data?.error === "string" && data.error) ||
+            `Enrich failed (${res.status})`
+        );
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Enrich request failed");
     } finally {
       setEnriching(false);
     }
@@ -100,6 +111,7 @@ export function S2DColumn({ status, items }: Props) {
 
   async function commitDraft() {
     if (!draft) return;
+    setError(null);
     try {
       await createItem.mutateAsync({
         title: draft.title,
@@ -111,8 +123,8 @@ export function S2DColumn({ status, items }: Props) {
         source_type: "manual",
       });
       reset();
-    } catch {
-      // ignore
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't create item");
     }
   }
 
@@ -121,6 +133,7 @@ export function S2DColumn({ status, items }: Props) {
     setDraft(null);
     setAdding(false);
     setEnriching(false);
+    setError(null);
   }
 
   return (
@@ -203,16 +216,44 @@ export function S2DColumn({ status, items }: Props) {
             <div className="text-[10px] text-muted-foreground">
               Enter to add as-is · ⌘/Ctrl+Enter to enrich with AI
             </div>
+            {error && (
+              <div className="flex items-start gap-1.5 rounded border border-destructive/40 bg-destructive/10 p-1.5 text-[11px] text-destructive">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                <span className="flex-1">{error}</span>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label="Dismiss error"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {adding && draft && (
-          <EnrichedDraftCard
-            draft={draft}
-            onChange={setDraft}
-            onCommit={commitDraft}
-            onCancel={reset}
-          />
+          <>
+            <EnrichedDraftCard
+              draft={draft}
+              onChange={setDraft}
+              onCommit={commitDraft}
+              onCancel={reset}
+            />
+            {error && (
+              <div className="flex items-start gap-1.5 rounded border border-destructive/40 bg-destructive/10 p-1.5 text-[11px] text-destructive">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                <span className="flex-1">{error}</span>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label="Dismiss error"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </>
         )}
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {items.length === 0 && !adding ? (

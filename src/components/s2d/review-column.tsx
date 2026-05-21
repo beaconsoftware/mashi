@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDroppable } from "@dnd-kit/core";
 import { Sparkles, Check, Trash2, Clock, Layers } from "lucide-react";
 import { useGSAP } from "@gsap/react";
@@ -37,6 +38,23 @@ export function ReviewColumn({ items }: Props) {
   });
   const listRef = useRef<HTMLDivElement | null>(null);
   const [deckOpen, setDeckOpen] = useState(false);
+
+  // Deep-link entry: ?review=1 on /s2d (used by the Cockpit "Start swipe
+  // deck" CTA) auto-opens the deck and strips the param so a reload doesn't
+  // re-trigger. Without this consumer, the cockpit button used to land the
+  // user on the board with the deck closed — a silent dead-end.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("review") !== "1") return;
+    if (items.length === 0) return;
+    setDeckOpen(true);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("review");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [searchParams, items.length, router, pathname]);
 
   useGSAP(
     () => {

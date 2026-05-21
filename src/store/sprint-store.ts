@@ -591,24 +591,53 @@ export const useSprintStore = create<SprintState>()(
     }),
     {
       name: "mashi.sprint",
-      // Persist enough to resume an active sprint after reload
       // Persist enough to resume an active sprint after reload. activeSlotIds
       // is required — without it, a reload mid-sprint loses the user's
       // parked-on-bench distinction and the recovery effect re-promotes
       // bench items into slots unintentionally.
-      partialize: (s) => ({
-        phase: s.phase,
-        selectedItemIds: s.selectedItemIds,
-        blocks: s.blocks,
-        createCalendarEvents: s.createCalendarEvents,
-        calendarAccountId: s.calendarAccountId,
-        blockStartedAtMs: s.blockStartedAtMs,
-        blockElapsedMsAccum: s.blockElapsedMsAccum,
-        activeIndex: s.activeIndex,
-        activeSlotIds: s.activeSlotIds,
-        paused: s.paused,
-        sprintStartedAt: s.sprintStartedAt,
-      }),
+      //
+      // Live-timer handling across reload: every persist write SETTLES each
+      // active block's running delta into its accumulatedMs and nulls its
+      // activatedAtMs. On rehydrate, we re-anchor activatedAtMs = Date.now()
+      // for active, non-paused slots so timers continue ticking. Net effect:
+      // time spent with the tab closed does NOT count as work, but committed
+      // in-tab time is fully preserved.
+      partialize: (s) => {
+        const writeAt = Date.now();
+        const blocksSettled = s.blocks.map((b) => {
+          if (s.paused) return b;
+          if (b.activatedAtMs == null) return b;
+          return {
+            ...b,
+            accumulatedMs: (b.accumulatedMs ?? 0) + (writeAt - b.activatedAtMs),
+            activatedAtMs: null,
+          };
+        });
+        return {
+          phase: s.phase,
+          selectedItemIds: s.selectedItemIds,
+          blocks: blocksSettled,
+          createCalendarEvents: s.createCalendarEvents,
+          calendarAccountId: s.calendarAccountId,
+          blockStartedAtMs: s.blockStartedAtMs,
+          blockElapsedMsAccum: s.blockElapsedMsAccum,
+          activeIndex: s.activeIndex,
+          activeSlotIds: s.activeSlotIds,
+          paused: s.paused,
+          sprintStartedAt: s.sprintStartedAt,
+        };
+      },
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        if (state.paused) return;
+        if (state.phase !== "active" && state.phase !== "minimized") return;
+        const now = Date.now();
+        state.blocks = state.blocks.map((b) =>
+          state.activeSlotIds.includes(b.s2dItemId)
+            ? { ...b, activatedAtMs: now }
+            : b
+        );
+      },
     }
   )
 );

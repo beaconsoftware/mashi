@@ -2,25 +2,30 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useS2DItems } from "@/hooks/use-s2d";
-import { useSprintStore, liveElapsedMs } from "@/store/sprint-store";
+import { useSprintStore, blockLiveElapsedMs } from "@/store/sprint-store";
 import { Maximize2, Check, Pause, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGSAP } from "@gsap/react";
 import { slideUp } from "@/lib/animation";
 
 /**
- * Sticky floating widget for minimized sprint state. Shows current task +
- * countdown. Click maximize to re-enter the full takeover.
+ * Sticky floating widget for minimized sprint state. Shows the first active
+ * slot's task + live countdown, with a slot-count chip when multiple slots
+ * are running concurrently. Click maximize to re-enter the full takeover.
+ *
+ * Why first active slot: in multi-active mode, the user has up to 3 things
+ * running at once. A single-line widget can't show all three; surfacing the
+ * top slot + "1/3 active" chip gives enough at-a-glance status to decide
+ * whether to maximize. The Done button completes the first slot specifically;
+ * the user can maximize for finer control.
  */
 export function SprintWidget() {
   const phase = useSprintStore((s) => s.phase);
   const blocks = useSprintStore((s) => s.blocks);
-  const activeIndex = useSprintStore((s) => s.activeIndex);
+  const activeSlotIds = useSprintStore((s) => s.activeSlotIds);
   const paused = useSprintStore((s) => s.paused);
-  const blockStartedAtMs = useSprintStore((s) => s.blockStartedAtMs);
-  const blockElapsedMsAccum = useSprintStore((s) => s.blockElapsedMsAccum);
   const unminimize = useSprintStore((s) => s.unminimize);
-  const advance = useSprintStore((s) => s.advance);
+  const completeBlock = useSprintStore((s) => s.completeBlock);
   const pause = useSprintStore((s) => s.pause);
   const resume = useSprintStore((s) => s.resume);
   const exitSprint = useSprintStore((s) => s.exitSprint);
@@ -49,17 +54,26 @@ export function SprintWidget() {
   );
 
   if (phase !== "minimized") return null;
-  if (activeIndex >= blocks.length) return null;
 
-  const current = blocks[activeIndex];
+  // Resolve the first active slot's block. If no slots are active (the user
+  // benched all 3 — a valid intentional state), the widget has nothing to
+  // show, so render nothing rather than fall back to legacy state.
+  const firstActiveId = activeSlotIds[0];
+  if (!firstActiveId) return null;
+  const current = blocks.find((b) => b.s2dItemId === firstActiveId);
+  if (!current) return null;
   const it = itemMap.get(current.s2dItemId);
   if (!it) return null;
 
   const totalMs = current.durationMin * 60_000;
-  const elapsedMs = liveElapsedMs({ blockStartedAtMs, blockElapsedMsAccum, paused });
+  const elapsedMs = blockLiveElapsedMs(current, paused);
   const remainingMs = Math.max(0, totalMs - elapsedMs);
   const overrunMs = elapsedMs > totalMs ? elapsedMs - totalMs : 0;
   const pct = Math.min(100, (elapsedMs / totalMs) * 100);
+  const pendingCount = blocks.filter(
+    (b) => b.status !== "done" && b.status !== "skipped"
+  ).length;
+  const activeCount = activeSlotIds.length;
 
   return (
     <div ref={widgetRef} className="fixed bottom-4 right-4 z-[90] w-80 overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
@@ -75,8 +89,13 @@ export function SprintWidget() {
       <div className="p-3">
         <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
           <span className="font-mono">MASH-{it.ticket_number}</span>
+          {activeCount > 1 && (
+            <span className="rounded bg-primary/15 px-1 py-0.5 font-mono text-primary">
+              {activeCount} active
+            </span>
+          )}
           <span className="ml-auto font-mono">
-            {activeIndex + 1}/{blocks.length}
+            {blocks.length - pendingCount}/{blocks.length}
           </span>
         </div>
         <div className="mt-1 line-clamp-2 text-[12px] text-foreground/90">{it.title}</div>
@@ -91,7 +110,7 @@ export function SprintWidget() {
           </div>
           <div className="flex items-center gap-0.5">
             <button
-              onClick={() => advance("done")}
+              onClick={() => completeBlock(current.s2dItemId, "done")}
               className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title="Done"
             >

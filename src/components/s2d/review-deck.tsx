@@ -76,15 +76,32 @@ export function ReviewDeck({ items, open, onClose }: Props) {
     return () => clearTimeout(id);
   }, [banner]);
 
-  // Snapshot the deck order when opened so swipes don't reshuffle mid-session
+  // Snapshot the deck order when opened so swipes don't reshuffle mid-session.
+  // Snapshotting happens synchronously during render the moment `open` flips
+  // true — NOT inside a useEffect — because a post-commit effect leaves the
+  // first paint with deckRef.current === [], which makes validIndices === []
+  // and renders the DoneScreen flash before any card appears. Tracking the
+  // previous open state via a ref lets us detect the transition in render
+  // without thrashing on every items prop change.
+  //
+  // `items` is intentionally NOT in the cursor-reset effect's deps. Without
+  // that, every optimistic cache mutation from useUpdateS2DItem (which flips
+  // needs_review=false on swipe) re-renders the parent, passes a new items
+  // array, and resets the cursor to 0 mid-deck — counter stuck at "1 / N"
+  // forever. The snapshot is pinned once on open; per-item live updates flow
+  // through liveItemsById below.
   const deckRef = useRef<S2DItem[]>([]);
+  const lastOpenRef = useRef(false);
+  if (open && !lastOpenRef.current) {
+    deckRef.current = items.slice();
+  }
+  lastOpenRef.current = open;
   useEffect(() => {
     if (open) {
-      deckRef.current = items.slice();
       setCursor(0);
       setOverrides({});
     }
-  }, [open, items]);
+  }, [open]);
 
   // Live lookup over the most recent items prop. The deck *order* is
   // pinned by the snapshot in deckRef, but per-item fields like
