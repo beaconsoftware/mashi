@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDroppable } from "@dnd-kit/core";
-import { Sparkles, Check, Trash2, Clock, Layers } from "lucide-react";
+import { Sparkles, Check, CheckCircle2, Trash2, Clock, Layers } from "lucide-react";
 import { useGSAP } from "@gsap/react";
 import { gsap, EASE, DUR, staggerEntry } from "@/lib/animation";
 import type { S2DItem, Pathway, Priority, S2DStatus } from "@/types";
@@ -165,6 +165,21 @@ function ReviewCard({ item }: { item: S2DItem }) {
     );
   }
 
+  function markDone() {
+    // "I already did this elsewhere, just clear it out." Closes the item
+    // with a different outcome from Drop so analytics distinguishes
+    // intentional handled-elsewhere from intentional discarded.
+    approveWithExit(
+      {
+        needs_review: false,
+        status: "done",
+        outcome: "Done from review (handled elsewhere)",
+        resolved_via: "manual",
+      },
+      "approve"
+    );
+  }
+
   const priorityMeta = PRIORITY_META[priority];
   const pathwayMeta = PATHWAY_META[pathway];
 
@@ -229,13 +244,14 @@ function ReviewCard({ item }: { item: S2DItem }) {
         </div>
         <div className="flex items-center gap-1">
           <span className="w-12 text-[10px] uppercase tracking-wider text-muted-foreground">
-            Pathway
+            Action
           </span>
           <select
             value={pathway}
             onChange={(e) => setPathway(e.target.value as Pathway)}
             onClick={(e) => e.stopPropagation()}
             className="flex-1 rounded border border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+            aria-label="Action type"
           >
             {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => (
               <option key={p} value={p}>
@@ -279,6 +295,19 @@ function ReviewCard({ item }: { item: S2DItem }) {
         >
           <Check className="h-3 w-3" />
           Approve
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation();
+            markDone();
+          }}
+          className="gap-1 h-7 text-[11px] border-emerald-500/60 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+          title="Already done — clear from review"
+        >
+          <CheckCircle2 className="h-3 w-3" />
+          Done
         </Button>
         <Button
           size="sm"

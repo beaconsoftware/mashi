@@ -360,7 +360,7 @@ export const ACTION_CATALOG: ActionMeta[] = [
   // watching
   { key: "watching_nudge", label: "Draft nudge", pathway: "watching", primary: true },
   // cross-pathway
-  { key: "retriage", label: "Re-triage", pathway: "any", primary: false, hint: "Suggest a fresh pathway + priority" },
+  { key: "retriage", label: "Re-triage", pathway: "any", primary: false, hint: "Suggest a fresh action type + priority" },
 ];
 
 export function actionsForPathway(pathway: S2DItem["pathway"]): ActionMeta[] {
