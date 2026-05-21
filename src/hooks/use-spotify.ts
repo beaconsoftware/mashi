@@ -25,6 +25,14 @@ export interface SpotifyState {
   playing?: boolean;
   progress_ms?: number | null;
   track?: SpotifyTrack | null;
+  /**
+   * When `active` is false, the server falls back to the last-played
+   * track so the UI has something to show. UI should display this with
+   * a "Resume" affordance, not as if it were playing.
+   */
+  last_played?: SpotifyTrack | null;
+  /** Context the last play was from (playlist/album/etc), for "resume". */
+  last_context?: { type: string; uri: string } | null;
   queue?: SpotifyTrack[];
   device?: { name: string; type: string; volume_percent: number } | null;
 }
@@ -49,6 +57,7 @@ export function useSpotifyState(opts: { enabled: boolean }) {
 type ControlBody =
   | { action: "play" }
   | { action: "pause" }
+  | { action: "resume"; context_uri?: string }
   | { action: "next" }
   | { action: "prev" }
   | { action: "volume"; volume_percent: number }

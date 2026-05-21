@@ -66,12 +66,64 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
     );
   }
 
-  // Connected but no active device.
+  // Connected but no active device. We have a last-played track to
+  // render as a "Resume" card. Resume = transfer playback to the first
+  // available device and replay the previous context (last playlist).
   if (data && data.connected && !data.active) {
+    const lastTrack = data.last_played ?? null;
+    const lastCtx = data.last_context ?? null;
     return (
-      <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border/40 bg-card/80 px-3 py-2 text-[12px] text-muted-foreground backdrop-blur-md">
-        <Music className="h-3.5 w-3.5" />
-        Open Spotify on any device and press play, controls will appear here.
+      <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border/40 bg-card/80 px-2 py-1.5 backdrop-blur-md">
+        <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded">
+          {lastTrack?.album_image_url ? (
+            <Image
+              src={lastTrack.album_image_url}
+              alt=""
+              fill
+              sizes="32px"
+              className="object-cover opacity-70"
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-secondary">
+              <Music className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12px] font-medium leading-tight text-muted-foreground">
+            {lastTrack ? `Last played, ${lastTrack.name}` : "Open Spotify to start"}
+          </div>
+          <div className="truncate text-[10px] leading-tight text-muted-foreground/80">
+            {lastTrack?.artist_name ?? "No active device"}
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="default"
+          onClick={async () => {
+            try {
+              await control.mutateAsync({
+                action: "resume",
+                context_uri: lastCtx?.uri,
+              });
+            } catch (err) {
+              const e = err as Error & { reason?: string | null; status?: number };
+              if (e.reason === "PREMIUM_REQUIRED") {
+                setPremiumWarn("Spotify Premium is required for transport controls.");
+              } else if (e.status === 404) {
+                setPremiumWarn("Open Spotify on a device first, then try again.");
+              }
+            }
+          }}
+          className="h-7 gap-1 px-2.5 text-[11px]"
+        >
+          <Play className="h-3 w-3 fill-current" />
+          Resume
+        </Button>
+        {premiumWarn && (
+          <span className="hidden text-[10px] text-amber-300 md:inline">{premiumWarn}</span>
+        )}
       </div>
     );
   }

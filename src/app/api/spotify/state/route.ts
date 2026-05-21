@@ -44,14 +44,32 @@ export async function GET() {
   }
 
   // 204 means "no active device" — common when Spotify hasn't been
-  // touched recently. Surface as connected:true, active:false so the
-  // UI can render the "open Spotify to start" hint.
+  // touched recently. Instead of showing an empty player, fall back to
+  // the most-recently-played track so the user sees something to resume.
+  // The Play button on the client then calls /api/spotify/control with
+  // action="resume" to activate a device and restart the prior context.
   if (stateRes.status === 204) {
+    const recentRes = await spotifyFetch(user.id, "/me/player/recently-played?limit=1");
+    let fallbackTrack: ReturnType<typeof simplifyTrack> | null = null;
+    let fallbackContext: { type: string; uri: string } | null = null;
+    if (recentRes.ok) {
+      const recent = (await recentRes.json()) as {
+        items?: Array<{
+          track: SpotifyTrack;
+          context: { type: string; uri: string } | null;
+        }>;
+      };
+      const first = recent.items?.[0];
+      if (first?.track) fallbackTrack = simplifyTrack(first.track);
+      if (first?.context) fallbackContext = first.context;
+    }
     return NextResponse.json({
       connected: true,
       active: false,
       playing: false,
-      track: null,
+      track: fallbackTrack,
+      last_played: fallbackTrack,
+      last_context: fallbackContext,
       queue: [],
       device: null,
       product: null,
