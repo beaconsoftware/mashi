@@ -48,8 +48,19 @@ export function useSpotifyState(opts: { enabled: boolean }) {
       if (!res.ok) throw new Error(`state ${res.status}`);
       return (await res.json()) as SpotifyState;
     },
-    refetchInterval: 8_000,
+    // Adaptive polling: only re-poll while music is actively playing or
+    // a sprint is using the data. Otherwise (idle, no device, paused)
+    // we drop to a much slower cadence so the global mount doesn't burn
+    // an API call every 8s on every page just to refresh "no active device".
+    refetchInterval: (q) => {
+      const d = q.state.data;
+      if (!d?.connected) return false; // never poll when not connected
+      if (d.playing) return 8_000;     // actively playing, tight cadence
+      if (d.active) return 20_000;     // device awake but paused
+      return 60_000;                    // idle, last-played card, slow keepalive
+    },
     refetchOnWindowFocus: false,
+    refetchIntervalInBackground: false, // pause polling when tab is hidden
     staleTime: 4_000,
   });
 }
@@ -138,6 +149,10 @@ export function useSpotifySettings() {
       if (!res.ok) throw new Error(`settings ${res.status}`);
       return (await res.json()) as { logging_enabled: boolean };
     },
+    // The opt-out toggle is changed rarely from one place (the
+    // connections row); no reason to refetch on every focus / mount.
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
   const mutation = useMutation({
     mutationFn: async (logging_enabled: boolean) => {
