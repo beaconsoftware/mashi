@@ -18,9 +18,17 @@ import { useMagneticHover, useSelectBurst } from "@/lib/animation/interactions";
 interface Props {
   item: S2DItem;
   isOverlay?: boolean;
+  /**
+   * Card density. "compact" (default) shows ticket / source / pathway /
+   * title / company / est — no description. "expanded" additionally
+   * surfaces a 2-line clamped description so the user can size up the
+   * work without opening the sheet. Board-level toggle controls this
+   * across every card on the board.
+   */
+  density?: "compact" | "expanded";
 }
 
-export function S2DItemCard({ item, isOverlay }: Props) {
+export function S2DItemCard({ item, isOverlay, density = "compact" }: Props) {
   const setSelected = useS2DStore((s) => s.setSelectedItem);
   const selectedId = useS2DStore((s) => s.selectedItemId);
   const isSelected = selectedId === item.id;
@@ -148,6 +156,17 @@ export function S2DItemCard({ item, isOverlay }: Props) {
       >
         {item.title}
       </div>
+
+      {density === "expanded" && item.description && (
+        <div
+          className={cn(
+            "mt-1.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground",
+            done && "line-through"
+          )}
+        >
+          {item.description}
+        </div>
+      )}
 
       <div className="mt-2 flex items-center gap-2">
         <CompanyBadge company={item.company} />

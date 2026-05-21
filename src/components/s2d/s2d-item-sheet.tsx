@@ -707,18 +707,9 @@ function MeetingBackedAction({ item, setBanner }: { item: S2DItem; setBanner: (b
 function MiniActions({ item, setBanner }: { item: S2DItem; setBanner: (b: Banner) => void }) {
   const updateItem = useUpdateS2DItem();
 
-  async function addToSprint() {
-    const today = new Date().toISOString().slice(0, 10);
-    try {
-      await updateItem.mutateAsync({
-        id: item.id,
-        patch: { sprint_date: today, sprint_type: "morning", status: "todo" },
-      });
-      setBanner({ kind: "ok", msg: "Added to today's sprint" });
-    } catch (err) {
-      setBanner({ kind: "err", msg: err instanceof Error ? err.message : "Couldn't save" });
-    }
-  }
+  // Note: per-item "Add to sprint" removed (2026-05) to consolidate sprint
+  // entry to the /s2d board top-right button + the sidebar nav. Adding to
+  // a sprint is now a board-level multi-select flow, not a per-card action.
 
   async function drop() {
     if (!confirm("Drop this item? It'll be marked done with outcome 'Dropped'.")) return;
@@ -751,10 +742,6 @@ function MiniActions({ item, setBanner }: { item: S2DItem; setBanner: (b: Banner
       <Button variant="outline" size="sm" onClick={markDone} className="gap-1.5">
         <Check className="h-3.5 w-3.5" />
         Mark done
-      </Button>
-      <Button variant="outline" size="sm" onClick={addToSprint} className="gap-1.5">
-        <Zap className="h-3.5 w-3.5" />
-        Add to sprint
       </Button>
       <SnoozePopover item={item} setBanner={setBanner} />
       <Button variant="ghost" size="sm" onClick={drop} className="gap-1.5 text-destructive">

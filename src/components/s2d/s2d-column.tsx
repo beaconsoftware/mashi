@@ -34,9 +34,11 @@ interface EnrichedDraft {
 interface Props {
   status: S2DStatus;
   items: S2DItem[];
+  /** Threaded through to every S2DItemCard rendered in this column. */
+  density?: "compact" | "expanded";
 }
 
-export function S2DColumn({ status, items }: Props) {
+export function S2DColumn({ status, items, density = "compact" }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: status, data: { type: "column", status } });
   const meta = STATUS_META[status];
   const ids = items.map((i) => i.id);
@@ -261,7 +263,9 @@ export function S2DColumn({ status, items }: Props) {
               {status === "done" ? "Nothing done yet today." : "Drop items here"}
             </div>
           ) : (
-            items.map((item) => <S2DItemCard key={item.id} item={item} />)
+            items.map((item) => (
+              <S2DItemCard key={item.id} item={item} density={density} />
+            ))
           )}
         </SortableContext>
       </div>

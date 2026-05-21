@@ -8,7 +8,6 @@ import type { S2DItem } from "@/types";
 import {
   NowCard,
   AiCommandTile,
-  SprintLauncherTile,
   ReviewQueueTile,
   UpdatesTile,
   CalendarStripTile,
@@ -52,15 +51,15 @@ export function HomeCockpit() {
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 auto-rows-[220px] lg:grid-cols-12 lg:auto-rows-auto lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-        {/* Row 1 — orchestration surface */}
-        <Tile className="lg:col-span-5">
+        {/* Row 1 — orchestration surface. Sprint launcher tile removed
+            (deliberately consolidated to two entry points: top-right of
+            the S2D board, and the sidebar nav). NowCard and AiCommandTile
+            expand to fill the row. */}
+        <Tile className="lg:col-span-7">
           <NowCard items={items} loading={isLoading} />
         </Tile>
-        <Tile className="lg:col-span-4">
+        <Tile className="lg:col-span-5">
           <AiCommandTile />
-        </Tile>
-        <Tile className="lg:col-span-3">
-          <SprintLauncherTile items={items} />
         </Tile>
 
         {/* Row 2 — what needs you */}

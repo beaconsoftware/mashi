@@ -12,7 +12,6 @@ import {
   Clock,
   Inbox,
   Loader2,
-  Play,
   RefreshCw,
   Send,
   Sparkles,
@@ -29,7 +28,6 @@ import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import type { Company, S2DItem } from "@/types";
 import { PRIORITY_META } from "@/types";
-import { useSprintStore } from "@/store/sprint-store";
 import { useAppStore } from "@/store/app-store";
 import { useS2DStore } from "@/store/s2d-store";
 import { useUpdateS2DItem } from "@/hooks/use-s2d";
@@ -374,73 +372,11 @@ export function AiCommandTile() {
 // 3. Sprint Launcher — pick mode, auto-select items, drop into planner
 // ============================================================================
 
-const SPRINT_MODES: Array<{
-  key: "morning" | "midday" | "eod" | "power_hour";
-  label: string;
-  hint: string;
-}> = [
-  { key: "morning", label: "Morning", hint: "Big rocks first" },
-  { key: "midday", label: "Midday", hint: "Replies + admin" },
-  { key: "eod", label: "EOD", hint: "Close loops" },
-  { key: "power_hour", label: "Power hour", hint: "60m sprint" },
-];
-
-export function SprintLauncherTile({ items }: { items: S2DItem[] }) {
-  const router = useRouter();
-  const enterPlanner = useSprintStore((s) => s.enterPlanner);
-  const phase = useSprintStore((s) => s.phase);
-
-  const eligible = items.filter(
-    (i) => i.status !== "done" && i.status !== "in_queue"
-  );
-  const urgent = eligible.filter((i) => i.priority === "urgent" || i.priority === "high");
-
-  function launch() {
-    enterPlanner();
-    router.push("/sprint");
-  }
-
-  const inSprint = phase === "active" || phase === "minimized";
-
-  return (
-    <>
-      <TileHeader
-        icon={<Zap className="h-3 w-3 text-primary" />}
-        title="Sprint"
-        right={
-          inSprint && (
-            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary">
-              live
-            </span>
-          )
-        }
-      />
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="grid grid-cols-2 gap-1.5">
-          {SPRINT_MODES.map((m) => (
-            <button
-              key={m.key}
-              onClick={launch}
-              className="group rounded-md border border-border/40 bg-card px-2 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-accent/30"
-            >
-              <div className="text-[12px] font-medium">{m.label}</div>
-              <div className="text-[10px] text-muted-foreground">{m.hint}</div>
-            </button>
-          ))}
-        </div>
-        <div className="mt-auto flex items-center justify-between border-t border-border/30 pt-2">
-          <div className="text-[10px] text-muted-foreground">
-            {urgent.length} urgent · {eligible.length} eligible
-          </div>
-          <Button size="sm" onClick={launch} className="h-7 gap-1.5">
-            <Play className="h-3 w-3 fill-current" />
-            {inSprint ? "Resume" : "Plan"}
-          </Button>
-        </div>
-      </div>
-    </>
-  );
-}
+// SprintLauncherTile intentionally removed (2026-05). Sprint planning has
+// been consolidated to two entry points: the "Plan sprint" button at the
+// top-right of the /s2d board and the sidebar nav link. Multiple entry
+// points fragmented the mental model and made it unclear where the
+// canonical "start a sprint" action lived.
 
 // ============================================================================
 // 4. Review Queue — needs_review items pending swipe approval
