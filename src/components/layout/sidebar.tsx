@@ -38,7 +38,7 @@ export function Sidebar() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <aside className="flex h-screen w-14 flex-col items-center border-r border-border/40 bg-background py-3">
+      <aside className="flex h-full w-14 shrink-0 flex-col items-center border-r border-border/40 bg-background py-3">
         {/* Logo */}
         <Link
           href="/"

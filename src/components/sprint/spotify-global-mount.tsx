@@ -26,11 +26,11 @@ export function SpotifyGlobalMount() {
 }
 
 /**
- * Compact player meant to sit inline at the top of <main> on every
- * page. NOT fixed-positioned: the player flows in the layout so page
- * TopBars and column headers don't end up underneath it. Centered with
- * max-w-3xl so on wide screens it doesn't stretch absurdly across the
- * width of the dashboard.
+ * Compact player meant to sit inline at the top of the dashboard, as
+ * part of the global header band in AppShell. NOT fixed-positioned: the
+ * player flows in the layout so page TopBars and column headers always
+ * sit directly below it, never underneath. Centered with max-w-3xl so on
+ * wide screens it doesn't stretch absurdly across the width of the dashboard.
  *
  * Trade-off: in sprint focus mode (z-[100] overlay), this inline
  * player is covered by the overlay. If sprint needs music controls,
@@ -38,7 +38,7 @@ export function SpotifyGlobalMount() {
  */
 export function SpotifyGlobalPlayer() {
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 pt-1.5">
+    <div className="mx-auto w-full max-w-3xl px-3 py-1.5">
       <SpotifyPlayer enabled />
     </div>
   );
