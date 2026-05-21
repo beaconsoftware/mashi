@@ -7,22 +7,28 @@ import { useSpotifyState } from "@/hooks/use-spotify";
 /**
  * Ambient album-art background.
  *
- * Renders the current Spotify track's album art as a heavily-blurred,
- * gently-rotating ground beneath the sprint UI. On track change, two
+ * Renders the current Spotify track's album art as a softly-blurred,
+ * gently-rotating ground beneath the app UI. On track change, two
  * layers crossfade so there's no flash. When music is paused, the
  * rotation slows to a near-stop instead of continuing to spin.
  *
+ * Layered top-down:
+ *   1. ArtLayer (current)     - blurred album art, transform-animated
+ *   2. ArtLayer (previous)    - same, for crossfade
+ *   3. Grain overlay          - animated noise, gives a subtle "film" feel
+ *   4. Color darkener         - bg/55 so foreground text stays legible
+ *   5. Vignette gradient      - softens the edges into the page bg
+ *
  * Implementation choices:
- * - Two stacked img layers (current + previous) so swap is a CSS opacity
- *   crossfade rather than reload-flash.
- * - SVG filter with feTurbulence + feDisplacementMap provides the
- *   noisy "liquid" feel without per-frame canvas redraws.
+ * - Two stacked layers so swap is a CSS opacity crossfade, not reload-flash.
  * - GSAP animates only transform properties (rotate, scale), never
  *   boxShadow, per the AGENTS.md GSAP gotcha.
+ * - The grain overlay animates by shifting the SVG noise base frequency
+ *   over time. Cheap on the GPU since it's a stable filter.
  * - Respects prefers-reduced-motion via withMotion wrapper.
  *
- * The component is absolutely positioned and inert (pointer-events:none),
- * so it never intercepts clicks on sprint cards above.
+ * `fixed inset-0 pointer-events-none` so it can mount once at the
+ * AppShell layer and sit behind every page without intercepting clicks.
  */
 export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
   const { data } = useSpotifyState({ enabled });
@@ -96,7 +102,7 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
     <div
       ref={rootRef}
       aria-hidden
-      className="pointer-events-none absolute inset-0 -z-0 overflow-hidden"
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
       style={{ filter: "url(#mashi-spotify-distort)" }}
     >
       <svg
@@ -115,18 +121,56 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
             />
             <feDisplacementMap in="SourceGraphic" in2="noise" scale="36" />
           </filter>
+          {/* Grain overlay filter — sharp noise so it reads as film grain.
+              The animation shifts baseFrequency over time which produces
+              a subtle, slow shimmer without per-frame canvas work. */}
+          <filter id="mashi-spotify-grain" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.9"
+              numOctaves="2"
+              stitchTiles="stitch"
+              seed="7"
+            >
+              <animate
+                attributeName="baseFrequency"
+                dur="22s"
+                values="0.85;0.95;0.85"
+                repeatCount="indefinite"
+              />
+            </feTurbulence>
+            <feColorMatrix
+              type="matrix"
+              values="0 0 0 0 1
+                      0 0 0 0 1
+                      0 0 0 0 1
+                      0 0 0 0.32 0"
+            />
+          </filter>
         </defs>
       </svg>
 
       <ArtLayer ref={aRef} url={layers.a} initialOpacity={layers.show === "a" ? 1 : 0} />
       <ArtLayer ref={bRef} url={layers.b} initialOpacity={layers.show === "b" ? 1 : 0} />
 
-      <div className="absolute inset-0 bg-background/70 backdrop-blur-3xl" />
+      {/* Animated grain overlay — sits above art, below the color darkener
+          so it reads as texture on the art rather than texture on text. */}
+      <div
+        className="absolute inset-0 opacity-40 mix-blend-overlay"
+        style={{ filter: "url(#mashi-spotify-grain)" }}
+      />
+
+      {/* Color darkener — keeps foreground text legible. Slightly lighter
+          than before (was bg/70) since art blur is reduced and we want
+          more art presence to come through. */}
+      <div className="absolute inset-0 bg-background/55 backdrop-blur-xl" />
+
+      {/* Vignette */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at center, transparent 0%, hsl(var(--background) / 0.45) 70%, hsl(var(--background) / 0.85) 100%)",
+            "radial-gradient(ellipse at center, transparent 0%, hsl(var(--background) / 0.35) 70%, hsl(var(--background) / 0.7) 100%)",
         }}
       />
     </div>
@@ -147,9 +191,10 @@ const ArtLayer = forwardRef<
       style={{
         opacity: initialOpacity,
         backgroundImage: `url(${url})`,
-        // Strong blur + saturation turns a tiny 300px image into a
-        // full-screen color field without revealing pixelation.
-        filter: "blur(60px) saturate(1.35) brightness(0.85)",
+        // Reduced blur from 60px to 36px so more of the art's color +
+        // form reads through. Saturation kept high so it feels lush.
+        // Scale 1.15 prevents the blurred edges from showing.
+        filter: "blur(36px) saturate(1.4) brightness(0.9)",
         transform: "scale(1.15)",
       }}
     />

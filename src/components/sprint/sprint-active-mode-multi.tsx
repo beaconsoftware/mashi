@@ -67,8 +67,9 @@ import { SprintContextPackage } from "@/components/sprint/sprint-context-package
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
 import { SprintToolkit } from "@/components/sprint/sprint-toolkit";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
-import { SpotifyAmbientBg } from "@/components/sprint/spotify-ambient-bg";
-import { SpotifyPlayer } from "@/components/sprint/spotify-player";
+// Spotify ambient bg + player are mounted globally in AppShell. The
+// only Spotify component sprint owns is the play logger, which tags
+// tracks to the currently-active slot.
 import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
 import { useDeckCardHover } from "@/lib/animation/interactions";
 import { PATHWAY_META } from "@/types";
@@ -557,9 +558,7 @@ export function SprintActiveModeMulti() {
     : 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background text-foreground">
-      {/* Album-art ambient ground. Sits behind every sprint card. Inert. */}
-      <SpotifyAmbientBg enabled />
+    <div className="fixed inset-0 z-[100] flex flex-col bg-background/80 text-foreground backdrop-blur-md">
       {/* Headless poller writes track-task plays during sprints. */}
       <SpotifyPlayLogger enabled />
       {/* Header */}
@@ -696,13 +695,6 @@ export function SprintActiveModeMulti() {
           ) : null}
         </DragOverlay>
       </DndContext>
-
-      {/* Spotify player. Sits below the bench / done strips, above the
-          inline detail panel's z-index since the panel handles its own
-          backdrop. Pointer-events:auto on the inner so clicks land. */}
-      <div className="pointer-events-none relative z-10 px-4 pb-3 pt-2">
-        <SpotifyPlayer enabled />
-      </div>
 
       {/* Inline detail panel — slides in from the right inside the sprint
           overlay so the user can still see the other slots & queue. */}

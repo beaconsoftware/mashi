@@ -10,13 +10,20 @@ import { ConnectionHealthAlert } from "@/components/layout/connection-health-ale
 // exported and can be re-mounted later if we want it back.
 import { SyncStatusBar } from "@/components/layout/sync-status-bar";
 import { SprintGlobalMount } from "@/components/sprint/sprint-global-mount";
+import {
+  SpotifyGlobalMount,
+  SpotifyGlobalPlayer,
+} from "@/components/sprint/spotify-global-mount";
 import { SpotlightProvider } from "@/components/spotlight/spotlight-context";
 import { SpotlightModal } from "@/components/spotlight/spotlight-modal";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SpotlightProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+      {/* Ambient album-art background. Sits behind the shell at z-0 so
+          every page surface that has any translucency picks up its hue. */}
+      <SpotifyGlobalMount />
+      <div className="relative z-10 flex h-screen w-full overflow-hidden text-foreground">
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col">
           <ConnectionHealthAlert />
@@ -27,6 +34,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SprintGlobalMount />
         <SpotlightModal />
       </div>
+      {/* Fixed top-center, z-[200] so it stays accessible even through
+          the sprint overlay. */}
+      <SpotifyGlobalPlayer />
     </SpotlightProvider>
   );
 }
