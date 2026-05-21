@@ -30,7 +30,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           main sidebar+content row. This guarantees the top band can
           never compete with <main>'s vertical flex math, and that the
           per-page TopBar always sits directly under the global band. */}
-      <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
+      {/* relative + z-10 puts the shell into the positioned stacking
+          order ABOVE the ambient bg layer (which is position:fixed z-0).
+          Without this, fixed > static in CSS painting order meant the
+          ambient art bled through every translucent surface (TopBar's
+          transparent bg, SprintBar's bg/20, etc.), making the top
+          stripe of the page look invisible against the art. */}
+      <div className="relative z-10 flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
         <header className="relative z-30 flex shrink-0 flex-col">
           <SpotifyGlobalPlayer />
           <ConnectionHealthAlert />
