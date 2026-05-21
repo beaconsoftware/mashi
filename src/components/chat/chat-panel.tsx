@@ -212,7 +212,7 @@ export function ChatPanel() {
   }
 
   return (
-    <div className="relative flex h-screen">
+    <div className="relative flex h-full shrink-0">
       <div
         ref={glowRef}
         aria-hidden
@@ -225,7 +225,7 @@ export function ChatPanel() {
       />
       <aside
         ref={panelRef}
-        className="relative flex h-screen w-[340px] flex-col border-l border-border/40 bg-background shadow-[0_0_40px_-10px_hsl(var(--primary)/0.25)]"
+        className="relative flex h-full w-[340px] flex-col border-l border-border/40 bg-background shadow-[0_0_40px_-10px_hsl(var(--primary)/0.25)]"
       >
       <header className="flex h-12 items-center justify-between border-b border-border/40 px-3">
         <div className="flex items-center gap-2 text-xs font-medium">

@@ -25,19 +25,17 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     () => {
       if (!wrapRef.current) return;
       withMotion(() => {
+        // Opacity-only fade. We deliberately removed the y/scale transforms
+        // here: they were applied to a flex container that holds the page's
+        // TopBar + scrollable content, and the transient transform could
+        // leave the top of the page visually offset if the tween was ever
+        // interrupted before clearProps ran. Opacity fade is safe regardless.
         gsap.fromTo(
           wrapRef.current,
-          {
-            opacity: 0,
-            y: 14,
-            scale: 0.985,
-          },
+          { opacity: 0 },
           {
             opacity: 1,
-            y: 0,
-            scale: 1,
             duration: DUR.base,
-            // back.out gives that slight overshoot-and-settle bounce
             ease: EASE.back,
             clearProps: "all",
           }

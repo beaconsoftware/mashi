@@ -26,17 +26,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           the AppShell had no backdrop and pages that assumed an opaque
           parent surface rendered as blank. */}
       <SpotifyGlobalMount />
-      <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-        <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col">
-          {/* Inline at the top of <main>, above ConnectionHealthAlert.
-              Flows in the layout so page TopBars don't end up under it. */}
+      {/* Outer column: top band (Spotify + alerts + sync) above the
+          main sidebar+content row. This guarantees the top band can
+          never compete with <main>'s vertical flex math, and that the
+          per-page TopBar always sits directly under the global band. */}
+      <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
+        <header className="relative z-30 flex shrink-0 flex-col">
           <SpotifyGlobalPlayer />
           <ConnectionHealthAlert />
           <SyncStatusBar />
-          {children}
-        </main>
-        <ChatPanel />
+        </header>
+        <div className="flex min-h-0 flex-1">
+          <Sidebar />
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {children}
+          </main>
+          <ChatPanel />
+        </div>
         <SprintGlobalMount />
         <SpotlightModal />
       </div>
