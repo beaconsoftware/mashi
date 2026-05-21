@@ -10,6 +10,7 @@ import {
 import {
   Sparkles,
   Check,
+  CheckCircle2,
   Trash2,
   ArrowDown,
   ArrowUp,
@@ -57,7 +58,20 @@ interface Props {
   onClose: () => void;
 }
 
-type SwipeAction = "approve" | "drop" | "backlog" | "snooze";
+/**
+ * Five outcomes per card:
+ *   approve  → approved + lands in agent-recommended status (default)
+ *   drop     → closed with outcome "Dropped before review"
+ *   backlog  → approved but forced to backlog
+ *   snooze   → approved but in_queue + snoozed_until = +24h
+ *   done     → approved AND immediately marked done (handled elsewhere
+ *              and just needs to clear out of the review pile)
+ *
+ * `done` is the "I already did this / don't need to act, just clear it"
+ * shortcut so a glance at the review pile doesn't force routing items
+ * through the active board first.
+ */
+type SwipeAction = "approve" | "drop" | "backlog" | "snooze" | "done";
 
 export function ReviewDeck({ items, open, onClose }: Props) {
   const updateItem = useUpdateS2DItem();
@@ -222,6 +236,11 @@ export function ReviewDeck({ items, open, onClose }: Props) {
           patch.needs_review = false;
           patch.status = "done";
           patch.outcome = "Dropped before review";
+          patch.resolved_via = "manual";
+        } else if (action === "done") {
+          patch.needs_review = false;
+          patch.status = "done";
+          patch.outcome = "Done from review (handled elsewhere)";
           patch.resolved_via = "manual";
         }
 
@@ -678,7 +697,7 @@ function CardFace({
               Priority: {priorityMeta.label}
             </span>
             <span className="rounded bg-secondary px-2 py-0.5 font-medium text-foreground/85">
-              Pathway: {pathwayMeta.label}
+              Action type: {pathwayMeta.label}
             </span>
             <span className="rounded bg-secondary px-2 py-0.5 font-medium text-foreground/85">
               → {status}
@@ -885,6 +904,15 @@ function ActionBar({
         <ArrowDown className="h-5 w-5" />
       </Button>
       <Button
+        variant="outline"
+        size="lg"
+        onClick={() => onSwipe("done")}
+        className="h-12 w-12 rounded-full p-0 border-emerald-500/60 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+        title="Already done — clear from review"
+      >
+        <CheckCircle2 className="h-5 w-5" />
+      </Button>
+      <Button
         size="lg"
         onClick={() => onSwipe("approve")}
         className="h-12 w-12 rounded-full p-0 bg-emerald-500 text-white hover:bg-emerald-600"
@@ -942,6 +970,11 @@ function vectorFor(action: SwipeAction): { x: number; y: number } {
       return { x: 0, y: -1 };
     case "snooze":
       return { x: 0, y: 1 };
+    case "done":
+      // Fly down-right — a blend of approve (right) and snooze-direction
+      // (down). No keyboard/swipe binding for this, so the vector only
+      // matters for the button-press fly-off animation.
+      return { x: 1, y: 1 };
   }
 }
 

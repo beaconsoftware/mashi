@@ -160,7 +160,7 @@ async function createGoogleEvent(opts: {
 
   const descLines = [
     `Task: ${opts.title}`,
-    `Pathway: ${opts.pathway}  ·  Priority: ${opts.priority}`,
+    `Action type: ${opts.pathway}  ·  Priority: ${opts.priority}`,
     `Mashi: ${opts.mashiUrl}`,
   ];
   if (opts.description) {

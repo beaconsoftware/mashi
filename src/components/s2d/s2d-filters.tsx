@@ -173,8 +173,8 @@ export function S2DFilters({
 
       <Divider />
 
-      {/* Pathways */}
-      <ChipGroup label="Pathway">
+      {/* Action types (internally still called pathway in the schema) */}
+      <ChipGroup label="Action type">
         {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => {
           const meta = PATHWAY_META[p];
           const on = state.pathways.has(p);

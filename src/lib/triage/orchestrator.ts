@@ -3,6 +3,18 @@ import { trackedCreate } from "@/lib/anthropic/tracked";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { buildTriageSystemPrompt, buildTriageUserPrompt } from "./prompts";
 import type { TriageOp, TriageResult, TriageUnit } from "./types";
+import type { SourceType } from "@/types";
+
+/**
+ * Source types that represent a meeting on their own — calendar invites,
+ * Fireflies transcripts, Granola notes. A `meeting_backed` create coming
+ * from one of these with no other corroborating signal (gmail thread,
+ * Slack message, Linear issue) is almost always noise: the meeting itself
+ * is the work surface, and a prep task is rarely actionable in isolation.
+ * We reject those creates at the orchestrator and clean up existing ones
+ * in the reconcile pass.
+ */
+const MEETING_ONLY_SOURCES: SourceType[] = ["calendar", "fireflies", "granola"];
 
 /**
  * Run the Sonnet triage agent on a single source unit and apply the
@@ -122,11 +134,43 @@ async function applyOperation(
 
   if (op.op === "create") {
     if (!op.title || typeof op.title !== "string") {
-      console.warn("[triage] create op missing title — skipped");
+      console.warn("[triage] create op missing title, skipped");
       return { created: 0, updated: 0, closed: 0 };
     }
     if (!op.pathway) {
-      console.warn(`[triage] create op missing pathway for "${op.title}" — skipped`);
+      console.warn(`[triage] create op missing pathway for "${op.title}", skipped`);
+      return { created: 0, updated: 0, closed: 0 };
+    }
+
+    // Meeting-only noise filter: a `meeting_backed` task spawned from a
+    // calendar invite / Fireflies transcript / Granola note with no
+    // other-source corroboration is almost always noise. The meeting
+    // itself is the work surface; a "prep for X" item rarely converts
+    // into action. Block at the orchestrator so these don't even hit
+    // the review queue. Log the skip so the suppression is visible.
+    if (
+      op.pathway === "meeting_backed" &&
+      MEETING_ONLY_SOURCES.includes(unit.source_type)
+    ) {
+      await supabase.from("triage_runs").insert({
+        user_id: userId,
+        source_type: unit.source_type,
+        source_unit_id: unit.source_thread_id,
+        model: MODELS.secondary,
+        operations: [
+          {
+            op: "skip_meeting_only_prep_create",
+            incoming_title: op.title,
+            incoming_pathway: op.pathway,
+            incoming_priority: op.priority,
+            rationale: `meeting_backed from ${unit.source_type} with no cross-source signal`,
+          },
+        ] as unknown as Record<string, unknown>[],
+        input_summary: { skipped_meeting_only_prep: true },
+        created_count: 0,
+        updated_count: 0,
+        closed_count: 0,
+      });
       return { created: 0, updated: 0, closed: 0 };
     }
 

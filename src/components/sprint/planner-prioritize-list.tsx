@@ -85,7 +85,7 @@ export function PlannerPrioritizeList({ eligibleItems }: Props) {
           onChange={(e) => setPathwayFilter(e.target.value)}
           className="h-7 rounded border border-border/40 bg-secondary px-2 text-[11px]"
         >
-          <option value="">All pathways</option>
+          <option value="">All action types</option>
           {Object.entries(PATHWAY_META).map(([k, v]) => (
             <option key={k} value={k}>
               {v.label}

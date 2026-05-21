@@ -525,6 +525,7 @@ export async function reconcileAllStatuses(userId: string): Promise<{
   fireflies: number;
   calendarPast: number;
   prepPast: number;
+  meetingOnly: number;
   stale: number;
   cascaded: number;
 }> {
@@ -560,6 +561,18 @@ export async function reconcileAllStatuses(userId: string): Promise<{
     console.warn("[reconcile] prep-items past-meeting sweep failed:", err);
   }
 
+  // Close meeting_backed items that exist purely from meeting-only signals
+  // (calendar / fireflies / granola) with no corroborating gmail / slack /
+  // linear source. These are the "Prep for X meeting" items that pile up
+  // without the user ever acting on them — the meeting itself is the work
+  // surface.
+  let meetingOnly = { closed: 0, closedIds: [] as string[] };
+  try {
+    meetingOnly = await reconcileMeetingOnlyPrepItems(userId);
+  } catch (err) {
+    console.warn("[reconcile] meeting-only prep sweep failed:", err);
+  }
+
   let staleResult: { closed: number; closedIds: string[]; details: string[] } = {
     closed: 0,
     closedIds: [],
@@ -578,6 +591,7 @@ export async function reconcileAllStatuses(userId: string): Promise<{
     ...fireflies.closedIds,
     ...calendarPast.closedIds,
     ...prepPast.closedIds,
+    ...meetingOnly.closedIds,
     ...staleResult.closedIds,
   ];
   let cascaded = 0;
@@ -598,12 +612,14 @@ export async function reconcileAllStatuses(userId: string): Promise<{
       fireflies.closed +
       calendarPast.closed +
       prepPast.closed +
+      meetingOnly.closed +
       staleResult.closed +
       cascaded,
     byProvider: [linear, gmail, slack],
     fireflies: fireflies.closed,
     calendarPast: calendarPast.closed,
     prepPast: prepPast.closed,
+    meetingOnly: meetingOnly.closed,
     stale: staleResult.closed,
     cascaded,
   };
@@ -808,6 +824,74 @@ export async function reconcilePastPrepItems(
             .neq("status", "done")
             .lt("updated_at", recentTouchCutoff());
     if (!error) closedIds.push(c.id);
+  }
+
+  return { closed: closedIds.length, closedIds };
+}
+
+/**
+ * Close `meeting_backed` items whose every signal is meeting-only (calendar
+ * invite / Fireflies transcript / Granola note) with no corroborating
+ * Gmail / Slack / Linear linkage. These are the "Prep for X" items that
+ * piled up on the board pre-orchestrator-filter: the meeting itself is
+ * the work surface, and no follow-through ever happens, so the prep task
+ * just lingers. The orchestrator now blocks new ones at create-time; this
+ * pass closes the historical ones.
+ *
+ * Source classification:
+ *   - own source_type: the row's own provenance
+ *   - linked_sources[].source_type: every other source that's been merged
+ *     onto this item via dedup
+ * If the union of these is a subset of {calendar, fireflies, granola}, the
+ * item has no cross-source signal and is closed.
+ */
+export async function reconcileMeetingOnlyPrepItems(
+  userId: string
+): Promise<{ closed: number; closedIds: string[] }> {
+  const supabase = createSupabaseServiceClient();
+  const closedIds: string[] = [];
+  const MEETING_ONLY = new Set(["calendar", "fireflies", "granola"]);
+
+  const { data: items } = await supabase
+    .from("s2d_items")
+    .select("id, title, source_type, linked_sources")
+    .eq("user_id", userId)
+    .eq("pathway", "meeting_backed")
+    .neq("status", "done");
+  if (!items || items.length === 0) return { closed: 0, closedIds: [] };
+
+  for (const it of items) {
+    const sources = new Set<string>();
+    if (it.source_type) sources.add(it.source_type);
+    const linked = Array.isArray(it.linked_sources) ? it.linked_sources : [];
+    for (const ls of linked) {
+      const t =
+        ls && typeof ls === "object" && "source_type" in ls
+          ? (ls as { source_type?: unknown }).source_type
+          : null;
+      if (typeof t === "string") sources.add(t);
+    }
+    // Empty sources set means we genuinely have no signal — also noise,
+    // close it.
+    const onlyMeetingSources =
+      sources.size === 0 ||
+      [...sources].every((s) => MEETING_ONLY.has(s));
+    if (!onlyMeetingSources) continue;
+
+    const { error } = await supabase
+      .from("s2d_items")
+      .update({
+        status: "done",
+        done_at: new Date().toISOString(),
+        outcome:
+          "Auto-closed: meeting-prep task with no cross-source signal (gmail/slack/linear). The meeting itself is the work surface; reopen if prep is actually needed.",
+        resolved_via: "auto_detected",
+      })
+      .eq("user_id", userId)
+      .eq("id", it.id)
+      .neq("status", "done")
+      .lt("updated_at", recentTouchCutoff());
+    if (!error) closedIds.push(it.id);
   }
 
   return { closed: closedIds.length, closedIds };
