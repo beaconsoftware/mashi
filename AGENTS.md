@@ -163,8 +163,39 @@ To allow a new email domain: `INSERT INTO public.signup_allowlist (domain, note)
 | Linear | Per-user **Personal API Key**, no OAuth | Linear OAuth tokens are limited. UI in `connections-manager.tsx` surfaces the workspace admin override path |
 | Fireflies | API key only | Paste-and-go |
 | Outlook / Microsoft Calendar | OAuth (Azure AD) | Wired but rarely used. Add prod redirect URI if a user needs it |
+| Spotify | Direct OAuth | Powers the sprint-mode media player + ambient album-art background + per-task song logging. Refresh tokens never expire (no reauth maintenance). Redirect URI for local dev **must** be `http://127.0.0.1:3456/...` — Spotify rejects `localhost` as not-secure. Premium-only for transport controls (skip/pause/volume); read endpoints still work for free accounts. |
 
 All OAuth tokens are encrypted at rest using `ENCRYPTION_KEY` (32-byte hex). See `src/lib/oauth/flow.ts`.
+
+### Adding a new OAuth provider
+
+Three places to touch, in this order — skipping any of them produces silent-ish failures:
+
+1. **`src/lib/oauth/providers/<name>.ts`** — implements `OAuthProvider` (buildAuthorizeUrl, exchangeCode, refresh, fetchAccountInfo).
+2. **`src/lib/oauth/registry.ts`** + **`src/lib/oauth/types.ts`** — add to `ProviderKey` union, register in `PROVIDERS`, append to `listVisibleProviders()`.
+3. **NEW MIGRATION** — `connected_accounts.provider` has a `CHECK` constraint enumerating allowed values (originally set in `002_connected_accounts.sql`). Adding a new key without extending the constraint causes OAuth callback INSERTs to be rejected with a Postgres `PostgrestError`. Because `PostgrestError` is NOT `instanceof Error`, the catch in `src/app/api/connect/[provider]/callback/route.ts` falls back to the generic "OAuth callback failed" — there's no clue in the UI what went wrong. See `021_provider_spotify.sql` for the canonical "extend the CHECK" pattern.
+4. **`src/components/settings/connections-manager.tsx`** — add the provider meta to `PROVIDER_META` so it shows up in Settings.
+5. **`.env.example`** — `<UPPER_NAME>_CLIENT_ID` and `<UPPER_NAME>_CLIENT_SECRET`, plus a comment with the dashboard URL + required redirect URI.
+
+### OAuth callback error opacity
+
+`completeOAuthFlow` rethrows Supabase errors via `throw error;`. Supabase errors (`PostgrestError`) are plain objects, not Error instances, so `err instanceof Error ? err.message : "..."` in the callback route shows the fallback string. If you see "OAuth callback failed" with no detail in the UI, the underlying failure is almost always a DB constraint violation — check the runtime logs (`vercel logs <url> --json`) and look for the actual Postgres response. Don't replace the fallback with `String(err)` blindly; that leaks raw DB errors into the URL. Better fix is to handle the Supabase error explicitly in `flow.ts` before rethrowing.
+
+### Env var fallbacks: use `||`, not `??`
+
+Vercel can persist an env var as an empty string (the CLI's `vercel env add` with piped stdin produces this; the dashboard occasionally does too). `process.env.X ?? "default"` only catches null/undefined — an empty string passes through and breaks URL construction (e.g. `flow.ts`'s `APP_URL`, producing relative redirect_uris that OAuth providers silently reject). Use `||` for env var fallbacks where empty-string is functionally equivalent to "unset".
+
+### Vercel env vars: prefer the dashboard for first-time setup
+
+`vercel env add` piping a value via `printf` / `echo` is unreliable — values can land as empty strings while the CLI cheerfully reports "Added Environment Variable". For new provider credentials, set via the dashboard at https://vercel.com/beacon-sw/mashi/settings/environment-variables and verify via the API:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://api.vercel.com/v9/projects/$PROJECT_ID/env?teamId=$TEAM_ID" \
+  | jq '.envs[] | select(.key=="YOUR_VAR") | {key, target, type, value_len: (.value | length)}'
+```
+
+Project has "Sensitive Environment Variables" on, so secret-type vars are write-only and can't be decrypted back via API — verify by triggering a build and seeing the feature work, not by reading the value.
 
 ## Where docs live
 
