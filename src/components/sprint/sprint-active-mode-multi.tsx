@@ -558,7 +558,7 @@ export function SprintActiveModeMulti() {
     : 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background/80 text-foreground backdrop-blur-md">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-background text-foreground">
       {/* Headless poller writes track-task plays during sprints. */}
       <SpotifyPlayLogger enabled />
       {/* Header */}

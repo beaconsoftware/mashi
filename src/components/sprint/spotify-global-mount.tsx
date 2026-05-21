@@ -34,8 +34,8 @@ export function SpotifyGlobalMount() {
  */
 export function SpotifyGlobalPlayer() {
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-2 z-[200] mx-auto flex w-full max-w-3xl justify-center px-3">
-      <div className="w-full">
+    <div className="pointer-events-none fixed inset-x-0 top-2 z-[200] flex justify-center px-3">
+      <div className="pointer-events-auto w-full max-w-3xl">
         <SpotifyPlayer enabled />
       </div>
     </div>

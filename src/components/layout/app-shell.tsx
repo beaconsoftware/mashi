@@ -20,10 +20,13 @@ import { SpotlightModal } from "@/components/spotlight/spotlight-modal";
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SpotlightProvider>
-      {/* Ambient album-art background. Sits behind the shell at z-0 so
-          every page surface that has any translucency picks up its hue. */}
+      {/* Ambient album-art background. Sits behind everything at z-0.
+          AppShell keeps bg-background so the layer is hidden by default
+          until we explicitly opt pages into translucency — without this
+          the AppShell had no backdrop and pages that assumed an opaque
+          parent surface rendered as blank. */}
       <SpotifyGlobalMount />
-      <div className="relative z-10 flex h-screen w-full overflow-hidden text-foreground">
+      <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col">
           <ConnectionHealthAlert />
