@@ -26,18 +26,20 @@ export function SpotifyGlobalMount() {
 }
 
 /**
- * Compact player, fixed at top-center of the viewport. z-[200] sits
- * above the sprint takeover (z-100) so transport controls remain
- * reachable while in sprint focus. The outer wrapper is pointer-events
- * none so the empty width on either side doesn't intercept clicks on
- * page content underneath, only the player bar itself receives events.
+ * Compact player meant to sit inline at the top of <main> on every
+ * page. NOT fixed-positioned: the player flows in the layout so page
+ * TopBars and column headers don't end up underneath it. Centered with
+ * max-w-3xl so on wide screens it doesn't stretch absurdly across the
+ * width of the dashboard.
+ *
+ * Trade-off: in sprint focus mode (z-[100] overlay), this inline
+ * player is covered by the overlay. If sprint needs music controls,
+ * the sprint UI should mount its own player surface again.
  */
 export function SpotifyGlobalPlayer() {
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-2 z-[200] flex justify-center px-3">
-      <div className="pointer-events-auto w-full max-w-3xl">
-        <SpotifyPlayer enabled />
-      </div>
+    <div className="mx-auto w-full max-w-3xl px-3 pt-1.5">
+      <SpotifyPlayer enabled />
     </div>
   );
 }

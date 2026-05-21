@@ -28,10 +28,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SpotifyGlobalMount />
       <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
         <Sidebar />
-        {/* pt-12 reserves a band at the top for the fixed SpotifyGlobalPlayer
-            so per-page TopBars / filter rows aren't covered by the
-            floating player at z-[200]. */}
-        <main className="flex min-w-0 flex-1 flex-col pt-12">
+        <main className="flex min-w-0 flex-1 flex-col">
+          {/* Inline at the top of <main>, above ConnectionHealthAlert.
+              Flows in the layout so page TopBars don't end up under it. */}
+          <SpotifyGlobalPlayer />
           <ConnectionHealthAlert />
           <SyncStatusBar />
           {children}
@@ -40,9 +40,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SprintGlobalMount />
         <SpotlightModal />
       </div>
-      {/* Fixed top-center, z-[200] so it stays accessible even through
-          the sprint overlay. */}
-      <SpotifyGlobalPlayer />
     </SpotlightProvider>
   );
 }
