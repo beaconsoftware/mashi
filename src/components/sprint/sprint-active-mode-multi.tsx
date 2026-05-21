@@ -67,6 +67,9 @@ import { SprintContextPackage } from "@/components/sprint/sprint-context-package
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
 import { SprintToolkit } from "@/components/sprint/sprint-toolkit";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
+import { SpotifyAmbientBg } from "@/components/sprint/spotify-ambient-bg";
+import { SpotifyPlayer } from "@/components/sprint/spotify-player";
+import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
 import { useDeckCardHover } from "@/lib/animation/interactions";
 import { PATHWAY_META } from "@/types";
 import { cn } from "@/lib/utils";
@@ -555,8 +558,12 @@ export function SprintActiveModeMulti() {
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-background text-foreground">
+      {/* Album-art ambient ground. Sits behind every sprint card. Inert. */}
+      <SpotifyAmbientBg enabled />
+      {/* Headless poller writes track-task plays during sprints. */}
+      <SpotifyPlayLogger enabled />
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 border-b border-border/30 px-6 py-3">
+      <div className="relative z-10 flex items-center justify-between gap-3 border-b border-border/30 bg-background/40 px-6 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Sprint · multi-active</span>
@@ -618,7 +625,7 @@ export function SprintActiveModeMulti() {
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         {/* Active slots — 3 columns side by side on wide, stacked on narrow */}
-        <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-3">
+        <div className="relative z-10 grid flex-1 min-h-0 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-3">
           {Array.from({ length: MAX_PARALLEL_SLOTS }).map((_, slotIdx) => {
             const block = activeBlocks[slotIdx];
             if (!block) {
@@ -689,6 +696,13 @@ export function SprintActiveModeMulti() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Spotify player. Sits below the bench / done strips, above the
+          inline detail panel's z-index since the panel handles its own
+          backdrop. Pointer-events:auto on the inner so clicks land. */}
+      <div className="pointer-events-none relative z-10 px-4 pb-3 pt-2">
+        <SpotifyPlayer enabled />
+      </div>
 
       {/* Inline detail panel — slides in from the right inside the sprint
           overlay so the user can still see the other slots & queue. */}
