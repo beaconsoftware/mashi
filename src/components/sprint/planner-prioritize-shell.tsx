@@ -16,23 +16,26 @@
  */
 
 import { useEffect, useState } from "react";
-import { LayoutGrid, List } from "lucide-react";
+import { LayoutGrid, List, Columns3 } from "lucide-react";
 import { useS2DItems } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
 import { PlannerPrioritizeSwipe } from "./planner-prioritize-swipe";
 import { PlannerPrioritizeList } from "./planner-prioritize-list";
+import { PlannerPrioritizeBoard } from "./planner-prioritize-board";
 import type { S2DItem } from "@/types";
 import { cn } from "@/lib/utils";
 
-type ViewMode = "card" | "list";
+type ViewMode = "card" | "list" | "board";
 
 const VIEW_KEY = "mashi:sprint-planner-view";
 
 function readSavedView(): ViewMode {
   if (typeof window === "undefined") return "card";
   const v = window.localStorage.getItem(VIEW_KEY);
-  return v === "list" ? "list" : "card";
+  if (v === "list") return "list";
+  if (v === "board") return "board";
+  return "card";
 }
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -154,8 +157,10 @@ export function PlannerPrioritizeShell() {
 
       {view === "card" ? (
         <PlannerPrioritizeSwipe eligibleItems={eligible} />
-      ) : (
+      ) : view === "list" ? (
         <PlannerPrioritizeList eligibleItems={eligible} />
+      ) : (
+        <PlannerPrioritizeBoard eligibleItems={eligible} />
       )}
     </div>
   );
@@ -197,6 +202,20 @@ function ViewToggle({
       >
         <List className="h-3 w-3" />
         List
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("board")}
+        className={cn(
+          "flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors",
+          view === "board"
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+        aria-pressed={view === "board"}
+      >
+        <Columns3 className="h-3 w-3" />
+        Board
       </button>
     </div>
   );

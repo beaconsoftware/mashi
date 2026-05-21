@@ -20,7 +20,9 @@ import {
   ExternalLink,
   Link as LinkIcon,
   AlertTriangle,
+  Zap,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import type { S2DItem, Pathway, Priority, S2DStatus } from "@/types";
 import { PATHWAY_META, PRIORITY_META } from "@/types";
@@ -94,9 +96,14 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // Snapshotting happens synchronously during render the moment `open` flips
   // true — NOT inside a useEffect — because a post-commit effect leaves the
   // first paint with deckRef.current === [], which makes validIndices === []
-  // and renders the DoneScreen flash before any card appears. Tracking the
-  // previous open state via a ref lets us detect the transition in render
-  // without thrashing on every items prop change.
+  // and renders the DoneScreen flash before any card appears.
+  //
+  // The "open transition" is gated on items.length > 0. If the deck opens
+  // while TanStack is still fetching, we DEFER the snapshot to whichever
+  // render has items — otherwise we'd snapshot an empty array and lock the
+  // deck on "Deck cleared" until close/reopen. lastOpenRef tracks whether
+  // the snapshot has actually landed; we only flip it true once we've
+  // captured a non-empty snapshot.
   //
   // `items` is intentionally NOT in the cursor-reset effect's deps. Without
   // that, every optimistic cache mutation from useUpdateS2DItem (which flips
@@ -106,10 +113,12 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // through liveItemsById below.
   const deckRef = useRef<S2DItem[]>([]);
   const lastOpenRef = useRef(false);
-  if (open && !lastOpenRef.current) {
+  if (open && !lastOpenRef.current && items.length > 0) {
     deckRef.current = items.slice();
+    lastOpenRef.current = true;
+  } else if (!open && lastOpenRef.current) {
+    lastOpenRef.current = false;
   }
-  lastOpenRef.current = open;
   useEffect(() => {
     if (open) {
       setCursor(0);
@@ -940,6 +949,7 @@ function Shortcut({ k, label }: { k: string; label: string }) {
 
 function DoneScreen({ onClose, count }: { onClose: () => void; count: number }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
   useGSAP(
     () => {
       if (ref.current) heroEntry(ref.current);
@@ -951,11 +961,32 @@ function DoneScreen({ onClose, count }: { onClose: () => void; count: number }) 
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/15">
         <Sparkles className="h-6 w-6 text-primary" />
       </div>
-      <h2 className="text-xl font-semibold">Deck cleared</h2>
+      <h2 className="text-xl font-semibold">Review queue cleared</h2>
       <p className="text-sm text-muted-foreground">
-        Reviewed {count} {count === 1 ? "item" : "items"}.
+        {count > 0
+          ? `Reviewed ${count} ${count === 1 ? "item" : "items"}.`
+          : "No items needed review."}
       </p>
-      <Button onClick={onClose}>Back to board</Button>
+      <p className="text-[12px] text-muted-foreground/80">
+        Want to keep swiping through backlog items?
+        <br />
+        The sprint planner&apos;s Card view does exactly that.
+      </p>
+      <div className="flex items-center justify-center gap-2">
+        <Button variant="outline" onClick={onClose}>
+          Back to board
+        </Button>
+        <Button
+          onClick={() => {
+            onClose();
+            router.push("/sprint");
+          }}
+          className="gap-1.5"
+        >
+          <Zap className="h-3.5 w-3.5" />
+          Swipe backlog
+        </Button>
+      </div>
     </div>
   );
 }
