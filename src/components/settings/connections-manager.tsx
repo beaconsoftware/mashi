@@ -13,7 +13,9 @@ import {
   RefreshCw,
   ShieldCheck,
   KeyRound,
+  Hash,
 } from "lucide-react";
+import { SlackChannelPicker } from "@/components/settings/slack-channel-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -354,6 +356,9 @@ function ProviderRow({
   onUpdateCompany: (id: string, companyId: string | null) => void;
   onSync: (id: string, provider: ProviderKey) => void;
 }) {
+  // Per-connection Slack channel picker state. Keyed by connection id so
+  // each workspace's picker opens independently.
+  const [channelPickerFor, setChannelPickerFor] = useState<string | null>(null);
   return (
     <Card>
       <CardContent className="p-4">
@@ -416,6 +421,18 @@ function ProviderRow({
                     </div>
                   )}
                 </div>
+                {meta.key === "slack" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setChannelPickerFor(c.id)}
+                    className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                    title="Choose which Slack channels Mashi monitors. DMs and group DMs are always synced."
+                  >
+                    <Hash className="h-3 w-3" />
+                    Channels
+                  </Button>
+                )}
                 <select
                   value={c.company_id ?? ""}
                   onChange={(e) =>
@@ -537,6 +554,21 @@ function ProviderRow({
           </ul>
         )}
       </CardContent>
+      {/* Per-workspace channel picker. Mounted once per ProviderRow; the
+          channelPickerFor state ensures only one Sheet is open at a time.
+          Other providers ignore this — channelPickerFor stays null. */}
+      {meta.key === "slack" && (
+        <SlackChannelPicker
+          open={channelPickerFor !== null}
+          onOpenChange={(o) => {
+            if (!o) setChannelPickerFor(null);
+          }}
+          connectionId={channelPickerFor ?? ""}
+          connectionLabel={
+            connections.find((c) => c.id === channelPickerFor)?.account_label ?? ""
+          }
+        />
+      )}
     </Card>
   );
 }

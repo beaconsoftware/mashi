@@ -33,6 +33,10 @@ interface SlackConversation {
   user?: string;
   is_im?: boolean;
   is_mpim?: boolean;
+  is_channel?: boolean;
+  is_private?: boolean;
+  is_member?: boolean;
+  is_archived?: boolean;
   name?: string;
 }
 
@@ -43,6 +47,7 @@ interface SlackMessage {
   subtype?: string;
   thread_ts?: string;
   bot_id?: string;
+  reply_count?: number;
 }
 
 interface SlackUser {
@@ -93,10 +98,26 @@ export async function syncSlackConnection(connectionId: string): Promise<{
 
   const { data: conn, error } = await supabase
     .from("connected_accounts")
-    .select("id, user_id, company_id, account_label, last_synced_at")
+    .select(
+      "id, user_id, company_id, account_label, last_synced_at, slack_monitored_channels, raw_provider_data"
+    )
     .eq("id", connectionId)
     .single();
   if (error) throw error;
+
+  const monitoredChannelIds = new Set<string>(
+    Array.isArray(conn.slack_monitored_channels)
+      ? (conn.slack_monitored_channels as unknown[]).filter(
+          (v): v is string => typeof v === "string"
+        )
+      : []
+  );
+  // Per-channel first-synced-at map. New monitored channels get a 7-day
+  // bootstrap window (relative to NOW, not last_synced_at) so the user
+  // doesn't have to wait a full sync cycle to see history land.
+  const rawProvider = (conn.raw_provider_data ?? {}) as Record<string, unknown>;
+  const channelFirstSynced =
+    (rawProvider.slack_channel_first_synced as Record<string, string>) ?? {};
 
   await supabase
     .from("connected_accounts")
@@ -106,9 +127,26 @@ export async function syncSlackConnection(connectionId: string): Promise<{
   try {
     const token = await getActiveAccessToken(connectionId);
     const me = await authTest(token);
-    const conversations = await listConversations(token);
+    const dmAndMpim = await listConversations(token);
+    // Resolve monitored public/private channels via conversations.info —
+    // cheaper than listing every channel in the workspace, since the user
+    // has explicitly opted into a handful.
+    const monitoredChannels = await fetchMonitoredChannels(
+      token,
+      Array.from(monitoredChannelIds)
+    );
+    const conversations: SlackConversation[] = [...dmAndMpim, ...monitoredChannels];
 
-    const oldestTs = slackOldestTs(conn.last_synced_at);
+    const defaultOldestTs = slackOldestTs(conn.last_synced_at);
+    const bootstrapOldestTs = (
+      (Date.now() - INITIAL_LOOKBACK_DAYS * 86_400_000) /
+      1000
+    ).toString();
+    // Track which monitored channels are getting their first sync, so we
+    // can stamp first_synced_at on raw_provider_data after the run
+    // completes. (If we stamp before sync and the run fails, the next
+    // sync skips the bootstrap and misses the 7-day window.)
+    const channelsBootstrappedThisRun: string[] = [];
 
     // Fetch messages per conversation (keep both my messages AND others' —
     // triage needs full back-and-forth context)
@@ -116,7 +154,17 @@ export async function syncSlackConnection(connectionId: string): Promise<{
     const pulled: Pulled[] = [];
     for (const conv of conversations) {
       if (pulled.length >= TOTAL_MESSAGE_CAP) break;
-      const msgs = await fetchHistory(token, conv.id, oldestTs);
+      const isChannel = !conv.is_im && !conv.is_mpim;
+      // Channels newly added to the monitored list get a 7-day bootstrap
+      // window the first time they're synced — without this, a brand-new
+      // monitored channel would only see messages from after the moment
+      // you added it (last_synced_at - 1h).
+      let oldest = defaultOldestTs;
+      if (isChannel && !channelFirstSynced[conv.id]) {
+        oldest = bootstrapOldestTs;
+        channelsBootstrappedThisRun.push(conv.id);
+      }
+      const msgs = await fetchHistory(token, conv.id, oldest);
       for (const m of msgs) {
         if (pulled.length >= TOTAL_MESSAGE_CAP) break;
         if (!isUsefulMessage(m)) continue;
@@ -152,7 +200,10 @@ export async function syncSlackConnection(connectionId: string): Promise<{
     const convLabel = (conv: SlackConversation): string => {
       if (conv.is_im && conv.user) return `DM with ${userLabel(conv.user)}`;
       if (conv.is_mpim) return `Group DM (${conv.name ?? conv.id})`;
-      return conv.name ?? conv.id;
+      // Public / private channel name — prefix with # for visual parity
+      // with Slack's own UI.
+      const name = conv.name ?? conv.id;
+      return name.startsWith("#") ? name : `#${name}`;
     };
 
     // Persist raw messages
@@ -217,6 +268,25 @@ export async function syncSlackConnection(connectionId: string): Promise<{
       autoClosed = r.closed;
     } catch (err) {
       console.warn("[slack-sync] reconcile failed:", err);
+    }
+
+    // Stamp first_synced_at for any channel that just had its bootstrap
+    // run. Doing this AFTER markSyncSuccess would race if markSyncSuccess
+    // ever pre-computes raw_provider_data; doing it before is safe
+    // because we're merging into the existing JSON blob.
+    if (channelsBootstrappedThisRun.length > 0) {
+      const nowIso = new Date().toISOString();
+      const nextStamps: Record<string, string> = { ...channelFirstSynced };
+      for (const id of channelsBootstrappedThisRun) nextStamps[id] = nowIso;
+      await supabase
+        .from("connected_accounts")
+        .update({
+          raw_provider_data: {
+            ...rawProvider,
+            slack_channel_first_synced: nextStamps,
+          },
+        })
+        .eq("id", connectionId);
     }
 
     await markSyncSuccess(supabase, connectionId);
@@ -333,12 +403,43 @@ async function listConversations(token: string): Promise<SlackConversation[]> {
   return out;
 }
 
+/**
+ * Resolve a list of channel IDs into SlackConversation objects via
+ * conversations.info. Cheaper than listing the workspace's full channel
+ * directory when the user has only opted into a handful. Failed lookups
+ * (channel deleted, bot kicked, etc.) are silently dropped — sync of
+ * everything else should still proceed.
+ */
+async function fetchMonitoredChannels(
+  token: string,
+  channelIds: string[]
+): Promise<SlackConversation[]> {
+  if (channelIds.length === 0) return [];
+  const out: SlackConversation[] = [];
+  for (const id of channelIds) {
+    try {
+      const j = await slackGet<{ channel?: SlackConversation }>(
+        token,
+        "conversations.info",
+        { channel: id }
+      );
+      if (j.channel && !j.channel.is_archived) out.push(j.channel);
+    } catch (err) {
+      console.warn(`[slack-sync] conversations.info failed for ${id}:`, err);
+    }
+  }
+  return out;
+}
+
 async function fetchHistory(
   token: string,
   channelId: string,
   oldestTs: string
 ): Promise<SlackMessage[]> {
-  const out: SlackMessage[] = [];
+  // Top-level messages first. Slack's conversations.history does NOT
+  // include thread replies — those are fetched separately per thread
+  // root via conversations.replies (see below).
+  const topLevel: SlackMessage[] = [];
   let cursor: string | undefined;
   do {
     const params: Record<string, string> = {
@@ -352,12 +453,66 @@ async function fetchHistory(
         messages: SlackMessage[];
         response_metadata?: { next_cursor?: string };
       }>(token, "conversations.history", params);
-      out.push(...j.messages);
+      topLevel.push(...j.messages);
       cursor = j.response_metadata?.next_cursor || undefined;
     } catch (err) {
       console.warn(`[slack-sync] history failed for ${channelId}:`, err);
       break;
     }
+  } while (cursor);
+
+  // Pull thread replies for any top-level message that's a thread root.
+  // A thread root has thread_ts === ts and reply_count > 0. Without
+  // this, every message inside a Slack thread was invisible — which
+  // means a real category of DM work (someone replying to your earlier
+  // ping) silently vanished. The day-slice grouping downstream keeps
+  // the triage unit bounded so per-thread fan-out doesn't blow up
+  // prompt size.
+  const out: SlackMessage[] = [];
+  for (const m of topLevel) {
+    out.push(m);
+    const isThreadRoot = m.thread_ts === m.ts && (m.reply_count ?? 0) > 0;
+    if (!isThreadRoot) continue;
+    try {
+      const replies = await fetchThreadReplies(token, channelId, m.ts, oldestTs);
+      // conversations.replies returns the parent again as the first
+      // element — skip it to avoid duplicating the message we already
+      // appended above.
+      for (const r of replies) {
+        if (r.ts !== m.ts) out.push(r);
+      }
+    } catch (err) {
+      console.warn(
+        `[slack-sync] replies failed for ${channelId} thread ${m.ts}:`,
+        err
+      );
+    }
+  }
+  return out;
+}
+
+async function fetchThreadReplies(
+  token: string,
+  channelId: string,
+  threadTs: string,
+  oldestTs: string
+): Promise<SlackMessage[]> {
+  const out: SlackMessage[] = [];
+  let cursor: string | undefined;
+  do {
+    const params: Record<string, string> = {
+      channel: channelId,
+      ts: threadTs,
+      oldest: oldestTs,
+      limit: "200",
+    };
+    if (cursor) params.cursor = cursor;
+    const j = await slackGet<{
+      messages: SlackMessage[];
+      response_metadata?: { next_cursor?: string };
+    }>(token, "conversations.replies", params);
+    out.push(...(j.messages ?? []));
+    cursor = j.response_metadata?.next_cursor || undefined;
   } while (cursor);
   return out;
 }
@@ -394,7 +549,11 @@ function isUsefulMessage(m: SlackMessage): boolean {
   if (m.subtype && m.subtype !== "thread_broadcast" && m.subtype !== "file_share") {
     return false;
   }
-  if (m.thread_ts && m.thread_ts !== m.ts) return false;
+  // Previously dropped any message where `thread_ts !== ts` (i.e. any
+  // reply inside a thread). That silently lost a real category of work
+  // — Slack threads inside DMs are common, and the reply often IS the
+  // ask. Threads now included; the day-slice grouping still keeps the
+  // unit of triage bounded.
   return true;
 }
 
