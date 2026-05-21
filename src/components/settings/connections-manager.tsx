@@ -27,6 +27,7 @@ import { SlackOAuthProvider } from "@/lib/oauth/providers/slack";
 import { OutlookOAuthProvider } from "@/lib/oauth/providers/outlook";
 import { MicrosoftCalendarOAuthProvider } from "@/lib/oauth/providers/mscal";
 import { FirefliesOAuthProvider } from "@/lib/oauth/providers/fireflies";
+import { SpotifyOAuthProvider } from "@/lib/oauth/providers/spotify";
 import type { ProviderKey, ProviderMeta } from "@/lib/oauth/types";
 import { useSyncStore } from "@/store/sync-store";
 
@@ -40,6 +41,7 @@ const PROVIDER_META: ProviderMeta[] = [
   OutlookOAuthProvider.meta,
   MicrosoftCalendarOAuthProvider.meta,
   FirefliesOAuthProvider.meta,
+  SpotifyOAuthProvider.meta,
 ];
 
 interface ConnectionRow {

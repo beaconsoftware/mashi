@@ -13,7 +13,8 @@ export type ProviderKey =
   | "linear"
   | "fireflies"
   | "granola"
-  | "notion";
+  | "notion"
+  | "spotify";
 
 export interface ProviderMeta {
   key: ProviderKey;
