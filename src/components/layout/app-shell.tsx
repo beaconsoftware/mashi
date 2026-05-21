@@ -28,7 +28,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SpotifyGlobalMount />
       <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
         <Sidebar />
-        <main className="flex min-w-0 flex-1 flex-col">
+        {/* pt-12 reserves a band at the top for the fixed SpotifyGlobalPlayer
+            so per-page TopBars / filter rows aren't covered by the
+            floating player at z-[200]. */}
+        <main className="flex min-w-0 flex-1 flex-col pt-12">
           <ConnectionHealthAlert />
           <SyncStatusBar />
           {children}
