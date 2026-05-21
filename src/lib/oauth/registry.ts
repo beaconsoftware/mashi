@@ -5,6 +5,7 @@ import { SlackOAuthProvider } from "./providers/slack";
 import { OutlookOAuthProvider } from "./providers/outlook";
 import { MicrosoftCalendarOAuthProvider } from "./providers/mscal";
 import { FirefliesOAuthProvider } from "./providers/fireflies";
+import { SpotifyOAuthProvider } from "./providers/spotify";
 import type { OAuthProvider, ProviderKey } from "./types";
 
 /**
@@ -22,6 +23,7 @@ const PROVIDERS: Record<ProviderKey, OAuthProvider> = {
   fireflies: FirefliesOAuthProvider,
   granola: FirefliesOAuthProvider, // placeholder — granola lacks an OAuth flow today
   notion: FirefliesOAuthProvider, // placeholder
+  spotify: SpotifyOAuthProvider,
 };
 
 export function getProvider(key: string): OAuthProvider | null {
@@ -43,5 +45,6 @@ export function listVisibleProviders(): OAuthProvider[] {
     PROVIDERS.outlook,
     PROVIDERS.mscal,
     PROVIDERS.fireflies,
+    PROVIDERS.spotify,
   ];
 }
