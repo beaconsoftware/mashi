@@ -65,6 +65,7 @@ import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
 import { SprintContextPackage } from "@/components/sprint/sprint-context-package";
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
+import { SprintToolkit } from "@/components/sprint/sprint-toolkit";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 import { useDeckCardHover } from "@/lib/animation/interactions";
 import { PATHWAY_META } from "@/types";
@@ -888,10 +889,13 @@ function SlotCard({
           />
         </div>
 
-        {/* Context package — pathway-specific call-to-action (draft a
-            reply, copy Claude prompt, etc.) followed by source-aware
-            context so the user can stay heads-down in the slot. */}
-        <div className="mt-3 flex-1 space-y-2">
+        {/* Action toolkit + pathway-specific context. The toolkit (chips
+            + drawer) surfaces the highest-value moves for the pathway and
+            its brief fetch is gated on the slot being active so background
+            slots don't burn a model call. The pathway context package and
+            source-aware context sit below for full visibility. */}
+        <div className="mt-3 flex-1 space-y-3">
+          <SprintToolkit item={item} active />
           <SprintContextPackage item={item} />
           <SprintItemContext item={item} enabled />
         </div>
