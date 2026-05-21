@@ -4,7 +4,10 @@ import { encrypt } from "@/lib/encryption";
 import { getProvider } from "./registry";
 import type { OAuthTokens, ProviderKey } from "./types";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3456";
+// Note: || (not ??) so an empty-string env var falls back. Vercel can
+// store a NEXT_PUBLIC_APP_URL row with no value, which ?? would happily
+// leave as "" and produce relative redirect_uris that OAuth providers reject.
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3456";
 
 export function callbackUrl(provider: ProviderKey): string {
   return `${APP_URL}/api/connect/${provider}/callback`;
