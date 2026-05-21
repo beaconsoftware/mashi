@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useReducer, useRef } from "react";
 import { gsap, withMotion } from "@/lib/animation";
 import { useSpotifyState } from "@/hooks/use-spotify";
 
@@ -29,23 +29,27 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
   const url = data?.track?.album_image_url ?? null;
   const playing = !!data?.playing;
 
-  // Crossfade state: keep prev + current URL on two layers.
-  const [layers, setLayers] = useState<{ a: string | null; b: string | null; show: "a" | "b" }>({
-    a: null,
-    b: null,
-    show: "a",
-  });
-
-  useEffect(() => {
-    if (!url) return;
-    setLayers((prev) => {
+  // Crossfade state: keep prev + current URL on two layers. A reducer
+  // is used so the "incorporate new url" transition is a pure event,
+  // not a setState-in-effect (which the React Compiler rules forbid).
+  const [layers, dispatch] = useReducer(
+    (
+      prev: { a: string | null; b: string | null; show: "a" | "b" },
+      next: string | null
+    ) => {
+      if (next == null) return prev;
       const active = prev.show === "a" ? prev.a : prev.b;
-      if (active === url) return prev;
+      if (active === next) return prev;
       if (prev.show === "a") {
-        return { a: prev.a, b: url, show: "b" };
+        return { a: prev.a, b: next, show: "b" as const };
       }
-      return { a: url, b: prev.b, show: "a" };
-    });
+      return { a: next, b: prev.b, show: "a" as const };
+    },
+    { a: null, b: null, show: "a" } as { a: string | null; b: string | null; show: "a" | "b" }
+  );
+  // Sync url into the reducer. dispatch IS allowed inside an effect.
+  useEffect(() => {
+    dispatch(url);
   }, [url]);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
