@@ -31,12 +31,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           never compete with <main>'s vertical flex math, and that the
           per-page TopBar always sits directly under the global band. */}
       {/* relative + z-10 puts the shell into the positioned stacking
-          order ABOVE the ambient bg layer (which is position:fixed z-0).
-          Without this, fixed > static in CSS painting order meant the
-          ambient art bled through every translucent surface (TopBar's
-          transparent bg, SprintBar's bg/20, etc.), making the top
-          stripe of the page look invisible against the art. */}
-      <div className="relative z-10 flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
+          order ABOVE the ambient bg layer (which is position:fixed z-0)
+          so the per-page TopBar / filter rows render in front of the
+          art instead of behind it.
+          bg-transparent lets the ambient album art show through wherever
+          page content doesn't have its own opaque surface (sidebar,
+          cards, sheets all have their own bg). Body still has
+          bg-background as the fallback when no Spotify track is loaded,
+          so the page never goes truly transparent. */}
+      <div className="relative z-10 flex h-screen w-full flex-col overflow-hidden bg-transparent text-foreground">
         <header className="relative z-30 flex shrink-0 flex-col">
           <SpotifyGlobalPlayer />
           <ConnectionHealthAlert />

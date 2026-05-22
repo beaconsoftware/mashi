@@ -160,17 +160,18 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
         style={{ filter: "url(#mashi-spotify-grain)" }}
       />
 
-      {/* Color darkener — keeps foreground text legible. Slightly lighter
-          than before (was bg/70) since art blur is reduced and we want
-          more art presence to come through. */}
-      <div className="absolute inset-0 bg-background/55 backdrop-blur-xl" />
+      {/* Color darkener — keeps foreground text legible. Lighter still
+          (was bg/55 + blur-xl) so the album art is actually perceptible
+          across the page, not just hinted. Verified visually with a live
+          browser inspection at /s2d to land on these numbers. */}
+      <div className="absolute inset-0 bg-background/45 backdrop-blur-md" />
 
       {/* Vignette */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at center, transparent 0%, hsl(var(--background) / 0.35) 70%, hsl(var(--background) / 0.7) 100%)",
+            "radial-gradient(ellipse at center, transparent 0%, hsl(var(--background) / 0.25) 70%, hsl(var(--background) / 0.55) 100%)",
         }}
       />
     </div>
