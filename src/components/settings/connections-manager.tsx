@@ -619,7 +619,7 @@ function ApiKeyDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <Card className="w-full max-w-md">
         <CardContent className="space-y-3 p-5">
           <div className="flex items-center gap-2">

@@ -580,7 +580,7 @@ function Overlay({
   return (
     <div
       ref={rootRef}
-      className="fixed inset-0 z-[110] flex items-center justify-center"
+      className="fixed inset-0 z-focus flex items-center justify-center"
       // Inline color — defensive against any Tailwind class collision /
       // global CSS that might otherwise leave the overlay transparent.
       // hsl(240 10% 4%) matches the dashboard's --background, fully

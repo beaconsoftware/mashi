@@ -38,7 +38,10 @@ export function Sidebar() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <aside className="relative z-[110] flex h-full w-14 shrink-0 flex-col items-center border-r border-border/40 bg-background py-3">
+      {/* z-sidebar (110) — ALWAYS above focus overlays so the global
+          nav stays usable even mid-sprint. Never override. See
+          AGENTS.md "Layout doctrine". */}
+      <aside className="relative z-sidebar flex h-full w-14 shrink-0 flex-col items-center border-r border-border/40 bg-background py-3">
         {/* Logo */}
         <Link
           href="/"

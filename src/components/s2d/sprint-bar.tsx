@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useS2DItems } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
+import { ChromeBar } from "@/components/layout/primitives";
 
 export function SprintBar() {
   const { data: items = [] } = useS2DItems();
@@ -34,7 +35,7 @@ export function SprintBar() {
   const sprintLive = sprintPhase === "active" || sprintPhase === "minimized";
 
   return (
-    <div className="flex items-center gap-4 border-b border-border/40 bg-background/55 px-4 py-2 text-[11px] backdrop-blur-sm">
+    <ChromeBar className="flex items-center gap-4 px-4 py-2 text-[11px]">
       <Stat label="todo" value={todo} accent />
       <Stat label="in flight" value={inProgress} />
       <Stat label="waiting" value={inQueue} />
@@ -59,7 +60,7 @@ export function SprintBar() {
           {sprintLive ? "Sprint in progress" : "Plan sprint"}
         </Button>
       </div>
-    </div>
+    </ChromeBar>
   );
 }
 

@@ -286,7 +286,7 @@ export function SprintActiveMode() {
   const upNext = blocks.slice(activeIndex + 1, activeIndex + 4);
 
   return (
-    <div ref={overlayRef} className="fixed inset-0 z-[100] flex flex-col bg-background">
+    <div ref={overlayRef} className="fixed inset-0 z-focus flex flex-col bg-background">
       {/* Progress bar */}
       <div className="h-1 w-full bg-secondary/40">
         <div

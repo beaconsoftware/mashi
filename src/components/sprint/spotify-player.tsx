@@ -255,7 +255,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
           snap-down feel, mirroring Spotify's own bottom drawer. */}
       <div
         className={cn(
-          "absolute left-0 right-0 top-full z-50 mt-1 origin-top",
+          "absolute left-0 right-0 top-full z-dropdown mt-1 origin-top",
           "rounded-lg border border-border/40 bg-card/95 p-2 shadow-2xl backdrop-blur-md",
           "transition duration-150 ease-out",
           expanded && queue.length > 0

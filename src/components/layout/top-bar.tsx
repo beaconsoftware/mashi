@@ -2,6 +2,7 @@
 
 import { ChatToggleButton } from "@/components/chat/chat-panel";
 import { NotificationHub } from "@/components/layout/notification-hub";
+import { ChromeBar } from "@/components/layout/primitives";
 import { SyncStatusChip } from "@/components/layout/sync-status-chip";
 import { SpotifyPlayer } from "@/components/sprint/spotify-player";
 import { SpotlightTrigger } from "@/components/spotlight/spotlight-trigger";
@@ -14,7 +15,7 @@ interface TopBarProps {
 
 export function TopBar({ title, subtitle, right }: TopBarProps) {
   return (
-    <header className="relative z-40 flex h-12 shrink-0 items-center gap-3 border-b border-border/40 bg-background/55 px-4 backdrop-blur-sm">
+    <ChromeBar as="header" className="flex h-12 shrink-0 items-center gap-3 px-4">
       <div className="flex items-baseline gap-3 shrink-0">
         <h1 className="text-sm font-semibold tracking-tight">{title}</h1>
         {subtitle && (
@@ -35,6 +36,6 @@ export function TopBar({ title, subtitle, right }: TopBarProps) {
         <NotificationHub />
         <ChatToggleButton />
       </div>
-    </header>
+    </ChromeBar>
   );
 }

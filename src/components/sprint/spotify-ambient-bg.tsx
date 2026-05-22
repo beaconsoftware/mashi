@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useMemo, useReducer, useRef } from "react";
 import { gsap, withMotion } from "@/lib/animation";
 import { useSpotifyState } from "@/hooks/use-spotify";
+import { AmbientGround } from "@/components/layout/primitives";
 
 /**
  * Ambient album-art background.
@@ -99,20 +100,7 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
   if (!everHadArt) return null;
 
   return (
-    <div
-      ref={rootRef}
-      aria-hidden
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
-      // Promote to its own compositor layer so the expensive
-      // backdrop-blur + SVG filters don't re-paint on every page
-      // navigation. Mashi is a single-page app; AppShell stays mounted
-      // across routes, so this layer can persist on the GPU.
-      style={{
-        willChange: "transform",
-        transform: "translateZ(0)",
-        contain: "layout paint",
-      }}
-    >
+    <AmbientGround ref={rootRef}>
       {/* IMPORTANT: the displacement filter is NOT applied here on the
           root. Previously it was, which meant the darkener layer + the
           vignette gradient also got displaced — and displacing a smooth
@@ -192,7 +180,7 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
             "radial-gradient(ellipse at center, transparent 0%, hsl(var(--background) / 0.35) 70%, hsl(var(--background) / 0.7) 100%)",
         }}
       />
-    </div>
+    </AmbientGround>
   );
 }
 

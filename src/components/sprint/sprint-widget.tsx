@@ -76,7 +76,7 @@ export function SprintWidget() {
   const activeCount = activeSlotIds.length;
 
   return (
-    <div ref={widgetRef} className="fixed bottom-4 right-4 z-[90] w-80 overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
+    <div ref={widgetRef} className="fixed bottom-4 right-4 z-widget w-80 overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
       <div className="relative h-1 w-full bg-secondary">
         <div
           className={cn(

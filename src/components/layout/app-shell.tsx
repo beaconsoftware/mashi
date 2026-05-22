@@ -1,6 +1,7 @@
 "use client";
 
 import { Sidebar } from "@/components/layout/sidebar";
+import { OverlayRoot } from "@/components/layout/primitives";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConnectionHealthAlert } from "@/components/layout/connection-health-alert";
 // ChatSummonPill removed from the always-visible UI — the pulsing
@@ -18,12 +19,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SpotlightProvider>
       {/* Shell stacking context:
-          - relative + z-10 keeps the shell positioned so the ambient
+          - relative + z-shell keeps the shell positioned so the ambient
             layer below paints behind it (not on top of translucent
             chrome surfaces).
           - bg-transparent lets the ambient album art show through
-            wherever page content doesn't have its own opaque bg. */}
-      <div className="relative z-10 flex h-screen w-full flex-col overflow-hidden bg-transparent text-foreground">
+            wherever page content doesn't have its own opaque bg.
+          - z values come from src/lib/layers.ts; see AGENTS.md "Layout
+            doctrine". */}
+      <div className="relative z-shell flex h-screen w-full flex-col overflow-hidden bg-transparent text-foreground">
         {/* Ambient album-art background MUST live INSIDE this wrapper.
             backdrop-filter (used by the sprint focus overlay z-100 and
             other translucent surfaces) only samples within its own
@@ -35,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             now rendered INSIDE each page's TopBar (see top-bar.tsx) so
             it shares a single 48px row with the page title + actions,
             no extra band stacked on top. */}
-        <header className="relative z-30 flex shrink-0 flex-col">
+        <header className="relative z-chrome flex shrink-0 flex-col">
           <ConnectionHealthAlert />
           <SyncStatusBar />
         </header>
@@ -48,6 +51,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <SprintGlobalMount />
         <SpotlightModal />
+        {/* Single anchor for FocusOverlay portals. Sprint focus mode +
+            future focus surfaces mount their content here via
+            createPortal so per-page renderers and global mounts can't
+            double-instantiate the same overlay. See AGENTS.md. */}
+        <OverlayRoot />
       </div>
     </SpotlightProvider>
   );

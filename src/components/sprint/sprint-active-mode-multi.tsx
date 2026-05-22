@@ -72,6 +72,7 @@ import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 // player otherwise) and the play logger to tag tracks to the active slot.
 import { SpotifyPlayer } from "@/components/sprint/spotify-player";
 import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
+import { FocusOverlay } from "@/components/layout/primitives";
 import { useDeckCardHover } from "@/lib/animation/interactions";
 import { PATHWAY_META } from "@/types";
 import { cn } from "@/lib/utils";
@@ -587,7 +588,7 @@ export function SprintActiveModeMulti() {
     : 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background/15 text-foreground backdrop-blur-sm">
+    <FocusOverlay>
       {/* Headless poller writes track-task plays during sprints. */}
       <SpotifyPlayLogger enabled />
       {/* Header */}
@@ -738,7 +739,7 @@ export function SprintActiveModeMulti() {
           onClose={() => setDetailItemId(null)}
         />
       )}
-    </div>
+    </FocusOverlay>
   );
 }
 
@@ -751,16 +752,20 @@ function DetailPanel({
 }) {
   return (
     <>
-      {/* Backdrop — click to close. z-index above the slots but below
-          any future modals. */}
+      {/* Backdrop — click to close. The detail panel sits INSIDE the
+          FocusOverlay portal's stacking context, so these z values are
+          local to that context (not absolute). The portal's parent
+          z-focus already lifts the whole overlay above page content;
+          inside, the backdrop just needs to beat the slot grid (z-10)
+          and the aside needs to beat the backdrop. */}
       <div
-        className="fixed inset-0 z-[110] bg-background/70 backdrop-blur-sm"
+        className="absolute inset-0 z-20 bg-background/70 backdrop-blur-sm"
         onClick={onClose}
       />
       <aside
         role="dialog"
         aria-label="Item detail"
-        className="fixed right-0 top-0 z-[120] flex h-full w-full max-w-xl flex-col border-l border-border/40 bg-background shadow-2xl"
+        className="absolute right-0 top-0 z-30 flex h-full w-full max-w-xl flex-col border-l border-border/40 bg-background shadow-2xl"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border/30 px-4 py-2">
           <div className="flex min-w-0 items-center gap-2">

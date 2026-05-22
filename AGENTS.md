@@ -116,6 +116,104 @@ Other rules:
 - Always wrap with `withMotion(() => ...)` from `src/lib/animation/index.ts` so users with `prefers-reduced-motion: reduce` get no animation.
 - Use `useGSAP` from `@gsap/react` with a `scope` ref for auto-cleanup.
 
+## Layout doctrine
+
+We had ~6 layout regressions in a single session, all from the same shape:
+fresh feature picks a fresh z-index, collides with another surface nobody
+remembered was there. Fix is structural: one z-scale, named utilities,
+shared primitives, single overlay portal. Reach for the primitives FIRST
+before hand-rolling chrome / overlay / background CSS.
+
+### Z-scale (src/lib/layers.ts)
+
+| Layer          | Value | Tailwind class | Meaning |
+|----------------|------:|----------------|---------|
+| GROUND         |     0 | `z-ground`     | Ambient bg, vignettes, decorative blur |
+| SHELL          |    10 | `z-shell`      | The AppShell wrapper, creates the main positioned context |
+| PAGE_CHROME    |    40 | `z-chrome`     | TopBar, SprintBar, S2DFilters, BoardToolbar |
+| DROPDOWN       |    50 | `z-dropdown`   | Popovers, tooltips, select menus, queue dropdown |
+| WIDGET         |    90 | `z-widget`     | SprintWidget chip, chat summon pill |
+| FOCUS_OVERLAY  |   100 | `z-focus`      | Sprint takeover, planner review deck, future focus modes |
+| SIDEBAR        |   110 | `z-sidebar`    | Sidebar — ALWAYS above focus overlays |
+| MODAL          |   150 | `z-modal`      | Spotlight, confirms, sheets (Dialog overlays) |
+| TOAST          |   200 | `z-toast`      | Notifications, error banners — highest |
+
+Use the utility class (`className="... z-chrome"`). The numeric constant
+is also exported as `Z.PAGE_CHROME` for `style={{ zIndex: Z.PAGE_CHROME }}`
+when you can't reach a class (rare). DO NOT hand-pick `z-[103]` etc.;
+`pnpm audit:layers` will fail.
+
+Local sub-component micro-stacks (sticky calendar headers, swipe-deck
+card depth, decorative rings inside an onboarding step) use bare Tailwind
+`z-10` / `z-20` / `-z-10` against their OWN stacking context. Those don't
+collide with the global doctrine and don't need migrating. The audit
+script carves out the few files that legitimately do this.
+
+### Stacking-context gotchas
+
+These properties create a new stacking context — child z-indexes are
+local to it, not absolute:
+
+- `backdrop-filter` (any value, including `backdrop-blur-sm`)
+- `filter`, `mix-blend-mode`, `transform`, `opacity` `< 1`
+- explicit `position: relative` + an explicit `z-index`
+
+This is WHY TopBar's `backdrop-blur-sm` originally broke its dropdown's
+`z-50`: the bar created a context, child z values resolved within it,
+and the next sibling row painted on top regardless. Fix: give the
+parent an explicit z-class (`z-chrome`) so its whole stacking context
+is lifted, not just its inline contents. The `<ChromeBar>` primitive
+bakes this in — use it instead of hand-rolling.
+
+### Single overlay portal
+
+AppShell mounts `<OverlayRoot />` once. Anything that wants to be a
+full-screen takeover (sprint focus mode, sprint complete recap when
+shown from a non-/sprint route) renders via `<FocusOverlay>` which
+`createPortal`s into that anchor.
+
+Why: previously the `/sprint` page renderer AND the `SprintGlobalMount`
+both rendered `<SprintComplete />` when a sprint ended on /sprint.
+Both copies fired the `POST /api/sprint/session` + `exitSprint()`
+side-effects and raced — the recap flashed and disappeared. The portal
++ "global mount never renders an overlay on /sprint" rule structurally
+prevents the dup. SprintGlobalMount is a router; it never renders an
+overlay directly on a page that already owns one.
+
+Rule: if you add a new fullscreen focus surface, use `<FocusOverlay>`.
+If you find yourself rendering the same component from both a per-page
+location and `SprintGlobalMount` (or a future global mount), STOP — one
+owner.
+
+### Sidebar is always-on-top of focus
+
+`<Sidebar>` lives at `z-sidebar` (110), ABOVE focus overlays (100).
+This is intentional: a sprint takeover should cover page content, but
+the user must still be able to bail to another nav target without
+keyboard-shortcut acrobatics. Never override `z-sidebar` to a lower
+value. If you need something above the sidebar, it should be at
+`z-modal` (150) or higher.
+
+### Primitives (src/components/layout/primitives.tsx)
+
+- `<ChromeBar>` — translucent edge bar with the canonical bg + blur +
+  z-chrome + relative. Use for TopBar, SprintBar, S2DFilters, board
+  toolbar. Optional `as` prop for semantic element (`header`, `nav`).
+- `<AmbientGround>` — fixed inset-0 ground layer with GPU compositing
+  hints. Must live INSIDE AppShell's wrapper or backdrop-filter from
+  translucent surfaces above won't be able to sample it.
+- `<FocusOverlay>` — fullscreen takeover. Portals to `#mashi-overlay-root`.
+  Bakes in z-focus + the translucent dim + backdrop-blur shell.
+- `<OverlayRoot>` — the single portal anchor. Mounted once in AppShell.
+
+### Audit
+
+`pnpm audit:layers` greps for arbitrary `z-[N]` classes and inline
+numeric `zIndex` outside the doctrine. Runs as part of `pnpm verify`.
+If you have a legitimate carve-out (a self-contained local stack), add
+the file to the EXCLUDE list in `scripts/audit-layers.sh` and document
+why.
+
 ## React Compiler / lint quirks
 
 The React Compiler ESLint plugin is strict. Patterns that look fine but error:

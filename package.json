@@ -8,7 +8,8 @@
     "start": "unset ANTHROPIC_API_KEY ANTHROPIC_BASE_URL; next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "verify": "pnpm typecheck && pnpm lint"
+    "audit:layers": "bash scripts/audit-layers.sh",
+    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
