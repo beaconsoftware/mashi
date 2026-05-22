@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
+import { getUserContext } from "@/lib/user-context";
 import type { Pathway, Priority } from "@/types";
 
 interface Row {
@@ -69,9 +70,12 @@ export async function bundleSameMeetingActionItems(userId: string): Promise<{
   // Only inspect meetings with 3+ open items — the explosion case
   const meetingsToScan = [...byMeeting.entries()].filter(([, group]) => group.length >= 3);
 
+  const userCtx = await getUserContext(userId);
+  const userName = userCtx.firstName;
+
   for (const [meetingId, group] of meetingsToScan) {
     try {
-      const bundles = await askToBundle(meetingId, group);
+      const bundles = await askToBundle(meetingId, group, userName);
       for (const bundle of bundles) {
         if (bundle.itemIds.length < 2) continue;
         await applyBundle(supabase, group, bundle, userId);
@@ -103,15 +107,19 @@ interface BundleProposal {
   rationale: string;
 }
 
-async function askToBundle(meetingId: string, items: Row[]): Promise<BundleProposal[]> {
-  const system = `You are bundling action items from a single Fireflies meeting on Sidd's task board.
+async function askToBundle(
+  meetingId: string,
+  items: Row[],
+  userName: string
+): Promise<BundleProposal[]> {
+  const system = `You are bundling action items from a single Fireflies meeting on ${userName}'s task board.
 
-These ${items.length} action items ALL came from the same meeting. Sidd has explicitly told Mashi: "The board tracks WORK, not sources" and "Balance between noise and consolidation is paramount — forget cost."
+These ${items.length} action items ALL came from the same meeting. ${userName} has explicitly told Mashi: "The board tracks WORK, not sources" and "Balance between noise and consolidation is paramount — forget cost."
 
 Default to BUNDLING. Multiple action items from one meeting that all advance the same initiative, project, customer rollout, or decision should collapse into ONE S2D for that initiative. The breakdown of who-does-what belongs in the description, not as separate board rows.
 
 # Examples of correct bundling
-- "Deborah does manual rollups" + "Taylor oversees rollup process" + "Sidd communicates rollup timeline to client" + "Schedule meeting to review rollup" → ONE bundle: "Snailworks roll-up band-aid rollout"
+- "Deborah does manual rollups" + "Taylor oversees rollup process" + "${userName} communicates rollup timeline to client" + "Schedule meeting to review rollup" → ONE bundle: "Snailworks roll-up band-aid rollout"
 - "Update pricing doc" + "Send pricing to sales" + "Decide pricing tier names" → ONE bundle: "Pricing finalization"
 
 # Examples of NOT bundling
@@ -121,7 +129,7 @@ Default to BUNDLING. Multiple action items from one meeting that all advance the
 # How to pick the canonical row
 - Title names the INITIATIVE, not a single action ("Snailworks roll-up band-aid rollout", not "Draft message to Deborah")
 - Description lists the breakdown: who's doing what, what decisions are pending, what's next
-- Pathway: use "delegated" if the work is mostly assigned to others, "heads_down" if it's mostly Sidd's, "decision_gate" if a key decision is pending, "watching" if Sidd is just tracking
+- Pathway: use "delegated" if the work is mostly assigned to others, "heads_down" if it's mostly ${userName}'s, "decision_gate" if a key decision is pending, "watching" if ${userName} is just tracking
 - Priority: highest of the bundled items
 
 # Output

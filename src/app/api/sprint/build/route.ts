@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
+import { getUserContext } from "@/lib/user-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,8 +64,10 @@ export async function POST(req: NextRequest) {
 
   const today = new Date().toISOString().slice(0, 10);
   const dow = new Date().toLocaleDateString(undefined, { weekday: "long" });
+  const userCtx = await getUserContext(user.id);
+  const userName = userCtx.firstName;
 
-  const system = `You build Sidd's sprint. He's the product lead at Beacon Software (a PE-backed software holdco), planning a focused work window from his open task pool.
+  const system = `You build ${userName}'s sprint. They're the product lead at Beacon Software (a PE-backed software holdco), planning a focused work window from their open task pool.
 
 Today: ${today} (${dow}).
 

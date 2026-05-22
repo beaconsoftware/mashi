@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
+import { getUserContext } from "@/lib/user-context";
 
 interface OpenItem {
   id: string;
@@ -48,11 +49,14 @@ export async function aiStalenessReview(userId: string): Promise<{
   const closedIds: string[] = [];
   const details: string[] = [];
 
+  const userCtx = await getUserContext(userId);
+  const userName = userCtx.firstName;
+
   const BATCH = 30;
   for (let i = 0; i < items.length; i += BATCH) {
     const batch = items.slice(i, i + BATCH) as OpenItem[];
     try {
-      const stale = await askHaikuForStale(batch);
+      const stale = await askHaikuForStale(batch, userName);
       for (const sid of stale) {
         const target = batch.find((b) => b.id === sid.id);
         if (!target) continue;
@@ -93,10 +97,10 @@ interface StaleHit {
   reason: string;
 }
 
-async function askHaikuForStale(items: OpenItem[]): Promise<StaleHit[]> {
+async function askHaikuForStale(items: OpenItem[], userName: string): Promise<StaleHit[]> {
   const today = new Date().toISOString().slice(0, 10);
 
-  const system = `You review tasks on Sidd's task board and decide which ones are obviously NO LONGER ACTIONABLE based on their own content.
+  const system = `You review tasks on ${userName}'s task board and decide which ones are obviously NO LONGER ACTIONABLE based on their own content.
 
 Today's date: ${today}.
 

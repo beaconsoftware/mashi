@@ -23,11 +23,11 @@ export type Temperature = "escalating" | "steady" | "cooled_off" | "unknown";
 export interface BriefPerson {
   /** Display name or email if name unknown. */
   name: string;
-  /** Their role in this work unit, in Sidd's words ("CEO of Portco X", "AE on the deal"). */
+  /** Their role in this work unit, phrased plainly ("CEO of Portco X", "AE on the deal"). */
   role?: string | null;
-  /** ISO timestamp of the most recent inbound/outbound between Sidd and this person. */
+  /** ISO timestamp of the most recent inbound/outbound between the user and this person. */
   last_touch_at?: string | null;
-  /** "inbound" if they were waiting on Sidd, "outbound" if Sidd was waiting on them. */
+  /** "inbound" if they were waiting on the user, "outbound" if the user was waiting on them. */
   last_touch_direction?: "inbound" | "outbound" | "unknown" | null;
 }
 
@@ -55,23 +55,23 @@ export interface ItemBrief {
   /** One-sentence summary of the work unit and where it stands. */
   headline?: string | null;
 
-  /** Key people involved + when Sidd last touched them. */
+  /** Key people involved + when the user last touched them. */
   key_people?: BriefPerson[];
 
   /** Chronological activity across all sources. Newest last. */
   timeline?: BriefTimelineEvent[];
 
-  /** Questions explicitly raised by someone else and not yet answered by Sidd. */
+  /** Questions explicitly raised by someone else and not yet answered by the user. */
   outstanding_questions?: string[];
 
-  /** Statements Sidd has made on the record. Short quotes / paraphrases. */
-  what_sidd_has_said?: string[];
+  /** Statements the user has made on the record. Short quotes / paraphrases. */
+  what_user_has_said?: string[];
 
-  /** Promises Sidd made that haven't been fulfilled. */
+  /** Promises the user made that haven't been fulfilled. */
   open_commitments?: string[];
 
-  /** What Sidd has NOT yet said that the other side may be expecting. */
-  what_sidd_has_not_said?: string[];
+  /** What the user has NOT yet said that the other side may be expecting. */
+  what_user_has_not_said?: string[];
 
   /** escalating / steady / cooled_off — is the situation heating up? */
   temperature?: Temperature;
@@ -111,28 +111,28 @@ export function renderBriefForPrompt(brief: ItemBrief): string {
   }
   if (brief.outstanding_questions?.length) {
     lines.push("");
-    lines.push("Outstanding questions to Sidd:");
+    lines.push("Outstanding questions to the user:");
     for (const q of brief.outstanding_questions) {
       lines.push(`- ${q}`);
     }
   }
-  if (brief.what_sidd_has_said?.length) {
+  if (brief.what_user_has_said?.length) {
     lines.push("");
-    lines.push("What Sidd has said:");
-    for (const s of brief.what_sidd_has_said) {
+    lines.push("What the user has said:");
+    for (const s of brief.what_user_has_said) {
       lines.push(`- ${s}`);
     }
   }
-  if (brief.what_sidd_has_not_said?.length) {
+  if (brief.what_user_has_not_said?.length) {
     lines.push("");
-    lines.push("What Sidd has not yet said:");
-    for (const s of brief.what_sidd_has_not_said) {
+    lines.push("What the user has not yet said:");
+    for (const s of brief.what_user_has_not_said) {
       lines.push(`- ${s}`);
     }
   }
   if (brief.open_commitments?.length) {
     lines.push("");
-    lines.push("Open commitments by Sidd:");
+    lines.push("Open commitments by the user:");
     for (const c of brief.open_commitments) {
       lines.push(`- ${c}`);
     }
@@ -214,8 +214,8 @@ export function emptyBrief(itemId: string, model: string): ItemBrief {
     key_people: [],
     timeline: [],
     outstanding_questions: [],
-    what_sidd_has_said: [],
-    what_sidd_has_not_said: [],
+    what_user_has_said: [],
+    what_user_has_not_said: [],
     open_commitments: [],
     temperature: "unknown",
     recommended_next_move: null,

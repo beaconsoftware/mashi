@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
+import { getUserContext } from "@/lib/user-context";
 import type { Pathway, Priority } from "@/types";
 
 interface S2DRow {
@@ -39,6 +40,9 @@ export async function consolidateDuplicates(userId: string): Promise<{
   let clustersFound = 0;
   let merged = 0;
 
+  const userCtx = await getUserContext(userId);
+  const userName = userCtx.firstName;
+
   // Per-company pass over THIS USER's open items. Without the user_id
   // filter, two users with the same-named company would have their items
   // merged into one canonical row across tenants. Catastrophic.
@@ -62,7 +66,7 @@ export async function consolidateDuplicates(userId: string): Promise<{
 
     if (!items || items.length < 2) continue;
 
-    const clusters = await clusterItemsByWork(items as S2DRow[], company.name);
+    const clusters = await clusterItemsByWork(items as S2DRow[], company.name, userName);
     for (const cluster of clusters) {
       if (cluster.length < 2) continue;
       clustersFound++;
@@ -146,7 +150,11 @@ export async function consolidateDuplicates(userId: string): Promise<{
  * Returns an array of clusters, each cluster being the list of items that
  * are the same work. Single-item "clusters" are filtered out by the caller.
  */
-async function clusterItemsByWork(items: S2DRow[], companyName: string): Promise<S2DRow[][]> {
+async function clusterItemsByWork(
+  items: S2DRow[],
+  companyName: string,
+  userName: string
+): Promise<S2DRow[][]> {
   // Chunk large company boards to keep prompt size reasonable
   const CHUNK = 80;
   const allClusters: S2DRow[][] = [];
@@ -154,7 +162,7 @@ async function clusterItemsByWork(items: S2DRow[], companyName: string): Promise
   for (let i = 0; i < items.length; i += CHUNK) {
     const slice = items.slice(i, i + CHUNK);
     try {
-      const clusters = await askHaikuToCluster(slice, companyName);
+      const clusters = await askHaikuToCluster(slice, companyName, userName);
       allClusters.push(...clusters);
     } catch (err) {
       console.warn(`[consolidate] cluster pass ${i / CHUNK} failed:`, err);
@@ -166,9 +174,10 @@ async function clusterItemsByWork(items: S2DRow[], companyName: string): Promise
 
 async function askHaikuToCluster(
   items: S2DRow[],
-  companyName: string
+  companyName: string,
+  userName: string
 ): Promise<S2DRow[][]> {
-  const system = `You cluster tasks on Sidd's board by their underlying piece of work.
+  const system = `You cluster tasks on ${userName}'s board by their underlying piece of work.
 
 The board has many items. Some are duplicates of the same underlying work, surfaced from different sources (a Linear ticket, a Fireflies action item, a Gmail thread, a Slack DM — all about the same project). Some are different action items extracted from the SAME meeting that all belong to ONE coherent initiative.
 
@@ -176,7 +185,7 @@ Your job: identify clusters of 2+ items that describe the SAME underlying work o
 
 # What clusters
 - Same concrete deliverable, project, decision, or rollout.
-- Same broader initiative with multiple sub-tasks distributed to different people. E.g., "Snailworks roll-up band-aid": Deborah doing manual rollups, Taylor overseeing, Sidd communicating timeline — these are ONE initiative even though each is a different action item.
+- Same broader initiative with multiple sub-tasks distributed to different people. E.g., "Snailworks roll-up band-aid": Deborah doing manual rollups, Taylor overseeing, ${userName} communicating timeline — these are ONE initiative even though each is a different action item.
 - Cross-source matches: a Linear ticket + the Fireflies action item that birthed it + the Gmail thread tracking progress.
 - A "track / follow up on X" item and the actual X task.
 - Multiple items that all close when the parent project ships.
@@ -192,7 +201,7 @@ Your job: identify clusters of 2+ items that describe the SAME underlying work o
 - Two items where one is a meta-task ("review the Linear backlog") and the other is concrete ("ship MAP-412")
 
 # Calibration
-Default to clustering when the items share a project, initiative, or source thread. False merges are easier to spot and split than per-meeting explosion is to clean up. Sidd has explicitly told Mashi: "The board tracks WORK, not sources. Balance between noise and consolidation is paramount."
+Default to clustering when the items share a project, initiative, or source thread. False merges are easier to spot and split than per-meeting explosion is to clean up. The user has explicitly told Mashi: "The board tracks WORK, not sources. Balance between noise and consolidation is paramount."
 
 Output ONLY valid JSON of this exact shape:
 { "clusters": [ { "ids": ["...", "..."], "rationale": "1 sentence" } ] }
