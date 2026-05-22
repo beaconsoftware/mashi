@@ -1,13 +1,15 @@
 import { ImageResponse } from "next/og";
 
 /**
- * Dynamic favicon — the same four-jhaadu-M mark, rendered on a primary
- * background. Replaces the legacy src/app/favicon.ico Next.js gets the
- * sizes right automatically.
+ * Dynamic favicon — record/bullseye mark on the yellow brand tile.
+ * Concentric contour rings emerging from a solid black disk with a
+ * yellow spindle dot in the center. Next.js handles size resolution.
  */
 
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
+
+const YELLOW = "hsl(43 96% 56%)";
 
 export default function Icon() {
   return new ImageResponse(
@@ -16,7 +18,7 @@ export default function Icon() {
         style={{
           width: "100%",
           height: "100%",
-          background: "hsl(43 96% 56%)",
+          background: YELLOW,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -25,22 +27,21 @@ export default function Icon() {
       >
         <svg
           viewBox="0 0 32 32"
-          width="22"
-          height="22"
+          width="26"
+          height="26"
           fill="none"
           stroke="black"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="M5 5 V18" strokeWidth="2.5" />
-          <path d="M5 5 L16 17" strokeWidth="2.5" />
-          <path d="M27 5 L16 17" strokeWidth="2.5" />
-          <path d="M27 5 V18" strokeWidth="2.5" />
-          <circle cx="5" cy="5" r="1.6" fill="black" stroke="none" />
-          <circle cx="27" cy="5" r="1.6" fill="black" stroke="none" />
-          <path d="M5 19 L5 25" strokeWidth="1.2" />
-          <path d="M16 18 L16 25" strokeWidth="1.2" />
-          <path d="M27 19 L27 25" strokeWidth="1.2" />
+          {/* Outer contour rings */}
+          <circle cx="16" cy="16" r="14" strokeWidth="1" opacity="0.45" />
+          <circle cx="16" cy="16" r="11.5" strokeWidth="1" opacity="0.7" />
+          <circle cx="16" cy="16" r="9" strokeWidth="1" opacity="0.9" />
+          {/* Solid black disk */}
+          <circle cx="16" cy="16" r="6.2" fill="black" stroke="none" />
+          {/* Yellow spindle dot (matches tile bg) */}
+          <circle cx="16" cy="16" r="1.6" fill={YELLOW} stroke="none" />
         </svg>
       </div>
     ),

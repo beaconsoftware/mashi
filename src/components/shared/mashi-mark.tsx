@@ -1,12 +1,18 @@
 /**
  * MashiMark — the brand logo.
  *
- * Four jhaadus (Indian brooms) standing in a row whose handles outline an M:
- * two outer brooms stand straight, two inner brooms lean inward forming the
- * downward V in the middle. Each broom has a bound top knot (the binding
- * that ties the bristles to the handle) and a fan of bristles at the
- * bottom. Single-color via currentColor so it inherits whatever the
- * parent text color is.
+ * A record-disk / bullseye hybrid: a solid black disk centered on the
+ * canvas with a small yellow dot in its middle (the spindle), and a
+ * series of thin concentric contour rings emerging outward like
+ * record grooves / target rings / sound waves.
+ *
+ * The inner spindle dot is rendered with a mask so it punches through
+ * the disk to whatever sits behind the SVG (the yellow brand tile in
+ * the sidebar, the favicon's yellow square, etc.) — works on any
+ * backdrop without hard-coding the dot color.
+ *
+ * Single-color via currentColor so disk + rings inherit the parent
+ * text color (typically black on the yellow brand tile).
  */
 export function MashiMark({
   size = 24,
@@ -30,44 +36,31 @@ export function MashiMark({
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {/* Four broom handles — outline an M. Outer two vertical; inner two
-          lean inward and meet at the bottom-center apex of the M's V. */}
-      {/* Outer left */}
-      <path d="M5 5 V18" strokeWidth="2" />
-      {/* Inner left — top-left corner down to center-middle */}
-      <path d="M5 5 L16 17" strokeWidth="2" />
-      {/* Inner right — top-right corner down to center-middle */}
-      <path d="M27 5 L16 17" strokeWidth="2" />
-      {/* Outer right */}
-      <path d="M27 5 V18" strokeWidth="2" />
+      <defs>
+        {/* Mask: white everywhere shows the disk, black at the center
+            cuts out the spindle. The resulting hole reveals whatever
+            background sits behind the SVG. */}
+        <mask id="mashi-mark-spindle" maskUnits="userSpaceOnUse">
+          <rect width="32" height="32" fill="white" />
+          <circle cx="16" cy="16" r="1.6" fill="black" />
+        </mask>
+      </defs>
 
-      {/* Top binding knots — small dots at the top of each handle */}
-      <circle cx="5" cy="5" r="1.4" fill="currentColor" stroke="none" />
-      <circle cx="27" cy="5" r="1.4" fill="currentColor" stroke="none" />
+      {/* Outer contour rings — thin grooves emerging outward. Opacity
+          drops slightly toward the outside so they feel like ripples. */}
+      <circle cx="16" cy="16" r="14" strokeWidth="0.9" opacity="0.45" />
+      <circle cx="16" cy="16" r="11.5" strokeWidth="0.9" opacity="0.7" />
+      <circle cx="16" cy="16" r="9" strokeWidth="0.9" opacity="0.9" />
 
-      {/* Bristle binding rings — short tick across each handle where the
-          rope wraps just above the bristles. Sells the "broom" read. */}
-      <path d="M3.5 18 H6.5" strokeWidth="1.2" />
-      <path d="M14 17 H18" strokeWidth="1.2" />
-      <path d="M25.5 18 H28.5" strokeWidth="1.2" />
-
-      {/* Bristle fans — three clusters at the bottom (outer-left,
-          center where two inner handles meet, outer-right). Each cluster
-          is 3 thin diverging strokes. */}
-      {/* Left fan */}
-      <path d="M3.5 19 L2.5 25" strokeWidth="1" opacity="0.85" />
-      <path d="M5 19 L5 25.5" strokeWidth="1" opacity="0.85" />
-      <path d="M6.5 19 L7.5 25" strokeWidth="1" opacity="0.85" />
-
-      {/* Center fan (two brooms share this) */}
-      <path d="M14 18 L13 25" strokeWidth="1" opacity="0.85" />
-      <path d="M16 18 L16 25.5" strokeWidth="1" opacity="0.85" />
-      <path d="M18 18 L19 25" strokeWidth="1" opacity="0.85" />
-
-      {/* Right fan */}
-      <path d="M25.5 19 L24.5 25" strokeWidth="1" opacity="0.85" />
-      <path d="M27 19 L27 25.5" strokeWidth="1" opacity="0.85" />
-      <path d="M28.5 19 L29.5 25" strokeWidth="1" opacity="0.85" />
+      {/* Solid disk with the spindle cut out via mask. */}
+      <circle
+        cx="16"
+        cy="16"
+        r="6.2"
+        fill="currentColor"
+        stroke="none"
+        mask="url(#mashi-mark-spindle)"
+      />
     </svg>
   );
 }
