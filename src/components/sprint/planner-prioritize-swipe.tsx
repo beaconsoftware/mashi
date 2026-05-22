@@ -258,7 +258,7 @@ export function PlannerPrioritizeSwipe({ eligibleItems }: Props) {
   return (
     <div className="flex h-full w-full flex-col">
       {/* Top: progress + close */}
-      <div className="flex items-center gap-3 border-b border-border/40 px-5 py-3">
+      <div className="flex items-center gap-3 border-b border-border/40 px-6 py-4">
         <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
           {cursor + 1} / {deckRef.current.length}
         </span>
@@ -282,8 +282,11 @@ export function PlannerPrioritizeSwipe({ eligibleItems }: Props) {
         </button>
       </div>
 
-      {/* Deck — single card */}
-      <div className="relative isolate flex-1 min-h-0 select-none p-6">
+      {/* Deck — single card. Generous vertical breathing room
+          (py-10 / lg:py-14) so the card never feels cramped against
+          the top progress bar or the bottom action bar, even on tall
+          screens where the absolute-inset card stretches to fill. */}
+      <div className="relative isolate flex-1 min-h-0 select-none px-6 py-10 lg:py-14">
         <CardFace
           key={current.id}
           item={current}
@@ -309,7 +312,7 @@ export function PlannerPrioritizeSwipe({ eligibleItems }: Props) {
       />
 
       {/* Keyboard hints */}
-      <div className="mb-3 flex items-center justify-center gap-3 text-[10px] text-muted-foreground">
+      <div className="mb-5 mt-2 flex items-center justify-center gap-3 text-[10px] text-muted-foreground">
         <Keyboard className="h-3 w-3" />
         <Shortcut k="←" label="skip" />
         <Shortcut k="→" label="add to sprint" />
@@ -365,7 +368,12 @@ function CardFace({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       className={cn(
-        "absolute inset-0 mx-auto flex max-w-lg cursor-grab touch-none flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl active:cursor-grabbing",
+        // max-h prevents the card from stretching the full deck
+        // container on tall viewports. my-auto + inset-x-0 centers it
+        // vertically within the inset-0 deck area. The card sizes to
+        // its content within these caps.
+        "absolute inset-x-0 mx-auto my-auto flex max-h-[640px] w-full max-w-lg cursor-grab touch-none flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl active:cursor-grabbing",
+        "inset-y-0",
         isAlreadySelected && "ring-2 ring-primary/40"
       )}
     >
