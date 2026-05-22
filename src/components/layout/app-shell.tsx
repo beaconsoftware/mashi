@@ -17,26 +17,20 @@ import { SpotlightModal } from "@/components/spotlight/spotlight-modal";
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SpotlightProvider>
-      {/* Ambient album-art background. Sits behind everything at z-0.
-          AppShell keeps bg-background so the layer is hidden by default
-          until we explicitly opt pages into translucency — without this
-          the AppShell had no backdrop and pages that assumed an opaque
-          parent surface rendered as blank. */}
-      <SpotifyGlobalMount />
-      {/* Outer column: top band (Spotify + alerts + sync) above the
-          main sidebar+content row. This guarantees the top band can
-          never compete with <main>'s vertical flex math, and that the
-          per-page TopBar always sits directly under the global band. */}
-      {/* relative + z-10 puts the shell into the positioned stacking
-          order ABOVE the ambient bg layer (which is position:fixed z-0)
-          so the per-page TopBar / filter rows render in front of the
-          art instead of behind it.
-          bg-transparent lets the ambient album art show through wherever
-          page content doesn't have its own opaque surface (sidebar,
-          cards, sheets all have their own bg). Body still has
-          bg-background as the fallback when no Spotify track is loaded,
-          so the page never goes truly transparent. */}
+      {/* Shell stacking context:
+          - relative + z-10 keeps the shell positioned so the ambient
+            layer below paints behind it (not on top of translucent
+            chrome surfaces).
+          - bg-transparent lets the ambient album art show through
+            wherever page content doesn't have its own opaque bg. */}
       <div className="relative z-10 flex h-screen w-full flex-col overflow-hidden bg-transparent text-foreground">
+        {/* Ambient album-art background MUST live INSIDE this wrapper.
+            backdrop-filter (used by the sprint focus overlay z-100 and
+            other translucent surfaces) only samples within its own
+            stacking context. When the ambient was rendered outside the
+            wrapper, sprint mode's backdrop-blur couldn't reach it and
+            the page looked pure-dark regardless of art opacity. */}
+        <SpotifyGlobalMount />
         {/* The Spotify player used to live here as its own row. It's
             now rendered INSIDE each page's TopBar (see top-bar.tsx) so
             it shares a single 48px row with the page title + actions,
