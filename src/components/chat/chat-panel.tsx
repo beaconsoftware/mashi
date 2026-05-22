@@ -357,9 +357,10 @@ export function ChatToggleButton() {
  * without it being shouty. Hover ramps the glow + the pill lifts. Click
  * triggers the chat panel's slide-in tween.
  *
- * Sits above the sprint widget (z-[100] vs z-[90]) so it never gets
- * buried during a live sprint, but visually it's a different size class
- * — a pill, not a full widget — so the two coexist fine.
+ * Sits at the widget layer (same as SprintWidget). Visually they're
+ * different size classes (pill vs full widget) and positioned far
+ * enough apart that they coexist without a stacking conflict. Below
+ * focus overlays so a sprint takeover covers them.
  */
 export function ChatSummonPill() {
   const { chatOpen, toggleChat } = useAppStore();
@@ -410,7 +411,7 @@ export function ChatSummonPill() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex justify-end p-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-widget flex justify-end p-4">
       <button
         ref={pillRef}
         onClick={toggleChat}

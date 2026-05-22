@@ -28,6 +28,7 @@ import { useS2DItems, useUpdateS2DItem } from "@/hooks/use-s2d";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ChromeBar } from "@/components/layout/primitives";
 
 type BoardView = "cards" | "select";
 type CardDensity = "compact" | "expanded";
@@ -392,7 +393,7 @@ function BoardToolbar({
   onClearSelection: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-border/30 bg-background/55 px-4 py-1.5 text-[11px] backdrop-blur-sm">
+    <ChromeBar className="flex items-center gap-2 border-border/30 px-4 py-1.5 text-[11px]">
       <div className="flex overflow-hidden rounded-md border border-border/40">
         <ToolbarPill
           active={view === "cards"}
@@ -452,7 +453,7 @@ function BoardToolbar({
           </Button>
         )}
       </div>
-    </div>
+    </ChromeBar>
   );
 }
 

@@ -143,4 +143,20 @@
     font-feature-settings: "ss01", "cv01";
     letter-spacing: -0.01em;
   }
+
+  /* ----------------------------------------------------------------
+     Layout doctrine — z-index utility classes.
+     Backed by src/lib/layers.ts. If you change a number here, change
+     it there too. Use these utilities instead of hand-picked z-[*]
+     values. See AGENTS.md "Layout doctrine".
+  ---------------------------------------------------------------- */
+  .z-ground   { z-index: 0;   }
+  .z-shell    { z-index: 10;  }
+  .z-chrome   { z-index: 40;  }
+  .z-dropdown { z-index: 50;  }
+  .z-widget   { z-index: 90;  }
+  .z-focus    { z-index: 100; }
+  .z-sidebar  { z-index: 110; }
+  .z-modal    { z-index: 150; }
+  .z-toast    { z-index: 200; }
 }

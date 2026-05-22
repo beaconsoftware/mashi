@@ -11,6 +11,7 @@ import {
   type S2DItem,
 } from "@/types";
 import { cn } from "@/lib/utils";
+import { ChromeBar } from "@/components/layout/primitives";
 
 export interface S2DFilterState {
   companies: Set<string>;
@@ -147,7 +148,7 @@ export function S2DFilters({
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-border/30 bg-background/55 px-4 py-2 text-[11px] backdrop-blur-sm">
+    <ChromeBar className="flex flex-wrap items-center gap-1.5 border-border/30 px-4 py-2 text-[11px]">
       <Filter className="h-3 w-3 text-muted-foreground" />
 
       {/* Companies */}
@@ -227,7 +228,7 @@ export function S2DFilters({
       <span className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums">
         {anyActive ? `${filteredCount} / ${totalCount}` : `${totalCount} items`}
       </span>
-    </div>
+    </ChromeBar>
   );
 }
 
