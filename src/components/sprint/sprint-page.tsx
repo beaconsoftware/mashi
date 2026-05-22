@@ -89,7 +89,7 @@ export function SprintPage() {
     );
   }
 
-  if (phase === "active" || phase === "minimized") {
+  if (phase === "active") {
     // Sprint complete check, multi-active aware: every block has settled
     // (status done/skipped). Empty blocks → also "complete" (nothing to
     // do; the SprintComplete screen handles that no-ops gracefully).
@@ -103,7 +103,41 @@ export function SprintPage() {
     return <SprintActiveModeMulti />;
   }
 
+  if (phase === "minimized") {
+    // The fullscreen overlay is dismissed; the global SprintWidget (in
+    // AppShell's SprintGlobalMount) floats over every page including
+    // this one. We render a quiet placeholder so /sprint isn't empty.
+    return (
+      <>
+        <TopBar title="Sprint" subtitle="Running in the background." />
+        <MinimizedSplash />
+      </>
+    );
+  }
+
   return null;
+}
+
+function MinimizedSplash() {
+  const unminimize = useSprintStore((s) => s.unminimize);
+  return (
+    <div className="flex h-full flex-1 items-center justify-center p-8">
+      <div className="max-w-md space-y-4 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+          <Sparkles className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <h1 className="text-xl font-semibold tracking-tight">Sprint minimized</h1>
+        <p className="text-sm text-muted-foreground">
+          Your sprint is running in the background. Open the floating widget or
+          tap below to bring it back full-screen.
+        </p>
+        <Button onClick={unminimize} className="gap-1.5">
+          <Play className="h-3.5 w-3.5" />
+          Resume full-screen
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function IdleSplash({ onStart }: { onStart: () => void }) {
