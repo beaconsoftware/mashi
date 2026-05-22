@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
+import { getUserContext } from "@/lib/user-context";
 
 interface ClosedItem {
   id: string;
@@ -66,8 +67,8 @@ export async function propagateClosures(
     if (!c.company_id) continue;
 
     // Sibling items in same company AND owned by same user. The user_id
-    // filter is crucial — without it, closing a Sidd item could cascade
-    // to close a Matt item with the same company name.
+    // filter is crucial — without it, closing one user's item could cascade
+    // to close another user's item with the same company name.
     const { data: open } = await supabase
       .from("s2d_items")
       .select("id, title, description, source_type, pathway")
@@ -85,7 +86,7 @@ export async function propagateClosures(
     );
     if (candidates.length === 0) continue;
 
-    const linkedIds = await askHaikuForLinks(c, candidates);
+    const linkedIds = await askHaikuForLinks(c, candidates, userId);
     if (linkedIds.length === 0) continue;
 
     for (const lid of linkedIds) {
@@ -125,11 +126,14 @@ export async function propagateClosures(
  */
 async function askHaikuForLinks(
   closed: ClosedItem,
-  candidates: OpenItem[]
+  candidates: OpenItem[],
+  userId: string
 ): Promise<string[]> {
+  const userCtx = await getUserContext(userId);
+  const userName = userCtx.firstName;
   const system = `You decide whether tasks on a board describe the same underlying piece of work.
 
-The user (Sidd) is product lead at Beacon Software. One task just closed. From a list of other open tasks in the same portfolio company, identify which ones describe the SAME work and should therefore also close.
+The user (${userName}) is product lead at Beacon Software. One task just closed. From a list of other open tasks in the same portfolio company, identify which ones describe the SAME work and should therefore also close.
 
 Strict rules:
 - Only flag items that are clearly the same underlying piece of work — not just on the same topic or about the same person.

@@ -7,6 +7,7 @@ import {
   emptyBrief,
   renderContextForBrief,
 } from "@/lib/s2d/item-brief";
+import { getUserContext } from "@/lib/user-context";
 import type { S2DItem } from "@/types";
 
 export const runtime = "nodejs";
@@ -62,7 +63,13 @@ export async function GET(
   const itemFacts = formatItemFacts(item as S2DItem);
   const sourceDump = renderContextForBrief(ctx);
 
-  const system = `You are a context consolidator for Sidd's task board. You read every signal Mashi has about ONE task and synthesize a tight, structured brief that downstream agents can act on.
+  const userCtx = await getUserContext(user.id);
+  const userName = userCtx.firstName;
+  const userEmailLine = userCtx.email
+    ? `${userName} writes from "${userCtx.email}". Anything from them is OUTBOUND; anything to them is INBOUND.`
+    : `Identify ${userName}'s outbound vs inbound messages from the source content. Anything from ${userName} is OUTBOUND; anything to them is INBOUND.`;
+
+  const system = `You are a context consolidator for ${userName}'s task board. You read every signal Mashi has about ONE task and synthesize a tight, structured brief that downstream agents can act on.
 
 You output ONE JSON object that matches the schema below. NOTHING ELSE. No prose before or after. No code fences. Just JSON.
 
@@ -75,10 +82,10 @@ Schema:
   "timeline": [
     { "at": ISO8601, "source": "gmail"|"slack"|"linear"|"fireflies"|"calendar"|"internal", "summary": string }
   ],
-  "outstanding_questions": string[],          // explicit asks to Sidd not yet answered
-  "what_sidd_has_said": string[],             // statements Sidd made on the record, short paraphrases
-  "what_sidd_has_not_said": string[],         // gaps in Sidd's communication the other side may be waiting on
-  "open_commitments": string[],               // promises Sidd made that aren't yet fulfilled
+  "outstanding_questions": string[],          // explicit asks to ${userName} not yet answered
+  "what_user_has_said": string[],             // statements ${userName} made on the record, short paraphrases
+  "what_user_has_not_said": string[],         // gaps in ${userName}'s communication the other side may be waiting on
+  "open_commitments": string[],               // promises ${userName} made that aren't yet fulfilled
   "temperature": "escalating" | "steady" | "cooled_off" | "unknown",
   "recommended_next_move": string,            // one sentence
   "stakeholders_to_consider": string[]        // names that aren't core but should be cc'd / looped in
@@ -89,7 +96,7 @@ Rules:
 - Strings stay short. The brief is a synthesis, not a re-dump.
 - If you don't have signal for a field, return an empty array or null.
 - NO em dashes (—) or en dashes (–). Use commas, periods, or rewrite.
-- Sidd writes "sidd.sengupta@beaconsoftware.com". Anything from him is OUTBOUND; anything to him is INBOUND.
+- ${userEmailLine}
 - Today's date is ${new Date().toISOString().slice(0, 10)}.`;
 
   const userPrompt = `# Task facts
@@ -136,11 +143,11 @@ Produce the JSON brief now.`;
       outstanding_questions: Array.isArray(parsed.outstanding_questions)
         ? parsed.outstanding_questions
         : [],
-      what_sidd_has_said: Array.isArray(parsed.what_sidd_has_said)
-        ? parsed.what_sidd_has_said
+      what_user_has_said: Array.isArray(parsed.what_user_has_said)
+        ? parsed.what_user_has_said
         : [],
-      what_sidd_has_not_said: Array.isArray(parsed.what_sidd_has_not_said)
-        ? parsed.what_sidd_has_not_said
+      what_user_has_not_said: Array.isArray(parsed.what_user_has_not_said)
+        ? parsed.what_user_has_not_said
         : [],
       open_commitments: Array.isArray(parsed.open_commitments)
         ? parsed.open_commitments

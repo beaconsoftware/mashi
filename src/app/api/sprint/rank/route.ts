@@ -5,6 +5,7 @@ import {
 } from "@/lib/supabase/server";
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
+import { getUserContext } from "@/lib/user-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +47,9 @@ export async function POST(req: NextRequest) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const system = `You order Sidd's sprint. He's already picked the items; you're just deciding the sequence.
+  const userCtx = await getUserContext(user.id);
+  const userName = userCtx.firstName;
+  const system = `You order ${userName}'s sprint. They've already picked the items; you're just deciding the sequence.
 
 Today: ${today}.
 

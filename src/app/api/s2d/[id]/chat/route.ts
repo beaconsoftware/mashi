@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { streamClaudeText } from "@/lib/anthropic/stream";
+import { getUserContext } from "@/lib/user-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +46,9 @@ export async function POST(
   const contextText = await buildContextText(supabase, item);
 
   const today = new Date().toISOString().slice(0, 10);
-  const system = `You are Mashi, Sidd's AI Chief of Staff, focused on ONE specific task on his board.
+  const userCtx = user ? await getUserContext(user.id) : null;
+  const userName = userCtx?.firstName ?? "the user";
+  const system = `You are Mashi, ${userName}'s AI Chief of Staff, focused on ONE specific task on their board.
 
 Today: ${today}.
 
@@ -62,11 +65,11 @@ ${item.outcome ? `outcome: ${item.outcome}` : ""}
 ${contextText}
 
 # How you answer
-- Sidd opened this task and is asking about it specifically. Stay on this task — don't tour the rest of his board.
+- ${userName} opened this task and is asking about it specifically. Stay on this task — don't tour the rest of their board.
 - Be concrete. Cite actual people, dates, decisions, blockers from the context above.
-- If he asks "what should I do" or "draft a reply", DRAFT IT in his voice (which is direct, no preamble, no LLM tells). No em dashes, no "I'd be happy to", no "Let me know".
-- If something he's asking isn't in the context, say so plainly — don't fabricate.
-- Short answers unless he asks for length. He's busy.`;
+- If they ask "what should I do" or "draft a reply", DRAFT IT in their voice (which is direct, no preamble, no LLM tells). No em dashes, no "I'd be happy to", no "Let me know".
+- If something they're asking isn't in the context, say so plainly — don't fabricate.
+- Short answers unless they ask for length. They're busy.`;
 
   const stream = await streamClaudeText({
     model: "primary",

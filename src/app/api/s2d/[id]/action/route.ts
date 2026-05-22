@@ -8,6 +8,7 @@ import {
   type ActionKey,
 } from "@/lib/s2d/action-agents";
 import { MODELS } from "@/lib/anthropic/client";
+import { getUserContext } from "@/lib/user-context";
 import type { S2DItem } from "@/types";
 
 export const runtime = "nodejs";
@@ -77,6 +78,8 @@ export async function POST(
       ? body.brief
       : emptyBrief(id, MODELS.secondary);
 
+  const userCtx = await getUserContext(user.id);
+
   let prompt;
   try {
     prompt = buildActionPrompt(body.action, {
@@ -84,6 +87,7 @@ export async function POST(
       brief,
       ctx,
       params: body.params,
+      userName: userCtx.firstName,
     });
   } catch (err) {
     return new Response(err instanceof Error ? err.message : "bad action", {

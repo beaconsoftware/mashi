@@ -1,6 +1,7 @@
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getUserContext } from "@/lib/user-context";
 import { buildTriageSystemPrompt, buildTriageUserPrompt } from "./prompts";
 import type { TriageOp, TriageResult, TriageUnit } from "./types";
 import type { SourceType } from "@/types";
@@ -89,7 +90,6 @@ async function callTriageAgent(
   model: string,
   userId: string
 ): Promise<TriageResult> {
-  const { getUserContext } = await import("@/lib/user-context");
   const userCtx = await getUserContext(userId);
   const system = buildTriageSystemPrompt({ userName: userCtx.firstName });
   const user = buildTriageUserPrompt(unit);
@@ -546,7 +546,10 @@ async function findSameWorkOpenItem(args: {
   const pool = candidates.filter((c) => c.source_thread_id !== args.excludeSourceThreadId);
   if (pool.length === 0) return null;
 
-  const system = `You are the dedup gatekeeper for Sidd's task board.
+  const userCtx = await getUserContext(args.userId);
+  const userName = userCtx.firstName;
+
+  const system = `You are the dedup gatekeeper for ${userName}'s task board.
 
 The board tracks ONE row per unit of work — never per source event. The same piece of work can show up in Linear, Gmail, Slack, and Fireflies, and they should ALL collapse into one row. Your job is to decide whether a proposed new task is the same underlying work as something already on the board.
 
@@ -566,7 +569,7 @@ The board tracks ONE row per unit of work — never per source event. The same p
 - Generic versions vs specific ones (e.g. "Triage Linear backlog" vs "Update MAP-412 autoship parsers" — one is meta, the other concrete)
 
 # Already-closed items in the pool
-Some items in the candidate list may show "[CLOSED]" with a done_at date. They were closed by Sidd already. If the proposed new task is the SAME work as one of those, you should STILL match it — the caller uses the match to skip the create entirely (so we don't recreate work the user just closed). Be especially careful here: only match a closed item if you're confident it's the same work, not just topically related.
+Some items in the candidate list may show "[CLOSED]" with a done_at date. They were closed by ${userName} already. If the proposed new task is the SAME work as one of those, you should STILL match it — the caller uses the match to skip the create entirely (so we don't recreate work the user just closed). Be especially careful here: only match a closed item if you're confident it's the same work, not just topically related.
 
 # Calibration
 - "Balance between noise (over-creating dups) and consolidation (wrongly merging) is paramount."

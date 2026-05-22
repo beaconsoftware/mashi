@@ -3,6 +3,7 @@ import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/s
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
 import { getActiveAccessToken } from "@/lib/oauth/flow";
+import { getUserContext } from "@/lib/user-context";
 import type { Pathway, Priority, S2DStatus } from "@/types";
 
 export const runtime = "nodejs";
@@ -80,8 +81,15 @@ export async function POST(req: NextRequest) {
 
   const contextUsed = [...local, ...liveHits].slice(0, 8);
 
+  const userCtx = await getUserContext(user.id);
+
   // 3. Hand to Sonnet for the actual enrichment
-  const draft = await enrichWithSonnet(placeholder, body.companyId ?? null, contextUsed);
+  const draft = await enrichWithSonnet(
+    placeholder,
+    body.companyId ?? null,
+    contextUsed,
+    userCtx.firstName
+  );
 
   return NextResponse.json({ draft, contextUsed });
 }
@@ -218,7 +226,8 @@ async function searchLiveFireflies(
 async function enrichWithSonnet(
   placeholder: string,
   companyId: string | null,
-  contextUsed: EnrichedDraft["context_used"]
+  contextUsed: EnrichedDraft["context_used"],
+  userName: string
 ): Promise<EnrichedDraft> {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -232,11 +241,11 @@ async function enrichWithSonnet(
           )
           .join("\n\n");
 
-  const system = `You enrich rough task placeholders that Sidd jots down into well-formed S2D items.
+  const system = `You enrich rough task placeholders that ${userName} jots down into well-formed S2D items.
 
 Today: ${today}.
 
-Sidd's the product lead at Beacon Software, a PE-backed software holdco. His placeholders are usually 3-15 words of intent. Your job: turn them into a concrete, board-ready task using the related context Mashi found in his data.
+${userName} is the product lead at Beacon Software, a PE-backed software holdco. Their placeholders are usually 3-15 words of intent. Your job: turn them into a concrete, board-ready task using the related context Mashi found in their data.
 
 # What to produce
 - title: clear, specific, 5-12 words. Names the actual deliverable or decision. Not "follow up" — say what.
@@ -253,7 +262,7 @@ Sidd's the product lead at Beacon Software, a PE-backed software holdco. His pla
 - If no relevant context, just enrich the placeholder cleanly — don't fabricate
 
 # Voice
-Match Sidd's style: direct, no preamble, no LLM tells, no em dashes. Use real names from the context.
+Match ${userName}'s style: direct, no preamble, no LLM tells, no em dashes. Use real names from the context.
 
 # Output
 Strict JSON, no fences, no preamble:

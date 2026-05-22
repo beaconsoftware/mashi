@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase/server";
 import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
+import { getUserContext } from "@/lib/user-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +54,9 @@ export async function POST(req: NextRequest) {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const system = `You write 1-2 sentence justifications for why each task got its current pathway + priority. Sidd reads these on a swipe-deck card and decides in 2 seconds whether to approve.
+  const userCtx = await getUserContext(user.id);
+  const userName = userCtx.firstName;
+  const system = `You write 1-2 sentence justifications for why each task got its current pathway + priority. ${userName} reads these on a swipe-deck card and decides in 2 seconds whether to approve.
 
 Today: ${today}.
 
