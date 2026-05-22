@@ -155,23 +155,22 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="pointer-events-auto relative w-full">
-      {/* Compact player bar — always visible, takes a fixed height so
-          its presence in the layout is predictable regardless of queue
-          state. The queue panel below is absolutely positioned so
-          opening it does NOT push page content down. */}
+      {/* Compact player bar — sized to fit inside the 48px page TopBar
+          without crowding it. py-1 + h-7 thumb + h-6 buttons keeps a
+          comfortable 4px margin top/bottom inside the TopBar row. */}
       <div
         className={cn(
-          "flex items-center gap-2 rounded-lg border border-border/40 bg-card/80 px-2 py-1.5 backdrop-blur-md"
+          "flex items-center gap-2 rounded-lg border border-border/40 bg-card/80 px-2 py-1 backdrop-blur-md"
         )}
       >
         {/* Art */}
-        <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded">
+        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded">
           {track?.album_image_url ? (
             <Image
               src={track.album_image_url}
               alt=""
               fill
-              sizes="32px"
+              sizes="28px"
               className="object-cover"
               unoptimized
             />
@@ -198,7 +197,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
             size="icon"
             variant="ghost"
             onClick={() => transport("prev")}
-            className="h-7 w-7"
+            className="h-6 w-6"
             aria-label="Previous track"
           >
             <SkipBack className="h-3.5 w-3.5" />
@@ -207,7 +206,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
             size="icon"
             variant="ghost"
             onClick={() => transport(playing ? "pause" : "play")}
-            className="h-7 w-7"
+            className="h-6 w-6"
             aria-label={playing ? "Pause" : "Play"}
           >
             {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -216,7 +215,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
             size="icon"
             variant="ghost"
             onClick={() => transport("next")}
-            className="h-7 w-7"
+            className="h-6 w-6"
             aria-label="Next track"
           >
             <SkipForward className="h-3.5 w-3.5" />
@@ -242,7 +241,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
           size="icon"
           variant="ghost"
           onClick={() => setExpanded((v) => !v)}
-          className="h-7 w-7"
+          className="h-6 w-6"
           aria-label={expanded ? "Hide queue" : "Show queue"}
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}

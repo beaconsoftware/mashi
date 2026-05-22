@@ -17,6 +17,20 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, Play } from "lucide-react";
 import { useGSAP } from "@gsap/react";
 import { heroEntry, gsap, EASE, DUR } from "@/lib/animation";
+import { TopBar } from "@/components/layout/top-bar";
+
+/**
+ * Map of sprint phase -> a short subtitle for the TopBar so the user
+ * always sees where they are in the planning flow. Active/minimized
+ * is a fixed overlay and renders its own header, so we skip TopBar
+ * there to avoid double-stacking.
+ */
+const SPRINT_SUBTITLE: Record<string, string> = {
+  idle: "Plan your next focus block.",
+  prioritize: "Stage 1 of 3 — pick + order the items you'll work on.",
+  schedule: "Stage 2 of 3 — assign durations + slot positions.",
+  review: "Stage 3 of 3 — lock in the plan.",
+};
 
 /**
  * Top-level /sprint route. Switches what's rendered based on the store's
@@ -54,16 +68,24 @@ export function SprintPage() {
   );
 
   if (phase === "idle") {
-    return <IdleSplash onStart={enterPlanner} />;
+    return (
+      <>
+        <TopBar title="Sprint" subtitle={SPRINT_SUBTITLE.idle} />
+        <IdleSplash onStart={enterPlanner} />
+      </>
+    );
   }
 
   if (phase === "prioritize" || phase === "schedule" || phase === "review") {
     return (
-      <div ref={stageWrapRef} className="flex h-full flex-1 flex-col min-h-0">
-        {phase === "prioritize" && <PlannerPrioritizeShell />}
-        {phase === "schedule" && <PlannerSchedule />}
-        {phase === "review" && <PlannerReview />}
-      </div>
+      <>
+        <TopBar title="Sprint" subtitle={SPRINT_SUBTITLE[phase]} />
+        <div ref={stageWrapRef} className="flex h-full flex-1 flex-col min-h-0">
+          {phase === "prioritize" && <PlannerPrioritizeShell />}
+          {phase === "schedule" && <PlannerSchedule />}
+          {phase === "review" && <PlannerReview />}
+        </div>
+      </>
     );
   }
 
@@ -74,6 +96,9 @@ export function SprintPage() {
     const allSettled =
       blocks.length === 0 ||
       blocks.every((b) => b.status === "done" || b.status === "skipped");
+    // Active mode is a fullscreen overlay (sprint-active-mode-multi)
+    // so we deliberately skip <TopBar /> here — the overlay covers
+    // the dashboard's top row anyway.
     if (allSettled) return <SprintComplete />;
     return <SprintActiveModeMulti />;
   }

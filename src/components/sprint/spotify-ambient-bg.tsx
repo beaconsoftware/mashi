@@ -103,6 +103,15 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
       ref={rootRef}
       aria-hidden
       className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      // Promote to its own compositor layer so the expensive
+      // backdrop-blur + SVG filters don't re-paint on every page
+      // navigation. Mashi is a single-page app; AppShell stays mounted
+      // across routes, so this layer can persist on the GPU.
+      style={{
+        willChange: "transform",
+        transform: "translateZ(0)",
+        contain: "layout paint",
+      }}
     >
       {/* IMPORTANT: the displacement filter is NOT applied here on the
           root. Previously it was, which meant the darkener layer + the
@@ -166,18 +175,21 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
         style={{ filter: "url(#mashi-spotify-grain)" }}
       />
 
-      {/* Color darkener — keeps foreground text legible. Lighter still
-          (was bg/55 + blur-xl) so the album art is actually perceptible
-          across the page, not just hinted. Verified visually with a live
-          browser inspection at /s2d to land on these numbers. */}
-      <div className="absolute inset-0 bg-background/45 backdrop-blur-md" />
+      {/* Color darkener — keeps foreground text legible. Bumped from
+          bg/45 to bg/60 because bright/medium-luminance art was washing
+          out muted-foreground text (filter chips, secondary labels,
+          empty-state copy). The art is still visibly tinted through
+          this layer — just less aggressive. */}
+      <div className="absolute inset-0 bg-background/60 backdrop-blur-md" />
 
-      {/* Vignette */}
+      {/* Vignette — also bumped (0.25/0.55 -> 0.35/0.7) so edges (where
+          the sidebar and other dark surfaces meet the ambient) don't
+          have a bright halo against muted text. */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at center, transparent 0%, hsl(var(--background) / 0.25) 70%, hsl(var(--background) / 0.55) 100%)",
+            "radial-gradient(ellipse at center, transparent 0%, hsl(var(--background) / 0.35) 70%, hsl(var(--background) / 0.7) 100%)",
         }}
       />
     </div>
