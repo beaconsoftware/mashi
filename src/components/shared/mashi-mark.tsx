@@ -1,19 +1,23 @@
 /**
  * MashiMark — the brand logo.
  *
- * A record-disk / bullseye hybrid: a solid black disk centered on the
- * canvas with a small yellow dot in its middle (the spindle), and a
- * series of thin concentric contour rings emerging outward like
- * record grooves / target rings / sound waves.
+ * A record / sonar-target hybrid. Composition:
+ *   - Large solid black disk centered on the canvas (the "vinyl").
+ *   - Yellow center dot (the spindle / bullseye).
+ *   - Yellow concentric contour rings INSIDE the black disk,
+ *     radiating outward from the dot like uneven sound reverberations.
+ *     Each ring is an arc-with-gaps (varying stroke-dasharray) so the
+ *     rings feel like a live audio waveform rather than a perfect
+ *     target.
  *
- * The inner spindle dot is rendered with a mask so it punches through
- * the disk to whatever sits behind the SVG (the yellow brand tile in
- * the sidebar, the favicon's yellow square, etc.) — works on any
- * backdrop without hard-coding the dot color.
- *
- * Single-color via currentColor so disk + rings inherit the parent
- * text color (typically black on the yellow brand tile).
+ * Yellow accents are hardcoded to the brand yellow so the mark reads
+ * the same whatever surface it sits on. The black disk is currentColor
+ * so the disk recolors naturally when nested in a non-default-text
+ * environment.
  */
+
+const BRAND_YELLOW = "hsl(43 96% 56%)";
+
 export function MashiMark({
   size = 24,
   className,
@@ -32,35 +36,48 @@ export function MashiMark({
       role="img"
       aria-label={title}
       fill="none"
-      stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <defs>
-        {/* Mask: white everywhere shows the disk, black at the center
-            cuts out the spindle. The resulting hole reveals whatever
-            background sits behind the SVG. */}
-        <mask id="mashi-mark-spindle" maskUnits="userSpaceOnUse">
-          <rect width="32" height="32" fill="white" />
-          <circle cx="16" cy="16" r="1.6" fill="black" />
-        </mask>
-      </defs>
+      {/* Solid black disk — the body of the mark. */}
+      <circle cx="16" cy="16" r="13.5" fill="currentColor" stroke="none" />
 
-      {/* Outer contour rings — thin grooves emerging outward. Opacity
-          drops slightly toward the outside so they feel like ripples. */}
-      <circle cx="16" cy="16" r="14" strokeWidth="0.9" opacity="0.45" />
-      <circle cx="16" cy="16" r="11.5" strokeWidth="0.9" opacity="0.7" />
-      <circle cx="16" cy="16" r="9" strokeWidth="0.9" opacity="0.9" />
+      {/* Yellow reverberation rings inside the disk. Each ring uses a
+          distinct stroke-dasharray + rotation so the gaps fall at
+          different angular positions — reads as a live waveform with
+          uneven peaks instead of a clean concentric target. */}
+      <g stroke={BRAND_YELLOW} fill="none" strokeLinecap="round">
+        <circle
+          cx="16"
+          cy="16"
+          r="10.5"
+          strokeWidth="0.9"
+          strokeDasharray="9 5 14 4 7 6"
+          opacity="0.55"
+          transform="rotate(12 16 16)"
+        />
+        <circle
+          cx="16"
+          cy="16"
+          r="8"
+          strokeWidth="1"
+          strokeDasharray="11 4 6 5 16 3"
+          opacity="0.75"
+          transform="rotate(-30 16 16)"
+        />
+        <circle
+          cx="16"
+          cy="16"
+          r="5.5"
+          strokeWidth="1.1"
+          strokeDasharray="14 3 9 4"
+          opacity="0.95"
+          transform="rotate(48 16 16)"
+        />
+      </g>
 
-      {/* Solid disk with the spindle cut out via mask. */}
-      <circle
-        cx="16"
-        cy="16"
-        r="6.2"
-        fill="currentColor"
-        stroke="none"
-        mask="url(#mashi-mark-spindle)"
-      />
+      {/* Yellow center dot — the bullseye. */}
+      <circle cx="16" cy="16" r="1.7" fill={BRAND_YELLOW} stroke="none" />
     </svg>
   );
 }
