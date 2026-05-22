@@ -154,22 +154,11 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <div className="pointer-events-auto w-full">
-      {/* Roll-up queue */}
-      {expanded && queue.length > 0 && (
-        <div className="mb-1 rounded-lg border border-border/40 bg-card/80 p-2 backdrop-blur-md">
-          <div className="mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Up next ({queue.length})
-          </div>
-          <ol className="max-h-56 space-y-0.5 overflow-y-auto">
-            {queue.map((t, i) => (
-              <QueueRow key={`${t.id}-${i}`} t={t} />
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {/* Compact player bar */}
+    <div className="pointer-events-auto relative w-full">
+      {/* Compact player bar — always visible, takes a fixed height so
+          its presence in the layout is predictable regardless of queue
+          state. The queue panel below is absolutely positioned so
+          opening it does NOT push page content down. */}
       <div
         className={cn(
           "flex items-center gap-2 rounded-lg border border-border/40 bg-card/80 px-2 py-1.5 backdrop-blur-md"
@@ -258,6 +247,32 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
         </Button>
+      </div>
+
+      {/* Queue dropdown — absolute-positioned BELOW the player bar so
+          expanding it does not push page content down. max-h-72 keeps
+          it from running off-screen on short viewports; the inner ol
+          scrolls. transition-* + opacity gives the panel a quick
+          snap-down feel, mirroring Spotify's own bottom drawer. */}
+      <div
+        className={cn(
+          "absolute left-0 right-0 top-full z-50 mt-1 origin-top",
+          "rounded-lg border border-border/40 bg-card/95 p-2 shadow-2xl backdrop-blur-md",
+          "transition duration-150 ease-out",
+          expanded && queue.length > 0
+            ? "pointer-events-auto scale-100 opacity-100"
+            : "pointer-events-none scale-95 opacity-0"
+        )}
+        aria-hidden={!expanded}
+      >
+        <div className="mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Up next ({queue.length})
+        </div>
+        <ol className="max-h-72 space-y-0.5 overflow-y-auto">
+          {queue.map((t, i) => (
+            <QueueRow key={`${t.id}-${i}`} t={t} />
+          ))}
+        </ol>
       </div>
 
       {premiumWarn && (
