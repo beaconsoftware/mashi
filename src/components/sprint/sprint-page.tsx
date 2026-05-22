@@ -122,7 +122,10 @@ function MinimizedSplash() {
   const unminimize = useSprintStore((s) => s.unminimize);
   return (
     <div className="flex h-full flex-1 items-center justify-center p-8">
-      <div className="max-w-md space-y-4 text-center">
+      {/* Backdrop-blurred card so the copy stays legible against the
+          ambient album-art layer when Spotify is playing during a
+          minimized sprint. */}
+      <div className="max-w-md space-y-4 rounded-2xl border border-border/40 bg-background/60 px-8 py-8 text-center backdrop-blur-sm">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
           <Sparkles className="h-5 w-5 text-muted-foreground" />
         </div>
@@ -159,7 +162,10 @@ function IdleSplash({ onStart }: { onStart: () => void }) {
 
   return (
     <div ref={rootRef} className="flex h-full flex-1 items-center justify-center p-8">
-      <div className="max-w-md space-y-4 text-center">
+      {/* Backdrop-blurred card mirrors the empty-state pattern from
+          <EmptyState> — the splash sits over the ambient album-art layer
+          and needs its own opaque surface to read. */}
+      <div className="max-w-md space-y-4 rounded-2xl border border-border/40 bg-background/60 px-8 py-8 text-center backdrop-blur-sm">
         <div ref={sparkleRef} className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15">
           <Sparkles className="h-5 w-5 text-primary" />
         </div>

@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 /**
  * Compact multi-select list view for sprint planning. Alternative to
  * the card-deck swipe UI. Same data, same actions — just a denser

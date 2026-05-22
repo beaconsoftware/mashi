@@ -44,6 +44,56 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Layout doctrine + design token guards. These greps are cheap so
+      # we run them in the verify job rather than spinning up a separate
+      # worker. If they fail, the PR has reached for an arbitrary z-index
+      # or an off-scale translucent surface — see AGENTS.md "Layout
+      # doctrine" + "Design tokens".
+      - name: Audit layers
+        run: pnpm audit:layers
+
+      - name: Audit translucency
+        run: pnpm audit:translucency
+
+  visual:
+    name: Visual regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+    # The visual job runs but doesn't fail the PR on diff yet — baselines
+    # are still being established and the dashboard data depends on
+    # seeded Supabase fixtures (see tests/visual/README.md). Once a
+    # canonical test user is provisioned in CI, flip continue-on-error
+    # to false. The job artifact (diff report) is uploaded either way so
+    # reviewers can spot regressions even while the gate is soft.
+    continue-on-error: true
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+      SUPABASE_SERVICE_ROLE_KEY: ci-build-placeholder
+      ANTHROPIC_API_KEY: ci-build-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run visual tests
+        run: pnpm test:visual
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   build:
     name: Next build
     runs-on: ubuntu-latest

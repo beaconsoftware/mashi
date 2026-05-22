@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 /**
  * Kanban-style multi-select view for sprint planning. Third view mode
  * alongside Card (swipe) and List (dense flat). Groups eligibleItems by

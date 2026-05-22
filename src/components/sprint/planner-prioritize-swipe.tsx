@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 /**
  * Swipe-based sprint planner — alternative to the list-based
  * PlannerPrioritize for users who prefer the Tinder-style

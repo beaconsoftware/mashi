@@ -214,6 +214,142 @@ If you have a legitimate carve-out (a self-contained local stack), add
 the file to the EXCLUDE list in `scripts/audit-layers.sh` and document
 why.
 
+## Design tokens
+
+The layout doctrine controls z-ordering and surface primitives. Design
+tokens control everything else — spacing, radius, opacity, type, motion.
+Same intent: one sanctioned scale per dimension so future features can't
+quietly drift into "every page looks subtly different".
+
+### Spacing
+
+| Token  | When                                                  |
+|--------|-------------------------------------------------------|
+| `gap-1`   | Icon next to its label (≈ 4px).                    |
+| `gap-1.5` | Tight chip / pill clusters.                        |
+| `gap-2`   | Default control-row spacing (buttons in a footer). |
+| `gap-3`   | Card-section spacing (heading + body).             |
+| `gap-4`   | Column / row spacing inside a Surface.             |
+| `gap-6`   | Page-level section gaps.                           |
+
+Page padding: `p-3` for compact dashboards (S2D, sprint), `p-4` for
+content-dense pages (inbox, calendar), `p-6` only for hero / onboarding.
+
+### Radius
+
+| Token         | When                                                  |
+|---------------|-------------------------------------------------------|
+| `rounded`     | Inline chips, badges, controls under 24px tall.       |
+| `rounded-md`  | Default for cards, inputs, buttons.                   |
+| `rounded-lg`  | Larger surfaces, modal bodies.                        |
+| `rounded-xl`  | `<Surface>` default — top-level dashboard cards.      |
+| `rounded-2xl` | Backdrop-blurred empty states, hero CTAs.             |
+
+Don't reach for arbitrary radii (`rounded-[7px]`). If a radius doesn't
+match one of these, the design conversation is probably wrong.
+
+### Opacity (translucent surfaces)
+
+Sanctioned steps on `bg-*/<N>` tokens:
+
+| Step  | When                                                            |
+|-------|-----------------------------------------------------------------|
+| `/15` | Faint tinted overlays inside an opaque parent (focus overlay).  |
+| `/40` | Backdrop on a `<FocusOverlay>` body in light variant.           |
+| `/55` | `<ChromeBar>` / `<SectionHeader>` strip — translucent edge bars.|
+| `/60` | `<EmptyState>` card body — backdrop-blurred empty placeholder.  |
+| `/80` | Cards over a busy ambient layer that need to read as solid.     |
+| `/95` | Headers / overlays that must read as fully solid but keep a tint.|
+
+Anything off-scale (`/5`, `/10`, `/20`, `/25`, `/30`, `/35`, `/50`,
+`/70`, `/90`) triggers `pnpm audit:translucency`. Carve-outs:
+
+```tsx
+// translucency-audit-ok: hover state — visual designer signed off
+"hover:bg-accent/30"
+```
+
+A file-wide marker (`translucency-audit-ok: file`) skips the entire
+file. It's used today on the ~30 legacy modules pre-existing the
+doctrine — they'll be migrated case-by-case as components are touched.
+Don't add new files to that grandfather list.
+
+### Text size
+
+| Token         | When                                                  |
+|---------------|-------------------------------------------------------|
+| `text-[10px]` | Inline metadata (timestamps, counts).                 |
+| `text-[11px]` | Section headers, badges (uppercase).                  |
+| `text-xs`     | Default body in dense lists.                          |
+| `text-sm`     | Standard paragraph copy.                              |
+| `text-base`   | Headlines, key labels.                                |
+
+Use Tailwind tokens (`text-xs`, `text-sm`) over arbitrary
+(`text-[12px]`) unless you specifically need a non-standard step (the
+10/11px scales below `text-xs` justify the arbitrary syntax).
+
+### Motion
+
+All motion goes through `DUR` and `EASE` from
+`src/lib/animation/index.ts`:
+
+| Token         | Approx | When                                          |
+|---------------|--------|-----------------------------------------------|
+| `DUR.micro`   | 180ms  | Tiny icon / button reactions.                 |
+| `DUR.short`   | 280ms  | Hover / focus / dropdown.                     |
+| `DUR.base`    | 420ms  | Entry tweens, route transitions.              |
+| `DUR.hero`    | 700ms  | Sprint takeover, sprint-complete recap.       |
+| `EASE.out`    | —      | General-purpose entry / drift.                |
+| `EASE.outQuick`| —     | Snappier button / icon reactions.             |
+| `EASE.elastic`| —      | Hero moments only (sprint launch).            |
+| `EASE.back`   | —      | Sheets / panels with a slight overshoot.      |
+
+Wrap every tween in `withMotion(() => ...)` so users with
+`prefers-reduced-motion: reduce` get no animation. Hand-rolled
+`gsap.to(el, { duration: 0.5 })` without the helper is a smell.
+
+## Foundation invariants
+
+These rules are load-bearing. Every PR that fails one of them is
+guaranteed to regress something:
+
+1. **Every translucent surface uses a primitive OR a `// translucency-
+   audit-ok: <reason>` carve-out.** `pnpm audit:translucency` enforces.
+   If you reach for `bg-card/30` ad-hoc, the audit will fail. Choose a
+   sanctioned step or wrap in `<ChromeBar>` / `<SectionHeader>` /
+   `<Surface>` / `<EmptyState>`.
+2. **Every fullscreen overlay portals through `#mashi-overlay-root` via
+   `<FocusOverlay>`.** Two owners rendering an overlay double-fires
+   side-effects and produces the SprintComplete-flash bug. One owner per
+   overlay.
+3. **Every Spotify-state-dependent component subscribes via
+   `useSpotifyState({ enabled: ... })`.** Hand-rolled polling drifts.
+4. **Visual tests must pass.** PRs that change a dashboard page must
+   regenerate baselines (`pnpm test:visual:update`) and commit the new
+   PNGs. PRs that fail the pixel-diff without a baseline update get
+   bounced.
+5. **Z-index goes through `Z.*` constants / `z-*` utility classes only.**
+   `pnpm audit:layers` enforces. No `z-[103]`.
+
+### Component decision tree
+
+Reach for the primitive FIRST, hand-rolled JSX never. The mapping:
+
+| I need to render…                                          | Use…                                  |
+|------------------------------------------------------------|---------------------------------------|
+| Top-of-page edge bar (toolbar, filter row, tab strip)      | `<ChromeBar>`                         |
+| Strip-bar at the top of a column / list / card section     | `<SectionHeader>`                     |
+| A card / panel sitting over the ambient ground             | `<Surface>`                           |
+| Ambient bg layer (album art, gradient, vignette)           | `<AmbientGround>`                     |
+| Full-screen takeover (sprint mode, future focus modes)     | `<FocusOverlay>`                      |
+| The portal anchor for overlays (one of, in AppShell)       | `<OverlayRoot>`                       |
+| "No items yet" placeholder over the ambient layer          | `<EmptyState>`                        |
+| Anything else translucent                                  | A sanctioned `/N` step + audit comment|
+
+If you find yourself wanting a primitive that doesn't exist, add it to
+`src/components/layout/primitives.tsx` rather than hand-rolling. Other
+features will benefit from the same surface.
+
 ## React Compiler / lint quirks
 
 The React Compiler ESLint plugin is strict. Patterns that look fine but error:
