@@ -34,7 +34,7 @@ export function SprintBar() {
   const sprintLive = sprintPhase === "active" || sprintPhase === "minimized";
 
   return (
-    <div className="flex items-center gap-4 border-b border-border/40 bg-secondary/20 px-4 py-2 text-[11px]">
+    <div className="flex items-center gap-4 border-b border-border/40 bg-background/55 px-4 py-2 text-[11px] backdrop-blur-sm">
       <Stat label="todo" value={todo} accent />
       <Stat label="in flight" value={inProgress} />
       <Stat label="waiting" value={inQueue} />

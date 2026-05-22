@@ -147,7 +147,7 @@ export function S2DFilters({
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-border/30 px-4 py-2 text-[11px]">
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-border/30 bg-background/55 px-4 py-2 text-[11px] backdrop-blur-sm">
       <Filter className="h-3 w-3 text-muted-foreground" />
 
       {/* Companies */}
@@ -240,7 +240,7 @@ function ChipGroup({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1">
-      <span className="text-[9px] uppercase tracking-wider text-muted-foreground/70">
+      <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       {children}
