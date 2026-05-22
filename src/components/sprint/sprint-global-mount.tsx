@@ -1,37 +1,43 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useSprintStore } from "@/store/sprint-store";
 import { SprintActiveModeMulti } from "./sprint-active-mode-multi";
 import { SprintComplete } from "./sprint-complete";
 import { SprintWidget } from "./sprint-widget";
 
 /**
- * Top-level mount in AppShell. The active-mode component renders a fixed
- * overlay only when phase==="active"; the widget renders only when
- * phase==="minimized". Together they make the sprint visible from any
- * page in the dashboard.
+ * Top-level mount in AppShell. Renders the sprint surface on EVERY route
+ * EXCEPT /sprint itself — which has its own page-level renderer that
+ * already handles active / minimized / complete state. Mounting both
+ * surfaces simultaneously double-instantiates SprintComplete on sprint
+ * end and the two side-effecting copies race each other (POST
+ * /api/sprint/session, exitSprint reset), making the recap flash and
+ * disappear.
  *
- * IMPORTANT: this is the surface that fires when the user starts a sprint
- * from anywhere except /sprint. /sprint's own page renders the same
- * components — both surfaces must mirror its completion-transition logic
- * (when every block is done/skipped, render SprintComplete instead of
- * leaving the user stuck in an empty active overlay).
+ * On non-/sprint routes:
+ *  - phase==="active" + allSettled → SprintComplete (recap recap)
+ *  - phase==="active" otherwise    → SprintActiveModeMulti overlay
+ *  - phase==="minimized"           → handled by SprintWidget below
  */
 export function SprintGlobalMount() {
+  const pathname = usePathname();
   const phase = useSprintStore((s) => s.phase);
   const blocks = useSprintStore((s) => s.blocks);
 
-  // Mirror sprint-page.tsx: every block settled → show the recap, not the
-  // empty active overlay. blocks.length === 0 also counts as settled so
-  // SprintComplete renders its no-op state if the user somehow lands here
-  // with no plan.
+  // The /sprint route renders its own copy of these. Skipping them here
+  // avoids the double-mount race.
+  const onSprintRoute = pathname === "/sprint";
+
   const allSettled =
     blocks.length === 0 ||
     blocks.every((b) => b.status === "done" || b.status === "skipped");
 
   return (
     <>
-      {phase === "active" && (allSettled ? <SprintComplete /> : <SprintActiveModeMulti />)}
+      {!onSprintRoute &&
+        phase === "active" &&
+        (allSettled ? <SprintComplete /> : <SprintActiveModeMulti />)}
       <SprintWidget />
     </>
   );
