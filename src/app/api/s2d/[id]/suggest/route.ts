@@ -3,6 +3,7 @@ import { streamClaudeText } from "@/lib/anthropic/stream";
 import { buildS2DSystemPrompt } from "@/lib/anthropic/prompts";
 import { getPathwayPrompt } from "@/lib/anthropic/pathway-prompts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getUserContext } from "@/lib/user-context";
 import type { S2DItem } from "@/types";
 import type { StyleProfile } from "@/types/style";
 
@@ -34,11 +35,16 @@ export async function POST(req: NextRequest) {
     return new Response("Missing item fields", { status: 400 });
   }
 
-  const system = buildS2DSystemPrompt({ styleProfile });
-  const userPrompt = getPathwayPrompt(item, item.pathway);
-
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
+
+  const userCtx = user ? await getUserContext(user.id) : null;
+  const system = buildS2DSystemPrompt({
+    userName: userCtx?.firstName,
+    userTimezone: userCtx?.timezone,
+    styleProfile,
+  });
+  const userPrompt = getPathwayPrompt(item, item.pathway);
 
   const stream = await streamClaudeText({
     model: "primary",

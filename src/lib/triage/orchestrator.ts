@@ -89,7 +89,9 @@ async function callTriageAgent(
   model: string,
   userId: string
 ): Promise<TriageResult> {
-  const system = buildTriageSystemPrompt();
+  const { getUserContext } = await import("@/lib/user-context");
+  const userCtx = await getUserContext(userId);
+  const system = buildTriageSystemPrompt({ userName: userCtx.firstName });
   const user = buildTriageUserPrompt(unit);
 
   const resp = await trackedCreate(

@@ -48,7 +48,7 @@ The JSON must conform exactly to the schema described in the user message.`;
   "uses_dashes": boolean,
   "capitalization": "standard" | "lowercase" | "mixed",
   "typical_greeting": "exact greeting if there's a pattern (e.g. \\"Hey [name]\\", \\"\\" if no greeting)",
-  "typical_signoff": "exact signoff if there's a pattern (e.g. \\"— Sidd\\", \\"thanks\\", \\"\\" if no signoff)",
+  "typical_signoff": "exact signoff if there's a pattern (e.g. \\"thanks\\", first-name signature, \\"\\" if no signoff)",
   "recurring_phrases": ["short phrases or words the author uses repeatedly"],
   "few_shot_examples": [
     { "context": "1-line description of the situation", "message": "verbatim or near-verbatim short excerpt" }

@@ -3,6 +3,7 @@ import { MODELS } from "@/lib/anthropic/client";
 import { trackedCreate } from "@/lib/anthropic/tracked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { collectWritingSamples } from "@/lib/style/sample-collector";
+import { getUserContext } from "@/lib/user-context";
 import type { StyleProfile } from "@/types/style";
 
 export const runtime = "nodejs";
@@ -44,7 +45,8 @@ export async function POST() {
 Return ONLY a valid JSON object — no preamble, no markdown fences, no commentary.
 The JSON must conform exactly to the schema described in the user message.`;
 
-  const userMsg = `Here are ${collect.samples.length} messages written by one person (the user — Sidd, product/M&A lead at Beacon Software, a PE holdco). Analyze them and return a JSON object with this exact shape:
+  const userCtx = await getUserContext(user.id);
+  const userMsg = `Here are ${collect.samples.length} messages written by one person (${userCtx.firstName}, product / M&A lead at Beacon Software, a PE holdco). Analyze them and return a JSON object with this exact shape:
 
 {
   "summary": "2–3 sentence description of how this person writes. Be concrete. ≤ 80 words.",

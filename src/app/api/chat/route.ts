@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { streamClaudeText } from "@/lib/anthropic/stream";
 import { buildChatSystemPrompt } from "@/lib/anthropic/prompts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getUserContext } from "@/lib/user-context";
 import type { StyleProfile } from "@/types/style";
 
 export const runtime = "nodejs";
@@ -30,7 +31,12 @@ export async function POST(req: NextRequest) {
     return new Response("no user message", { status: 400 });
   }
 
+  // Pull the caller's name/timezone so the chat prompt addresses them
+  // personally instead of hardcoding "Sidd".
+  const userCtx = user ? await getUserContext(user.id) : null;
   const system = buildChatSystemPrompt({
+    userName: userCtx?.firstName,
+    userTimezone: userCtx?.timezone,
     currentPage: body.currentPage,
     styleProfile: body.styleProfile,
   });

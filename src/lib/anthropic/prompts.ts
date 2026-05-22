@@ -9,8 +9,12 @@ interface PromptContext {
   styleProfile?: StyleProfile | null;
 }
 
+// Default fallback when the caller hasn't passed a real user context yet.
+// Generic "the user" is intentional — historically this was hardcoded to
+// "Sidd" which leaked his name into every other user's LLM responses.
+// Always prefer to pass an actual userName from getUserContext().
 const DEFAULTS: Required<Omit<PromptContext, "styleProfile" | "currentPage">> = {
-  userName: "Sidd",
+  userName: "the user",
   currentDate: new Date().toISOString().slice(0, 10),
   userTimezone: "America/Toronto",
 };

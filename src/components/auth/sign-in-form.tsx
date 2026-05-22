@@ -23,10 +23,10 @@ function parseAuthError(search: URLSearchParams, hash: string): string | null {
 
   // Friendly mapping for the common ones we've actually seen
   if (description.includes("Database error saving new user")) {
-    return "Supabase couldn't create your account. This is usually a server-side trigger failure — ping Sidd.";
+    return "Supabase couldn't create your account. This is usually a server-side trigger failure, ping an admin.";
   }
   if (description.toLowerCase().includes("not on the signup allowlist")) {
-    return "Your email domain isn't on the allowlist yet. Ask Sidd to add it.";
+    return "Your email domain isn't on the allowlist yet. Ask an admin to add it.";
   }
   if (code === "access_denied" || error === "access_denied") {
     return "Sign-in was cancelled. Try again whenever.";
