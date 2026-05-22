@@ -103,15 +103,21 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
       ref={rootRef}
       aria-hidden
       className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
-      style={{ filter: "url(#mashi-spotify-distort)" }}
     >
+      {/* IMPORTANT: the displacement filter is NOT applied here on the
+          root. Previously it was, which meant the darkener layer + the
+          vignette gradient also got displaced — and displacing a smooth
+          gradient produces visible wavy dark splotches at the edges
+          where the displacement is strongest. Applying the filter
+          exclusively to each ArtLayer keeps the smoothing layers
+          undistorted. */}
       <svg
         className="pointer-events-none absolute -z-10 h-0 w-0 opacity-0"
         aria-hidden
         focusable="false"
       >
         <defs>
-          <filter id="mashi-spotify-distort" x="-10%" y="-10%" width="120%" height="120%">
+          <filter id="mashi-spotify-distort" x="-15%" y="-15%" width="130%" height="130%">
             <feTurbulence
               type="fractalNoise"
               baseFrequency="0.008 0.012"
@@ -119,7 +125,7 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
               seed="3"
               result="noise"
             />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="36" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="24" />
           </filter>
           {/* Grain overlay filter — sharp noise so it reads as film grain.
               The animation shifts baseFrequency over time which produces
@@ -192,11 +198,18 @@ const ArtLayer = forwardRef<
       style={{
         opacity: initialOpacity,
         backgroundImage: `url(${url})`,
-        // Reduced blur from 60px to 36px so more of the art's color +
-        // form reads through. Saturation kept high so it feels lush.
-        // Scale 1.15 prevents the blurred edges from showing.
-        filter: "blur(36px) saturate(1.4) brightness(0.9)",
-        transform: "scale(1.15)",
+        // Stack: displacement first (so it reads as liquid distortion
+        // on the unblurred source) -> blur -> saturate -> brightness.
+        // Order matters: blurring after displacement smooths the
+        // displacement edges; reversing the stack creates a sharper,
+        // more aggressive distortion that's harder to make read as
+        // ambient.
+        filter:
+          "url(#mashi-spotify-distort) blur(36px) saturate(1.4) brightness(0.9)",
+        // scale 1.35 gives the displacement filter plenty of art to
+        // pull from at the edges so we don't get void/black splotches
+        // pulled in at the viewport boundary.
+        transform: "scale(1.35)",
       }}
     />
   );
