@@ -159,6 +159,19 @@ interface SprintState {
    */
   reopenBlock: (s2dItemId: string, target: "active" | "bench") => void;
 
+  /**
+   * Periodic timer-settle. Sweeps every active-slot block and folds its
+   * live (now - activatedAtMs) delta into accumulatedMs, re-anchoring
+   * activatedAtMs = now. This is a no-op when paused / no active slot.
+   *
+   * Called from sprint-active-mode-multi.tsx every few seconds so the
+   * persist middleware's partialize captures the in-flight elapsed
+   * time. Without it, refreshing while in the middle of a slot loses
+   * everything that ticked since the last user action — the timer
+   * visually restarted from 0.
+   */
+  tick: () => void;
+
   pause: () => void;
   resume: () => void;
   minimize: () => void;
@@ -532,6 +545,30 @@ export const useSprintStore = create<SprintState>()(
           }
           // Falls onto the bench. User can drag/pull into a slot afterwards.
           return { ...s, blocks: updatedBlocks };
+        }),
+
+      tick: () =>
+        set((s) => {
+          if (s.paused) return s;
+          if (s.activeSlotIds.length === 0) return s;
+          const now = Date.now();
+          let dirty = false;
+          const updated = s.blocks.map((b) => {
+            if (!s.activeSlotIds.includes(b.s2dItemId)) return b;
+            if (b.activatedAtMs == null) return b;
+            const delta = now - b.activatedAtMs;
+            // Sub-second deltas aren't worth a setState (and partialize)
+            // round-trip; the local force-tick handles the visual.
+            if (delta < 500) return b;
+            dirty = true;
+            return {
+              ...b,
+              accumulatedMs: (b.accumulatedMs ?? 0) + delta,
+              activatedAtMs: now,
+            };
+          });
+          if (!dirty) return s;
+          return { ...s, blocks: updated };
         }),
 
       pause: () =>

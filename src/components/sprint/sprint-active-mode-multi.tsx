@@ -121,11 +121,39 @@ export function SprintActiveModeMulti() {
     const id = setTimeout(() => setBanner(null), 8000);
     return () => clearTimeout(id);
   }, [banner]);
+  // Local force tick for the 1s clock display (cheap re-render only).
   useEffect(() => {
     if (paused) return;
     const id = setInterval(() => force((x) => x + 1), 1000);
     return () => clearInterval(id);
   }, [paused]);
+
+  // Persist tick: every 5s, fold the in-flight delta of each active
+  // slot into accumulatedMs via the store action. The persist
+  // middleware's partialize captures the settled state on every
+  // setState, so this is what keeps a hard-refresh from wiping the
+  // timer back to zero. The fine-grained 1s display tick above is
+  // local and doesn't touch the store.
+  const tick = useSprintStore((s) => s.tick);
+  useEffect(() => {
+    if (paused) return;
+    const id = setInterval(() => tick(), 5000);
+    return () => clearInterval(id);
+  }, [paused, tick]);
+
+  // Also settle on tab visibility change / window unload so a manual
+  // refresh or tab close has the most recent elapsed already written.
+  useEffect(() => {
+    const handler = () => tick();
+    window.addEventListener("beforeunload", handler);
+    window.addEventListener("pagehide", handler);
+    document.addEventListener("visibilitychange", handler);
+    return () => {
+      window.removeEventListener("beforeunload", handler);
+      window.removeEventListener("pagehide", handler);
+      document.removeEventListener("visibilitychange", handler);
+    };
+  }, [tick]);
 
   // Migration / recovery: if a sprint was started before activeSlotIds
   // was persisted (pre-ff090bd), or before multi-active shipped, the
