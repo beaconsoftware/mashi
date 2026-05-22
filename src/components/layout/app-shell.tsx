@@ -10,10 +10,7 @@ import { ConnectionHealthAlert } from "@/components/layout/connection-health-ale
 // exported and can be re-mounted later if we want it back.
 import { SyncStatusBar } from "@/components/layout/sync-status-bar";
 import { SprintGlobalMount } from "@/components/sprint/sprint-global-mount";
-import {
-  SpotifyGlobalMount,
-  SpotifyGlobalPlayer,
-} from "@/components/sprint/spotify-global-mount";
+import { SpotifyGlobalMount } from "@/components/sprint/spotify-global-mount";
 import { SpotlightProvider } from "@/components/spotlight/spotlight-context";
 import { SpotlightModal } from "@/components/spotlight/spotlight-modal";
 
@@ -40,8 +37,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           bg-background as the fallback when no Spotify track is loaded,
           so the page never goes truly transparent. */}
       <div className="relative z-10 flex h-screen w-full flex-col overflow-hidden bg-transparent text-foreground">
+        {/* The Spotify player used to live here as its own row. It's
+            now rendered INSIDE each page's TopBar (see top-bar.tsx) so
+            it shares a single 48px row with the page title + actions,
+            no extra band stacked on top. */}
         <header className="relative z-30 flex shrink-0 flex-col">
-          <SpotifyGlobalPlayer />
           <ConnectionHealthAlert />
           <SyncStatusBar />
         </header>

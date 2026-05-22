@@ -1,18 +1,17 @@
 "use client";
 
 import { SpotifyAmbientBg } from "./spotify-ambient-bg";
-import { SpotifyPlayer } from "./spotify-player";
 
 /**
- * Global Spotify surface, mounted once in the AppShell.
+ * Global Spotify ambient surface, mounted once in the AppShell.
  *
- * Renders TWO layers that should be present on every page:
- *   1. Ambient album-art background, fixed-positioned behind all content
- *   2. Compact player strip at the top of <main>
+ * Renders the ambient album-art background fixed-positioned behind
+ * all content. The PLAYER itself is mounted inside each page's TopBar
+ * (see src/components/layout/top-bar.tsx) so the controls sit in the
+ * same row as the page title + actions, no extra header band.
  *
  * The play logger (SpotifyPlayLogger) stays scoped to sprint mode since
- * its only job is to tag tracks to the active sprint slot — outside a
- * sprint there's nothing to attribute plays to.
+ * its only job is to tag tracks to the active sprint slot.
  *
  * The ambient bg short-circuits to null when no track has ever loaded,
  * so a user without a connected Spotify account sees no visual change.
@@ -22,24 +21,5 @@ export function SpotifyGlobalMount() {
     <>
       <SpotifyAmbientBg enabled />
     </>
-  );
-}
-
-/**
- * Compact player meant to sit inline at the top of the dashboard, as
- * part of the global header band in AppShell. NOT fixed-positioned: the
- * player flows in the layout so page TopBars and column headers always
- * sit directly below it, never underneath. Centered with max-w-3xl so on
- * wide screens it doesn't stretch absurdly across the width of the dashboard.
- *
- * Trade-off: in sprint focus mode (z-[100] overlay), this inline
- * player is covered by the overlay. If sprint needs music controls,
- * the sprint UI should mount its own player surface again.
- */
-export function SpotifyGlobalPlayer() {
-  return (
-    <div className="mx-auto w-full max-w-3xl px-3 py-1.5">
-      <SpotifyPlayer enabled />
-    </div>
   );
 }
