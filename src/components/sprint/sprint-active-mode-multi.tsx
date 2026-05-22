@@ -67,9 +67,10 @@ import { SprintContextPackage } from "@/components/sprint/sprint-context-package
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
 import { SprintToolkit } from "@/components/sprint/sprint-toolkit";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
-// Spotify ambient bg + player are mounted globally in AppShell. The
-// only Spotify component sprint owns is the play logger, which tags
-// tracks to the currently-active slot.
+// Spotify ambient bg is mounted globally in AppShell. Sprint also mounts
+// the player IN its header (z-100 overlay would cover the global TopBar
+// player otherwise) and the play logger to tag tracks to the active slot.
+import { SpotifyPlayer } from "@/components/sprint/spotify-player";
 import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
 import { useDeckCardHover } from "@/lib/animation/interactions";
 import { PATHWAY_META } from "@/types";
@@ -558,12 +559,12 @@ export function SprintActiveModeMulti() {
     : 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background text-foreground">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-background/85 text-foreground backdrop-blur-md">
       {/* Headless poller writes track-task plays during sprints. */}
       <SpotifyPlayLogger enabled />
       {/* Header */}
-      <div className="relative z-10 flex items-center justify-between gap-3 border-b border-border/30 bg-background/40 px-6 py-3 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
+      <div className="relative z-10 flex items-center gap-3 border-b border-border/30 bg-background/40 px-6 py-3 backdrop-blur-sm">
+        <div className="flex items-center gap-3 shrink-0">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Sprint · multi-active</span>
           <span className="rounded-md bg-secondary/50 px-2 py-0.5 text-[11px] text-muted-foreground">
@@ -576,7 +577,12 @@ export function SprintActiveModeMulti() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        {/* Spotify player in the middle, mirrors the global TopBar layout
+            so sprint mode keeps the same control affordance for music. */}
+        <div className="relative mx-auto flex w-full max-w-md flex-1 justify-center">
+          <SpotifyPlayer enabled />
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
           <Button
             size="sm"
             variant="outline"
