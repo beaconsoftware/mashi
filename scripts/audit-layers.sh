@@ -55,15 +55,13 @@ EXCLUDE_FILES=(
   # portals to body by default. Tracked at the callsite. Grandfathered
   # here so the audit can land and catch new violations elsewhere.
   "src/components/sprint/sprint-active-mode-multi.tsx"
-  # shadcn-doctrine TODO (PR 3 of 3): hand-rolled <select>, raw <button>
-  # ticket-form, and a fixed-overlay APIKeyDialog that should be a
-  # shadcn <Select> + <Dialog>. Grandfathered until PR 3 lands the
-  # remaining hand-rolled modal migrations.
+  # shadcn-doctrine TODO: one remaining raw <select> for the
+  # connection-row company-picker (line ~468). The APIKeyDialog was
+  # migrated to shadcn <Dialog> in PR #16; the remaining <select> uses
+  # native styling that the bulk Select migration didn't catch (likely
+  # rendered inside a row-click container where the Radix Select popover
+  # would conflict). Migrate when touching this file again.
   "src/components/settings/connections-manager.tsx"
-  # shadcn-doctrine TODO (PR 3 of 3): hand-rolled fixed-overlay modal
-  # (lines 268+) plus a few buttons inside it. Spotlight migrates to
-  # shadcn <Dialog> in PR 3.
-  "src/components/spotlight/spotlight-modal.tsx"
 )
 
 build_exclude_grep() {
