@@ -7,6 +7,14 @@ import { GitBranch, ExternalLink, User } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChromeBar, EmptyState } from "@/components/layout/primitives";
 import { cn } from "@/lib/utils";
 import { useLinearIssues, type LinearIssueRow } from "@/hooks/use-linear-issues";
@@ -68,44 +76,49 @@ export function LinearView() {
             {filtered.length} of {issues.length}
           </span>
 
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={() => setAssignedToMe((v) => !v)}
             className={cn(
-              "h-7 rounded border px-2 text-[11px] transition-colors",
+              "h-7 rounded border px-2 text-[11px] font-normal transition-colors",
               assignedToMe
-                ? "border-primary/40 bg-primary/10 text-primary"
+                ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
                 : "border-border/40 text-muted-foreground hover:bg-accent/30"
             )}
           >
             assigned to me
-          </button>
+          </Button>
 
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="h-7 rounded border border-border/40 bg-background px-2 text-[11px]"
-          >
-            <option value="all">All workspaces</option>
-            <option value="none">No company</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <SelectTrigger className="h-7 rounded border-border/40 bg-background px-2 text-[11px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All workspaces</SelectItem>
+              <SelectItem value="none">No company</SelectItem>
+              {companies.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-7 rounded border border-border/40 bg-background px-2 text-[11px]"
-          >
-            <option value="all">All statuses</option>
-            {statuses.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-7 rounded border-border/40 bg-background px-2 text-[11px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {statuses.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Input
             value={search}

@@ -143,13 +143,16 @@ export function PortcosStep() {
                     style={{ backgroundColor: c.color_hex }}
                   />
                   <span>{c.name}</span>
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => remove(c.id)}
-                    className="opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
+                    className="h-4 w-4 opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
                     aria-label={`Remove ${c.name}`}
                   >
                     <X className="h-3 w-3" />
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

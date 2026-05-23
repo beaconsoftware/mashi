@@ -45,6 +45,12 @@ import type {
 } from "@/lib/s2d/claude-prompt";
 import type { Pathway, S2DItem } from "@/types";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface Props {
   item: S2DItem;
@@ -286,43 +292,49 @@ function SourceRow({ source }: { source: SourceContext }) {
 
   return (
     <li className="rounded border border-border/30 bg-background/30">
-      <button
-        type="button"
-        onClick={() => setExpanded((x) => !x)}
-        className="flex w-full items-center gap-2 px-2 py-1.5 text-left"
-      >
-        {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-        )}
-        <SourceTypeIcon type={source.source_type} />
-        <span className="line-clamp-1 flex-1 text-[11px] text-foreground/85">
-          {inlineMeta ?? source.source_label ?? source.source_thread_id}
-        </span>
-        {source.deep_link && (
-          <a
-            href={source.deep_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            title="Open in source"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        )}
-      </button>
-      {!expanded && source.snippet && (
-        <div className="line-clamp-1 px-2 pb-1.5 pl-7 text-[11px] text-muted-foreground">
-          {source.snippet}
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <div className="flex w-full items-center gap-2 px-2 py-1.5">
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="flex h-auto flex-1 items-center justify-start gap-2 whitespace-normal rounded-none px-0 py-0 text-left font-normal hover:bg-transparent"
+            >
+              {expanded ? (
+                <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+              )}
+              <SourceTypeIcon type={source.source_type} />
+              <span className="line-clamp-1 flex-1 text-[11px] text-foreground/85">
+                {inlineMeta ?? source.source_label ?? source.source_thread_id}
+              </span>
+            </Button>
+          </CollapsibleTrigger>
+          {source.deep_link && (
+            <a
+              href={source.deep_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="Open in source"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
         </div>
-      )}
-      {expanded && (
-        <div className="border-t border-border/30 px-2 py-2 pl-7">
-          <SourceDetailInline details={source.details} />
-        </div>
-      )}
+        {!expanded && source.snippet && (
+          <div className="line-clamp-1 px-2 pb-1.5 pl-7 text-[11px] text-muted-foreground">
+            {source.snippet}
+          </div>
+        )}
+        <CollapsibleContent>
+          <div className="border-t border-border/30 px-2 py-2 pl-7">
+            <SourceDetailInline details={source.details} />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </li>
   );
 }

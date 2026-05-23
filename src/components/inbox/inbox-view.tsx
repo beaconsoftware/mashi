@@ -8,6 +8,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChromeBar, EmptyState } from "@/components/layout/primitives";
 import { cn } from "@/lib/utils";
 import { useInboxMessages, type InboxMessage } from "@/hooks/use-inbox";
@@ -129,29 +136,34 @@ export function InboxView() {
 
           <div className="mx-2 h-4 w-px bg-border/40" />
 
-          <select
+          <Select
             value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
-            className="h-7 rounded border border-border/40 bg-background px-2 text-[11px]"
+            onValueChange={(v) => setSourceFilter(v as SourceFilter)}
           >
-            <option value="all">All sources</option>
-            <option value="gmail">Gmail</option>
-            <option value="slack">Slack</option>
-          </select>
+            <SelectTrigger className="h-7 rounded border-border/40 bg-background px-2 text-[11px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sources</SelectItem>
+              <SelectItem value="gmail">Gmail</SelectItem>
+              <SelectItem value="slack">Slack</SelectItem>
+            </SelectContent>
+          </Select>
 
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="h-7 rounded border border-border/40 bg-background px-2 text-[11px]"
-          >
-            <option value="all">All companies</option>
-            <option value="none">No company</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <SelectTrigger className="h-7 rounded border-border/40 bg-background px-2 text-[11px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All companies</SelectItem>
+              <SelectItem value="none">No company</SelectItem>
+              {companies.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Input
             value={search}
@@ -182,15 +194,17 @@ export function InboxView() {
             <ul className="divide-y divide-border/40">
               {filtered.map((m) => (
                 <li key={m.id}>
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
                     onClick={() => setSelectedId(m.id)}
                     className={cn(
-                      "block w-full px-3 py-2.5 text-left transition-colors hover:bg-accent/30",
+                      "block h-auto w-full justify-start whitespace-normal rounded-none px-3 py-2.5 text-left font-normal transition-colors hover:bg-accent/30",
                       selectedId === m.id && "bg-accent/50"
                     )}
                   >
                     <MessageRow message={m} company={m.company_id ? companyMap.get(m.company_id) : undefined} />
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -229,22 +243,25 @@ function FilterPill({
   tone?: "default" | "primary" | "destructive";
 }) {
   return (
-    <button
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
       onClick={onClick}
       className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded border px-2 text-[11px] transition-colors",
+        "inline-flex h-7 items-center gap-1.5 rounded border px-2 text-[11px] font-normal transition-colors",
         active
           ? tone === "destructive"
-            ? "border-destructive/40 bg-destructive/10 text-destructive"
+            ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
             : tone === "primary"
-            ? "border-primary/40 bg-primary/10 text-primary"
+            ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
             : "border-border bg-accent text-foreground"
           : "border-border/40 text-muted-foreground hover:bg-accent/30"
       )}
     >
       <span>{label}</span>
       <span className="font-mono text-[10px] opacity-70">{count}</span>
-    </button>
+    </Button>
   );
 }
 

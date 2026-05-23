@@ -14,6 +14,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { gsap, withMotion, EASE, DUR } from "@/lib/animation";
 import { cn } from "@/lib/utils";
 
@@ -90,8 +91,10 @@ export function NotificationHub() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           aria-label={count > 0 ? `${count} updates` : "No updates"}
           className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
@@ -106,7 +109,7 @@ export function NotificationHub() {
               {count > 99 ? "99+" : count}
             </span>
           )}
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between border-b border-border/40 px-3 py-2">
@@ -114,12 +117,15 @@ export function NotificationHub() {
             Updates
           </div>
           {count > 0 && (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={markAllRead}
-              className="text-[11px] text-muted-foreground hover:text-foreground"
+              className="h-auto px-1 py-0.5 text-[11px] font-normal text-muted-foreground hover:text-foreground"
             >
               Mark all read
-            </button>
+            </Button>
           )}
         </div>
         {count === 0 ? (
@@ -131,9 +137,11 @@ export function NotificationHub() {
             <ul className="divide-y divide-border/40">
               {top10.map((it) => (
                 <li key={it.id}>
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
                     onClick={() => openItem(it.id)}
-                    className="block w-full px-3 py-2 text-left hover:bg-accent/40"
+                    className="block h-auto w-full justify-start whitespace-normal rounded-none px-3 py-2 text-left font-normal hover:bg-accent/40"
                   >
                     <div className="mb-1 flex items-center gap-1.5">
                       {it.source_type && <SourceIcon type={it.source_type} />}
@@ -152,7 +160,7 @@ export function NotificationHub() {
                         {it.last_update_summary}
                       </div>
                     )}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

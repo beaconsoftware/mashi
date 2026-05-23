@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { MashiMark } from "@/components/shared/mashi-mark";
 
 const NAV = [
@@ -154,13 +155,15 @@ export function Sidebar() {
           <Tooltip>
             <TooltipTrigger asChild>
               <form action="/auth/sign-out" method="POST">
-                <button
+                <Button
                   type="submit"
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-[11px] font-medium hover:bg-accent"
+                  variant="secondary"
+                  size="icon"
+                  className="h-7 w-7 rounded-full bg-secondary text-[11px] font-medium hover:bg-accent"
                   aria-label="Sign out"
                 >
                   S
-                </button>
+                </Button>
               </form>
             </TooltipTrigger>
             <TooltipContent side="right">Sign out</TooltipContent>

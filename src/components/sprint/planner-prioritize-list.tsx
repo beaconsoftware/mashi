@@ -22,6 +22,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChromeBar } from "@/components/layout/primitives";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSprintStore } from "@/store/sprint-store";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
@@ -84,35 +92,42 @@ export function PlannerPrioritizeList({ eligibleItems }: Props) {
           placeholder="Filter by title…"
           className="h-7 max-w-xs text-[12px]"
         />
-        <select
-          value={pathwayFilter}
-          onChange={(e) => setPathwayFilter(e.target.value)}
-          className="h-7 rounded border border-border/40 bg-secondary px-2 text-[11px]"
+        <Select
+          value={pathwayFilter || "__all__"}
+          onValueChange={(v) => setPathwayFilter(v === "__all__" ? "" : v)}
         >
-          <option value="">All action types</option>
-          {Object.entries(PATHWAY_META).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value)}
-          className="h-7 rounded border border-border/40 bg-secondary px-2 text-[11px]"
+          <SelectTrigger className="h-7 rounded border-border/40 bg-secondary px-2 text-[11px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All action types</SelectItem>
+            {Object.entries(PATHWAY_META).map(([k, v]) => (
+              <SelectItem key={k} value={k}>
+                {v.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={priorityFilter || "__all__"}
+          onValueChange={(v) => setPriorityFilter(v === "__all__" ? "" : v)}
         >
-          <option value="">All priorities</option>
-          {Object.entries(PRIORITY_META).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="h-7 rounded border-border/40 bg-secondary px-2 text-[11px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All priorities</SelectItem>
+            {Object.entries(PRIORITY_META).map(([k, v]) => (
+              <SelectItem key={k} value={k}>
+                {v.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={showSelectedOnly}
-            onChange={(e) => setShowSelectedOnly(e.target.checked)}
+            onCheckedChange={(v) => setShowSelectedOnly(v === true)}
             className="h-3 w-3"
           />
           Selected only ({selected.length})
@@ -205,11 +220,12 @@ function ListRow({
 
   return (
     <li>
-      <button
+      <Button
         type="button"
+        variant="ghost"
         onClick={onToggle}
         className={cn(
-          "flex w-full items-center gap-2 px-5 py-2 text-left transition-colors hover:bg-accent/20",
+          "flex h-auto w-full items-center justify-start gap-2 whitespace-normal rounded-none px-5 py-2 text-left font-normal transition-colors hover:bg-accent/20",
           selected && "bg-primary/10 hover:bg-primary/15"
         )}
       >
@@ -261,7 +277,7 @@ function ListRow({
             {item.est_minutes}m
           </span>
         )}
-      </button>
+      </Button>
     </li>
   );
 }

@@ -326,12 +326,16 @@ export function SprintActiveMode() {
           <div className="mx-auto flex max-w-4xl items-start gap-2 text-[12px] text-destructive">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="flex-1">{banner.msg}</span>
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setBanner(null)}
-              className="text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss"
+              className="h-5 w-5 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -386,13 +390,16 @@ export function SprintActiveMode() {
           </div>
 
           <div className="mt-6 flex items-center gap-3 text-[11px] text-muted-foreground">
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setSelected(currentItem.id)}
-              className="inline-flex items-center gap-1 hover:text-foreground"
+              className="inline-flex h-auto items-center gap-1 px-0 py-0 text-[11px] font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
             >
               <MessageSquare className="h-3 w-3" />
               Open detail / talk to Mashi
-            </button>
+            </Button>
           </div>
 
           {/* Pathway-aware action package — pre-built so the user can

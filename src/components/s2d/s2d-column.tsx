@@ -13,6 +13,13 @@ import { S2DItemCard } from "@/components/s2d/s2d-item-card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCreateS2DItem } from "@/hooks/use-s2d";
 import { useGSAP } from "@gsap/react";
 import { staggerEntry } from "@/lib/animation";
@@ -163,13 +170,16 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
             {items.length}
           </span>
         </div>
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
           onClick={() => setAdding((v) => !v)}
           aria-label={`Add ${meta.label} item`}
-          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="h-5 w-5 rounded text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           {adding ? <X className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
-        </button>
+        </Button>
       </SectionHeader>
 
       <div ref={listRef} className="flex-1 overflow-y-auto p-2 space-y-1.5">
@@ -232,13 +242,16 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
               <div className="flex items-start gap-1.5 rounded border border-destructive/40 bg-destructive/10 p-1.5 text-[11px] text-destructive">
                 <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                 <span className="flex-1">{error}</span>
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setError(null)}
-                  className="text-muted-foreground hover:text-foreground"
                   aria-label="Dismiss error"
+                  className="h-4 w-4 text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -256,13 +269,16 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
               <div className="flex items-start gap-1.5 rounded border border-destructive/40 bg-destructive/10 p-1.5 text-[11px] text-destructive">
                 <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                 <span className="flex-1">{error}</span>
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setError(null)}
-                  className="text-muted-foreground hover:text-foreground"
                   aria-label="Dismiss error"
+                  className="h-4 w-4 text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </Button>
               </div>
             )}
           </>
@@ -328,38 +344,50 @@ function EnrichedDraftCard({
       />
 
       <div className="grid grid-cols-2 gap-1.5">
-        <select
+        <Select
           value={draft.pathway}
-          onChange={(e) => onChange({ ...draft, pathway: e.target.value as Pathway })}
-          className="rounded border border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+          onValueChange={(v) => onChange({ ...draft, pathway: v as Pathway })}
         >
-          {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => (
-            <option key={p} value={p}>
-              {PATHWAY_META[p].label}
-            </option>
-          ))}
-        </select>
-        <select
+          <SelectTrigger className="h-7 w-full rounded border-border/40 bg-secondary px-1.5 py-1 text-[11px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => (
+              <SelectItem key={p} value={p}>
+                {PATHWAY_META[p].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
           value={draft.priority}
-          onChange={(e) => onChange({ ...draft, priority: e.target.value as Priority })}
-          className="rounded border border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+          onValueChange={(v) => onChange({ ...draft, priority: v as Priority })}
         >
-          {(Object.keys(PRIORITY_META) as Priority[]).map((p) => (
-            <option key={p} value={p}>
-              {PRIORITY_META[p].label}
-            </option>
-          ))}
-        </select>
-        <select
+          <SelectTrigger className="h-7 w-full rounded border-border/40 bg-secondary px-1.5 py-1 text-[11px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(PRIORITY_META) as Priority[]).map((p) => (
+              <SelectItem key={p} value={p}>
+                {PRIORITY_META[p].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
           value={draft.status}
-          onChange={(e) => onChange({ ...draft, status: e.target.value as S2DStatus })}
-          className="rounded border border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+          onValueChange={(v) => onChange({ ...draft, status: v as S2DStatus })}
         >
-          <option value="todo">Todo</option>
-          <option value="backlog">Backlog</option>
-          <option value="in_queue">In Queue</option>
-        </select>
-        <input
+          <SelectTrigger className="h-7 w-full rounded border-border/40 bg-secondary px-1.5 py-1 text-[11px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todo">Todo</SelectItem>
+            <SelectItem value="backlog">Backlog</SelectItem>
+            <SelectItem value="in_queue">In Queue</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
           type="number"
           min={5}
           step={5}
@@ -371,7 +399,7 @@ function EnrichedDraftCard({
             })
           }
           placeholder="est minutes"
-          className="rounded border border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+          className="h-7 rounded border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
         />
       </div>
 

@@ -7,6 +7,7 @@ import { Sparkles, DollarSign, Clock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -122,18 +123,21 @@ export function UsageView() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         {(["7d", "30d", "all"] as Window[]).map((w) => (
-          <button
+          <Button
             key={w}
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={() => setWindow(w)}
             className={cn(
-              "h-7 rounded border px-2.5 text-[11px] transition-colors",
+              "h-7 rounded border px-2.5 text-[11px] font-normal transition-colors",
               window === w
-                ? "border-border bg-accent text-foreground"
+                ? "border-border bg-accent text-foreground hover:bg-accent"
                 : "border-border/40 text-muted-foreground hover:bg-accent/30"
             )}
           >
             last {w === "all" ? "all" : w}
-          </button>
+          </Button>
         ))}
         <span className="ml-2 font-mono text-[10px] text-muted-foreground">
           {rows.length} calls

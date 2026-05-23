@@ -10,6 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface ConnRow {
@@ -76,12 +77,14 @@ export function SyncStatusChip() {
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={syncNow}
             disabled={isSyncing || connections.length === 0}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-md border bg-card px-2 text-[11px] transition-colors hover:bg-accent disabled:opacity-60",
+              "inline-flex h-7 items-center gap-1.5 rounded-md border bg-card px-2 text-[11px] font-normal transition-colors hover:bg-accent disabled:opacity-60",
               hasError
                 ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
                 : "border-border/40 text-muted-foreground hover:text-foreground"
@@ -95,7 +98,7 @@ export function SyncStatusChip() {
               <RefreshCw className="h-3 w-3" />
             )}
             <span>{label}</span>
-          </button>
+          </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" align="end" className="max-w-xs space-y-1.5 p-2.5">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold">

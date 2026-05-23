@@ -13,6 +13,13 @@ import { PATHWAY_META, PRIORITY_META, STATUS_META } from "@/types";
 import { SourceIcon } from "@/components/shared/source-icon";
 import { CompanyBadge } from "@/components/shared/company-badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useUpdateS2DItem } from "@/hooks/use-s2d";
 import { useS2DStore } from "@/store/s2d-store";
 import { cn } from "@/lib/utils";
@@ -89,14 +96,16 @@ export function ReviewColumn({ items }: Props) {
           </span>
         </div>
         {items.length > 0 && (
-          <button
+          <Button
+            type="button"
+            size="sm"
             onClick={() => setDeckOpen(true)}
-            className="flex items-center gap-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90"
+            className="h-auto rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground hover:bg-primary/90"
             title="Open the swipe-deck review"
           >
             <Layers className="h-3 w-3" />
             Swipe
-          </button>
+          </Button>
         )}
       </SectionHeader>
 
@@ -233,52 +242,70 @@ function ReviewCard({ item }: { item: S2DItem }) {
           <span className="w-12 text-[10px] uppercase tracking-wider text-muted-foreground">
             Priority
           </span>
-          <select
+          <Select
             value={priority}
-            onChange={(e) => setPriority(e.target.value as Priority)}
-            onClick={(e) => e.stopPropagation()}
-            className="flex-1 rounded border border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
-            style={{ color: priorityMeta.color }}
+            onValueChange={(v) => setPriority(v as Priority)}
           >
-            {(Object.keys(PRIORITY_META) as Priority[]).map((p) => (
-              <option key={p} value={p}>
-                {PRIORITY_META[p].label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              onClick={(e) => e.stopPropagation()}
+              className="h-7 flex-1 rounded border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+              style={{ color: priorityMeta.color }}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(PRIORITY_META) as Priority[]).map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PRIORITY_META[p].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex items-center gap-1">
           <span className="w-12 text-[10px] uppercase tracking-wider text-muted-foreground">
             Action
           </span>
-          <select
+          <Select
             value={pathway}
-            onChange={(e) => setPathway(e.target.value as Pathway)}
-            onClick={(e) => e.stopPropagation()}
-            className="flex-1 rounded border border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
-            aria-label="Action type"
+            onValueChange={(v) => setPathway(v as Pathway)}
           >
-            {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => (
-              <option key={p} value={p}>
-                {PATHWAY_META[p].label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Action type"
+              className="h-7 flex-1 rounded border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PATHWAY_META[p].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex items-center gap-1">
           <span className="w-12 text-[10px] uppercase tracking-wider text-muted-foreground">
             Send to
           </span>
-          <select
+          <Select
             value={targetStatus}
-            onChange={(e) => setTargetStatus(e.target.value as S2DStatus)}
-            onClick={(e) => e.stopPropagation()}
-            className="flex-1 rounded border border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+            onValueChange={(v) => setTargetStatus(v as S2DStatus)}
           >
-            <option value="todo">{STATUS_META.todo.label}</option>
-            <option value="backlog">{STATUS_META.backlog.label}</option>
-            <option value="in_queue">{STATUS_META.in_queue.label}</option>
-          </select>
+            <SelectTrigger
+              onClick={(e) => e.stopPropagation()}
+              className="h-7 flex-1 rounded border-border/40 bg-secondary px-1.5 py-1 text-[11px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todo">{STATUS_META.todo.label}</SelectItem>
+              <SelectItem value="backlog">{STATUS_META.backlog.label}</SelectItem>
+              <SelectItem value="in_queue">{STATUS_META.in_queue.label}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

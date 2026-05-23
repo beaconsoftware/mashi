@@ -7,6 +7,7 @@ import { useS2DItems, useCompanies } from "@/hooks/use-s2d";
 import { useCalendarEvents } from "@/hooks/use-calendar";
 import { useMagneticHover } from "@/lib/animation/interactions";
 import type { S2DItem } from "@/types";
+import { Button } from "@/components/ui/button";
 import {
   NowCard,
   AiCommandTile,
@@ -126,14 +127,17 @@ function FilterChip({ label, onClear }: { label: string; onClear: () => void }) 
   return (
     <div className="mb-2 flex items-center gap-2 text-[11px]">
       <span className="text-muted-foreground">Filtering to</span>
-      <button
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
         onClick={onClear}
-        className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-foreground hover:bg-primary/20"
+        className="inline-flex h-auto items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-normal text-foreground hover:bg-primary/20"
       >
         {label}
         <span className="text-muted-foreground">·</span>
         <span>×</span>
-      </button>
+      </Button>
     </div>
   );
 }

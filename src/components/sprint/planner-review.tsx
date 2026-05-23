@@ -4,6 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useS2DItems } from "@/hooks/use-s2d";
 import { useSprintStore, MAX_PARALLEL_SLOTS } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ArrowLeft, Play, CalendarCheck, Loader2, AlertTriangle } from "lucide-react";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
@@ -117,11 +125,10 @@ export function PlannerReview() {
               Calendar
             </div>
             <label className="mt-2 flex items-start gap-2 text-[13px]">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={createCal}
-                onChange={(e) => setCreateCal(e.target.checked)}
-                className="mt-0.5 accent-primary"
+                onCheckedChange={(v) => setCreateCal(v === true)}
+                className="mt-0.5"
               />
               <span>
                 Push these blocks to my calendar.{" "}
@@ -135,20 +142,24 @@ export function PlannerReview() {
             {createCal && accounts.length > 0 && (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
                 <span className="text-muted-foreground">Push to</span>
-                <select
-                  value={calAccountId ?? ""}
-                  onChange={(e) => {
-                    setCalAccountId(e.target.value || null);
+                <Select
+                  value={calAccountId ?? undefined}
+                  onValueChange={(v) => {
+                    setCalAccountId(v || null);
                     setAutoPicked(false);
                   }}
-                  className="rounded border border-border/40 bg-secondary px-2 py-1 text-[12px]"
                 >
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.account_label} {a.account_email ? `(${a.account_email})` : ""}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-7 rounded border-border/40 bg-secondary px-2 py-1 text-[12px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.account_label} {a.account_email ? `(${a.account_email})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {autoPicked && (
                   <span className="text-[11px] text-amber-500/90">
                     Auto-picked. Switch above if this is the wrong calendar.

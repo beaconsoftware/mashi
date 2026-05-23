@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { useSpotifyState, useSpotifyControl, type SpotifyTrack } from "@/hooks/use-spotify";
 
@@ -225,13 +226,12 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
         {/* Volume */}
         <div className="hidden items-center gap-1 md:flex">
           <Volume2 className="h-3 w-3 text-muted-foreground" />
-          <input
-            type="range"
+          <Slider
             min={0}
             max={100}
-            value={volume}
-            onChange={(e) => changeVolume(parseInt(e.target.value, 10))}
-            className="h-1 w-20 cursor-pointer accent-primary"
+            value={[volume]}
+            onValueChange={(v) => changeVolume(v[0] ?? 0)}
+            className="w-20 cursor-pointer"
             aria-label="Volume"
           />
         </div>

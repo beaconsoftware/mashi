@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { ChromeBar, EmptyState } from "@/components/layout/primitives";
 import { cn } from "@/lib/utils";
 import { useCalendarEvents, type CalendarEventRow } from "@/hooks/use-calendar";
@@ -187,26 +188,35 @@ function Toolbar({
 
       {view !== "agenda" && (
         <>
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
             onClick={() => shift(view === "week" ? -7 : -1)}
             className="inline-flex h-7 w-7 items-center justify-center rounded border border-border/40 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Previous"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={goToday}
-            className="h-7 rounded border border-border/40 px-2.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="h-7 rounded border border-border/40 px-2.5 text-[11px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             Today
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
             onClick={() => shift(view === "week" ? 7 : 1)}
             className="inline-flex h-7 w-7 items-center justify-center rounded border border-border/40 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Next"
           >
             <ChevronRight className="h-3.5 w-3.5" />
-          </button>
+          </Button>
           <span className="text-[12px] font-medium">{label}</span>
         </>
       )}
@@ -214,18 +224,21 @@ function Toolbar({
       {view === "agenda" && (
         <div className="flex items-center gap-1.5">
           {(["upcoming", "today", "past"] as Filter[]).map((f) => (
-            <button
+            <Button
               key={f}
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setFilter(f)}
               className={cn(
-                "h-7 rounded border px-2.5 text-[11px] capitalize transition-colors",
+                "h-7 rounded border px-2.5 text-[11px] font-normal capitalize transition-colors",
                 filter === f
                   ? "border-border bg-accent text-foreground"
                   : "border-border/40 text-muted-foreground hover:bg-accent/30"
               )}
             >
               {f}
-            </button>
+            </Button>
           ))}
           {count != null && (
             <span className="ml-2 font-mono text-[10px] text-muted-foreground">
@@ -250,16 +263,19 @@ function ViewBtn({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
       onClick={onClick}
       className={cn(
-        "inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] transition-colors",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/40"
+        "inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] font-normal transition-colors",
+        active ? "bg-accent text-foreground hover:bg-accent" : "text-muted-foreground hover:bg-accent/40"
       )}
     >
       {icon}
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -494,7 +510,9 @@ function EventBlock({
   const accent = company?.color_hex ?? "hsl(var(--primary))";
 
   return (
-    <button
+    <Button
+      type="button"
+      variant="outline"
       ref={(el) => {
         hoverRef.current = el;
         burstRef.current = el as unknown as HTMLDivElement | null;
@@ -503,7 +521,7 @@ function EventBlock({
       onMouseLeave={onLeave}
       onClick={() => onSelect(event.id)}
       className={cn(
-        "absolute overflow-hidden rounded-md border bg-card px-1.5 py-1 text-left transition-colors",
+        "absolute h-auto block overflow-hidden whitespace-normal rounded-md border bg-card px-1.5 py-1 text-left font-normal transition-colors",
         selected
           ? "border-primary/60 ring-1 ring-primary/40 shadow-[0_0_20px_-6px_hsl(var(--primary)/0.6)]"
           : "border-border/50 hover:border-primary/40"
@@ -531,7 +549,7 @@ function EventBlock({
         <span className="font-mono tabular-nums">{fmtTime(event.start_at)}</span>
         {event.meeting_url && <Video className="h-2.5 w-2.5 text-primary" />}
       </div>
-    </button>
+    </Button>
   );
 }
 
@@ -628,7 +646,9 @@ function AgendaRow({
 
   return (
     <li>
-      <button
+      <Button
+        type="button"
+        variant="outline"
         ref={(el) => {
           hoverRef.current = el;
           burstRef.current = el as unknown as HTMLDivElement | null;
@@ -637,7 +657,7 @@ function AgendaRow({
         onMouseLeave={onLeave}
         onClick={() => onSelect(event.id)}
         className={cn(
-          "relative block w-full rounded-md border bg-card px-3 py-2 text-left transition-colors",
+          "relative block h-auto w-full whitespace-normal rounded-md border bg-card px-3 py-2 text-left font-normal transition-colors",
           selected
             ? "border-primary/60 ring-1 ring-primary/40 shadow-[0_0_20px_-6px_hsl(var(--primary)/0.55)]"
             : "border-border/30 hover:border-primary/30"
@@ -680,7 +700,7 @@ function AgendaRow({
             </span>
           )}
         </div>
-      </button>
+      </Button>
     </li>
   );
 }
