@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 import { useMemo, useState } from "react";
 import {
   Calendar as CalIcon,

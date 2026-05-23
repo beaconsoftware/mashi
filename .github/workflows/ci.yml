@@ -44,6 +44,63 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Layout doctrine + design token guards. These greps are cheap so
+      # we run them in the verify job rather than spinning up a separate
+      # worker. If they fail, the PR has reached for an arbitrary z-index
+      # or an off-scale translucent surface — see AGENTS.md "Layout
+      # doctrine" + "Design tokens".
+      - name: Audit layers
+        run: pnpm audit:layers
+
+      - name: Audit translucency
+        run: pnpm audit:translucency
+
+  visual:
+    name: Visual regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+    # GATED OFF until a CI Supabase test user is provisioned. The
+    # Playwright scaffolding (config, auth setup, dashboard-routes spec)
+    # is committed and ready, but with placeholder Supabase env the dev
+    # server can't boot in CI and the suite times out. To re-enable:
+    #   1. Run scripts/seed-ci-test-user.ts against prod Supabase.
+    #   2. Add SUPABASE_SERVICE_ROLE_KEY, PLAYWRIGHT_TEST_USER_ID,
+    #      PLAYWRIGHT_TEST_USER_EMAIL, NEXT_PUBLIC_SUPABASE_URL,
+    #      NEXT_PUBLIC_SUPABASE_ANON_KEY as GitHub Actions repo secrets.
+    #   3. Replace the placeholder env block below with `secrets.*` refs.
+    #   4. `pnpm test:visual:update` locally to capture baselines, commit them.
+    #   5. Remove `if: false` and (once stable) flip continue-on-error to false.
+    # See tests/visual/README.md for the full playbook.
+    if: false
+    continue-on-error: true
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+      SUPABASE_SERVICE_ROLE_KEY: ci-build-placeholder
+      ANTHROPIC_API_KEY: ci-build-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run visual tests
+        run: pnpm test:visual
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   build:
     name: Next build
     runs-on: ubuntu-latest

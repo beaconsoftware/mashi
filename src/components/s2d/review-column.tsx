@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDroppable } from "@dnd-kit/core";
@@ -14,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useUpdateS2DItem } from "@/hooks/use-s2d";
 import { useS2DStore } from "@/store/s2d-store";
 import { cn } from "@/lib/utils";
+import { SectionHeader } from "@/components/layout/primitives";
 import { ReviewDeck } from "./review-deck";
 
 interface Props {
@@ -75,13 +78,13 @@ export function ReviewColumn({ items }: Props) {
         isOver && "bg-primary/5"
       )}
     >
-      <div className="flex items-center justify-between border-b border-primary/30 bg-primary/10 px-3 py-2.5">
+      <SectionHeader tone="accent" className="justify-between py-2.5">
         <div className="flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
-            Review
+          <span className="font-semibold">Review</span>
+          <span className="font-mono text-[10px] normal-case tracking-normal text-muted-foreground">
+            {items.length}
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground">{items.length}</span>
         </div>
         {items.length > 0 && (
           <button
@@ -93,7 +96,7 @@ export function ReviewColumn({ items }: Props) {
             Swipe
           </button>
         )}
-      </div>
+      </SectionHeader>
 
       <div ref={listRef} className="flex-1 overflow-y-auto p-2 space-y-2">
         {items.length === 0 ? (

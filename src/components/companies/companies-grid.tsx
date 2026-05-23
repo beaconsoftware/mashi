@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useS2DItems, useCompanies } from "@/hooks/use-s2d";

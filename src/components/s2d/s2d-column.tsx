@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 import { useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -13,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useCreateS2DItem } from "@/hooks/use-s2d";
 import { useGSAP } from "@gsap/react";
 import { staggerEntry } from "@/lib/animation";
+import { SectionHeader } from "@/components/layout/primitives";
 
 interface EnrichedDraft {
   title: string;
@@ -146,12 +149,12 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
         isOver && "border-primary/50 bg-primary/5"
       )}
     >
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/40">
+      <SectionHeader className="justify-between py-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground/80">
-            {meta.label}
+          <span className="font-semibold">{meta.label}</span>
+          <span className="font-mono text-[10px] normal-case tracking-normal text-muted-foreground">
+            {items.length}
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground">{items.length}</span>
         </div>
         <button
           onClick={() => setAdding((v) => !v)}
@@ -160,7 +163,7 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
         >
           {adding ? <X className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
         </button>
-      </div>
+      </SectionHeader>
 
       <div ref={listRef} className="flex-1 overflow-y-auto p-2 space-y-1.5">
         {adding && !draft && (

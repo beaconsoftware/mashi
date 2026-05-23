@@ -40,3 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+
+# playwright
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
+# Stored auth state for visual regression tests — contains a real
+# Supabase session token, must never be committed.
+/tests/visual/.auth/

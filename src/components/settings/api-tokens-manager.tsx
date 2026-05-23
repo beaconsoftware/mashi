@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 import { useEffect, useState } from "react";
 import { Copy, Trash2, Plus, KeyRound, AlertTriangle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";

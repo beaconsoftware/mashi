@@ -14,6 +14,14 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // DXT has its own tsconfig + node_modules; root lint shouldn't touch it.
     "dxt/**",
+    // Claude Code worktrees + caches — these contain build artifacts
+    // from sibling sessions that have no business being linted by the
+    // root project.
+    ".claude/**",
+    // Playwright generated output.
+    "playwright-report/**",
+    "test-results/**",
+    "tests/visual/.auth/**",
   ]),
   // React Compiler ESLint plugin rules are strict and several pre-existing
   // files in the codebase violate them (sprint planner, review-deck,

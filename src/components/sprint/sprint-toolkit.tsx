@@ -1,5 +1,7 @@
 "use client";
 
+// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+
 /**
  * Sprint slot toolkit. Renders the per-pathway action chips and the
  * expandable drawer where each action's preview gets streamed.
