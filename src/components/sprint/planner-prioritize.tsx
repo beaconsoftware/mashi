@@ -8,6 +8,8 @@ import { useSprintStore } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
 import { ChromeBar } from "@/components/layout/primitives";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
 import {
   ArrowRight,
   Sparkles,
@@ -175,11 +177,15 @@ export function PlannerPrioritize() {
                         picked && "bg-primary/5"
                       )}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={picked}
-                        readOnly
-                        className="mt-1 accent-primary"
+                        // Row click is the canonical toggle interaction; the
+                        // checkbox is a read-only visual cue. Suppress the
+                        // built-in toggle so the click doesn't double-fire.
+                        onCheckedChange={() => undefined}
+                        className="mt-1 pointer-events-none"
+                        tabIndex={-1}
+                        aria-hidden
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
@@ -272,13 +278,17 @@ export function PlannerPrioritize() {
                     className="flex items-start gap-2 rounded border border-border/40 bg-secondary/30 p-2 text-[12px]"
                   >
                     <div className="flex flex-col gap-0.5 pt-0.5">
-                      <button
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => moveUp(i)}
                         disabled={i === 0}
-                        className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                        aria-label="Move up"
+                        className="h-4 w-4 text-muted-foreground hover:text-foreground disabled:opacity-30"
                       >
                         <GripVertical className="h-3 w-3 rotate-90" />
-                      </button>
+                      </Button>
                     </div>
                     <span className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                       {String(i + 1).padStart(2, "0")}
@@ -298,28 +308,40 @@ export function PlannerPrioritize() {
                       <div className="line-clamp-2 text-foreground/90">{it.title}</div>
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <button
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => moveUp(i)}
                         disabled={i === 0}
-                        className="text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30"
+                        aria-label="Move up"
+                        className="h-4 w-4 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30"
                       >
                         ↑
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
                         onClick={() => moveDown(i)}
                         disabled={i === selected.length - 1}
-                        className="text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30"
+                        aria-label="Move down"
+                        className="h-4 w-4 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30"
                       >
                         ↓
-                      </button>
+                      </Button>
                     </div>
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => toggle(it.id)}
-                      className="text-muted-foreground hover:text-destructive"
                       title="Remove"
+                      aria-label="Remove"
+                      className="h-5 w-5 text-muted-foreground hover:text-destructive"
                     >
                       <X className="h-3.5 w-3.5" />
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ol>
@@ -445,14 +467,14 @@ function BuildPanel({
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground w-14">
           Duration
         </span>
-        <input
-          type="range"
+        <Slider
           min={30}
           max={180}
           step={15}
-          value={params.durationMin}
-          onChange={(e) => onChange({ ...params, durationMin: parseInt(e.target.value, 10) })}
+          value={[params.durationMin]}
+          onValueChange={(v) => onChange({ ...params, durationMin: v[0] ?? 30 })}
           className="flex-1"
+          aria-label="Sprint duration"
         />
         <span className="font-mono text-[11px] tabular-nums w-12 text-right">
           {params.durationMin}m
@@ -469,9 +491,11 @@ function BuildPanel({
         />
         <div className="mt-1 flex flex-wrap gap-1">
           {THEME_CHIPS.map((c) => (
-            <button
+            <Button
               key={c}
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() =>
                 onChange({
                   ...params,
@@ -482,14 +506,14 @@ function BuildPanel({
                 })
               }
               className={cn(
-                "rounded border px-1.5 py-0.5 text-[10px] transition-colors",
+                "h-auto rounded border px-1.5 py-0.5 text-[10px] font-normal transition-colors",
                 params.theme.toLowerCase() === c.toLowerCase()
-                  ? "border-primary bg-primary/20 text-foreground"
+                  ? "border-primary bg-primary/20 text-foreground hover:bg-primary/25 hover:text-foreground"
                   : "border-border/40 bg-secondary text-muted-foreground hover:bg-accent"
               )}
             >
               {c}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -500,19 +524,21 @@ function BuildPanel({
         </span>
         <div className="flex gap-1">
           {(["", "low", "medium", "high"] as const).map((e) => (
-            <button
+            <Button
               key={e || "auto"}
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => onChange({ ...params, energy: e })}
               className={cn(
-                "rounded border px-1.5 py-0.5 text-[10px] transition-colors",
+                "h-auto rounded border px-1.5 py-0.5 text-[10px] font-normal transition-colors",
                 params.energy === e
-                  ? "border-primary bg-primary/20 text-foreground"
+                  ? "border-primary bg-primary/20 text-foreground hover:bg-primary/25 hover:text-foreground"
                   : "border-border/40 bg-secondary text-muted-foreground hover:bg-accent"
               )}
             >
               {e || "auto"}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

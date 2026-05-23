@@ -63,15 +63,7 @@ EXCLUDE_FILES=(
   # change per page). Tracked as a follow-up PR. Each entry leaves the
   # audit clean today so the regex fix can land and catch any NEW raw
   # primitives going forward.
-  "src/components/inbox/inbox-view.tsx"
-  "src/components/linear/linear-view.tsx"
-  "src/components/notes/notes-view.tsx"
   "src/components/settings/connections-manager.tsx"
-  "src/components/sprint/planner-prioritize-list.tsx"
-  "src/components/sprint/planner-review.tsx"
-  "src/components/sprint/sprint-complete.tsx"
-  "src/components/s2d/s2d-column.tsx"
-  "src/components/s2d/review-column.tsx"
   # shadcn-doctrine TODO (also PR 2): hand-rolled checkbox <input
   # type="checkbox"> and range <input type="range">. shadcn <Checkbox>
   # and <Slider> aren't in ui/ yet — needs `npx shadcn add checkbox
@@ -80,16 +72,11 @@ EXCLUDE_FILES=(
   #     click-stopPropagation interaction needs verification per callsite)
   #   - <input type="range"> → <Slider> (value is an array, onValueChange
   #     not onChange; visual is a different control)
-  "src/components/s2d/s2d-board.tsx"
-  "src/components/sprint/spotify-player.tsx"
-  "src/components/sprint/planner-prioritize.tsx"
-  "src/components/sprint/planner-prioritize-board.tsx"
   # shadcn-doctrine TODO (PR 2): two collapsible-disclosure <button>s
   # for expandable sections. Right primitive is shadcn <Collapsible> +
   # CollapsibleTrigger (`npx shadcn add collapsible`). Migration is a
   # structural change — Trigger handles state via Radix, not local
   # useState. Worth doing as part of the Select/Checkbox PR.
-  "src/components/s2d/item-context-panel.tsx"
   # shadcn-doctrine TODO (PR 2): bulk legacy raw <button> grandfather.
   # All these files have multi-line JSX buttons that the previous audit
   # regex missed. They generally fall into a few categories:

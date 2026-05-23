@@ -29,6 +29,7 @@ import { STATUS_ORDER, type S2DItem, type S2DStatus, PATHWAY_META, PRIORITY_META
 import { useS2DItems, useUpdateS2DItem } from "@/hooks/use-s2d";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { ChromeBar } from "@/components/layout/primitives";
 
@@ -323,12 +324,16 @@ export function S2DBoard() {
           >
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="flex-1">{banner.msg}</span>
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setBanner(null)}
-              className="text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss"
+              className="h-5 w-5 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
         )}
         {view === "cards" ? (
@@ -430,12 +435,15 @@ function BoardToolbar({
         <div className="ml-2 flex items-center gap-2 text-muted-foreground">
           <span>{selectedCount} selected</span>
           {selectedCount > 0 && (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={onClearSelection}
-              className="rounded px-1 py-0.5 hover:bg-accent hover:text-foreground"
+              className="h-auto rounded px-1 py-0.5 text-[11px] font-normal hover:bg-accent hover:text-foreground"
             >
               clear
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -471,18 +479,21 @@ function ToolbarPill({
   label: string;
 }) {
   return (
-    <button
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-1.5 px-2 py-1 transition-colors",
+        "h-auto rounded-none px-2 py-1 text-[11px] font-normal transition-colors",
         active
-          ? "bg-secondary text-foreground"
+          ? "bg-secondary text-foreground hover:bg-secondary hover:text-foreground"
           : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
       )}
     >
       {icon}
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -533,14 +544,17 @@ function SelectListView({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-3">
       <div className="mb-2 flex items-center gap-2 px-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={() =>
             onSelectAll(allSelected ? [] : sorted.map((it) => it.id))
           }
-          className="rounded border border-border/40 px-1.5 py-0.5 font-mono hover:bg-accent/40 hover:text-foreground"
+          className="h-auto rounded border border-border/40 px-1.5 py-0.5 text-[10px] font-mono font-normal uppercase tracking-wider hover:bg-accent/40 hover:text-foreground"
         >
           {allSelected ? "deselect all" : "select all"}
-        </button>
+        </Button>
         <span>{sorted.length} eligible</span>
       </div>
       <ul className="divide-y divide-border/30 rounded-md border border-border/40 bg-card">
@@ -557,12 +571,11 @@ function SelectListView({
                 checked && "bg-primary/5"
               )}
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={checked}
-                onChange={() => onToggle(it.id)}
+                onCheckedChange={() => onToggle(it.id)}
                 onClick={(e) => e.stopPropagation()}
-                className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                className="h-3.5 w-3.5 cursor-pointer"
                 aria-label={`Select ${it.title}`}
               />
               <span className="w-16 shrink-0 font-mono text-[10px] text-muted-foreground">

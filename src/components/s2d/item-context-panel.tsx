@@ -17,6 +17,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { SourceIcon } from "@/components/shared/source-icon";
 import type { S2DItem, SourceType } from "@/types";
 import { cn } from "@/lib/utils";
@@ -141,35 +146,39 @@ function SourceRow({ source }: { source: SourceContext }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="px-3 py-2">
-      <button
-        type="button"
-        onClick={() => setExpanded((x) => !x)}
-        className="flex w-full items-center gap-2 text-left"
-      >
-        {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-        )}
-        <SourceIcon type={source.source_type as SourceType} withLabel />
-        <span className="text-[11px] text-muted-foreground truncate">
-          {source.source_label ?? source.source_thread_id}
-        </span>
+    <Collapsible open={expanded} onOpenChange={setExpanded} className="px-3 py-2">
+      <div className="flex w-full items-center gap-2">
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="flex h-auto flex-1 items-center justify-start gap-2 whitespace-normal rounded-none px-0 py-0 text-left font-normal hover:bg-transparent"
+          >
+            {expanded ? (
+              <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+            )}
+            <SourceIcon type={source.source_type as SourceType} withLabel />
+            <span className="text-[11px] text-muted-foreground truncate">
+              {source.source_label ?? source.source_thread_id}
+            </span>
+          </Button>
+        </CollapsibleTrigger>
         {source.deep_link && (
           <a
             href={source.deep_link}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
             title="Open in source"
           >
             <ExternalLink className="h-3 w-3" />
             Open
           </a>
         )}
-      </button>
+      </div>
 
       {source.snippet && !expanded && (
         <div className="mt-1 pl-5 text-[12px] text-foreground/70 line-clamp-2">
@@ -177,8 +186,10 @@ function SourceRow({ source }: { source: SourceContext }) {
         </div>
       )}
 
-      {expanded && <SourceDetail details={source.details} />}
-    </div>
+      <CollapsibleContent>
+        <SourceDetail details={source.details} />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -399,26 +410,32 @@ function ItemChat({ item }: { item: S2DItem }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-md border border-border/50 bg-card">
-      <button
-        type="button"
-        onClick={() => setOpen((x) => !x)}
-        className="flex w-full items-center justify-between border-b border-border/40 bg-secondary/40 px-3 py-2 text-left"
-      >
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider">
-            Ask Mashi about this
-          </span>
-        </div>
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-        )}
-      </button>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="overflow-hidden rounded-md border border-border/50 bg-card"
+    >
+      <CollapsibleTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex h-auto w-full items-center justify-between rounded-none border-b border-border/40 bg-secondary/40 px-3 py-2 text-left font-normal hover:bg-secondary/40"
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">
+              Ask Mashi about this
+            </span>
+          </div>
+          {open ? (
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </Button>
+      </CollapsibleTrigger>
 
-      {open && (
+      <CollapsibleContent>
         <div className="space-y-2 p-3">
           {messages.length > 0 && (
             <div
@@ -485,7 +502,7 @@ function ItemChat({ item }: { item: S2DItem }) {
             )}
           </div>
         </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

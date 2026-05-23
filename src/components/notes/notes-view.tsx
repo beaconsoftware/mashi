@@ -7,6 +7,14 @@ import { Mic, Users, Calendar as CalendarIcon, ListChecks } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChromeBar, EmptyState } from "@/components/layout/primitives";
 import { cn } from "@/lib/utils";
 import { useMeetings, useActionItemsForMeeting } from "@/hooks/use-meetings";
@@ -49,19 +57,20 @@ export function NotesView() {
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
             {meetings.length} meetings
           </span>
-          <select
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="h-7 rounded border border-border/40 bg-background px-2 text-[11px]"
-          >
-            <option value="all">All companies</option>
-            <option value="none">No company</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <Select value={companyFilter} onValueChange={setCompanyFilter}>
+            <SelectTrigger className="h-7 rounded border-border/40 bg-background px-2 text-[11px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All companies</SelectItem>
+              <SelectItem value="none">No company</SelectItem>
+              {companies.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -92,10 +101,12 @@ export function NotesView() {
                 const company = m.company_id ? companyMap.get(m.company_id) : undefined;
                 return (
                   <li key={m.id}>
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
                       onClick={() => setSelectedId(m.id)}
                       className={cn(
-                        "block w-full px-3 py-2.5 text-left transition-colors hover:bg-accent/30",
+                        "block h-auto w-full justify-start whitespace-normal rounded-none px-3 py-2.5 text-left font-normal transition-colors hover:bg-accent/30",
                         selectedId === m.id && "bg-accent/50"
                       )}
                     >
@@ -127,7 +138,7 @@ export function NotesView() {
                           {company.name}
                         </div>
                       )}
-                    </button>
+                    </Button>
                   </li>
                 );
               })}

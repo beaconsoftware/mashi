@@ -19,6 +19,7 @@
 import { useMemo } from "react";
 import { Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSprintStore } from "@/store/sprint-store";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
@@ -164,12 +165,11 @@ function BoardCard({
       )}
     >
       <div className="flex items-start gap-2">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={checked}
-          onChange={onToggle}
+          onCheckedChange={onToggle}
           onClick={(e) => e.stopPropagation()}
-          className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-primary"
+          className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer"
           aria-label={`Add ${item.title} to sprint`}
         />
         <div className="min-w-0 flex-1">

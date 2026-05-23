@@ -8,6 +8,13 @@ import { useS2DItems, useUpdateS2DItem } from "@/hooks/use-s2d";
 import { blockLiveElapsedMs, useSprintStore } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sparkles,
   Check,
   SkipForward,
@@ -281,12 +288,16 @@ export function SprintComplete() {
           <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-2.5 text-left text-[12px] text-destructive">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="flex-1">{banner.msg}</span>
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setBanner(null)}
-              className="text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss"
+              className="h-5 w-5 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
         )}
         <h1 className="text-xl font-semibold">Sprint complete</h1>
@@ -367,21 +378,25 @@ export function SprintComplete() {
                     done
                   </span>
                 ) : (
-                  <select
+                  <Select
                     value={dispositions[b.s2dItemId] ?? "todo"}
-                    onChange={(e) =>
+                    onValueChange={(v) =>
                       setDispositions((prev) => ({
                         ...prev,
-                        [b.s2dItemId]: e.target.value as Disposition,
+                        [b.s2dItemId]: v as Disposition,
                       }))
                     }
-                    className="rounded border border-border/40 bg-secondary px-1.5 py-0.5 text-[10px] font-medium"
                     disabled={saving}
                   >
-                    <option value="todo">Keep in To Do</option>
-                    <option value="backlog">Move to Backlog</option>
-                    <option value="snooze">Snooze 24h</option>
-                  </select>
+                    <SelectTrigger className="h-6 rounded border-border/40 bg-secondary px-1.5 py-0.5 text-[10px] font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todo">Keep in To Do</SelectItem>
+                      <SelectItem value="backlog">Move to Backlog</SelectItem>
+                      <SelectItem value="snooze">Snooze 24h</SelectItem>
+                    </SelectContent>
+                  </Select>
                 )}
               </li>
             );
