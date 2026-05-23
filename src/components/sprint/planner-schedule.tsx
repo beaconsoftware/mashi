@@ -169,7 +169,7 @@ export function PlannerSchedule() {
   }, [draggingId, blocks, itemMap]);
 
   return (
-    <div className="flex h-full flex-col bg-card">
+    <div className="flex h-full flex-col">
       <PlannerHeader phase="schedule" onCancel={exit} />
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>

@@ -39,6 +39,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChromeBar } from "@/components/layout/primitives";
 import { useUpdateS2DItem } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
 import { gsap, EASE, DUR } from "@/lib/animation";
@@ -259,8 +260,10 @@ export function PlannerPrioritizeSwipe({ eligibleItems }: Props) {
 
   return (
     <div className="flex h-full w-full flex-col">
-      {/* Top: progress + close */}
-      <div className="flex items-center gap-3 border-b border-border/40 px-6 py-4">
+      {/* Top: progress + close. ChromeBar so the row reads against the
+          ambient album-art layer; the focal card below stays opaque
+          and pops against the same ambient. */}
+      <ChromeBar className="flex items-center gap-3 px-6 py-4">
         <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
           {cursor + 1} / {deckRef.current.length}
         </span>
@@ -282,7 +285,7 @@ export function PlannerPrioritizeSwipe({ eligibleItems }: Props) {
         >
           <X className="h-4 w-4" />
         </button>
-      </div>
+      </ChromeBar>
 
       {/* Deck — single card. Generous vertical breathing room
           (py-10 / lg:py-14) so the card never feels cramped against
@@ -305,23 +308,26 @@ export function PlannerPrioritizeSwipe({ eligibleItems }: Props) {
         />
       </div>
 
-      {/* Action buttons */}
-      <ActionBar
-        onSwipe={(a) => flyOff(a, vectorFor(a))}
-        remaining={remaining}
-        selectedCount={selected.length}
-        onLockIn={lockIn}
-      />
-
-      {/* Keyboard hints */}
-      <div className="mb-5 mt-2 flex items-center justify-center gap-3 text-[10px] text-muted-foreground">
-        <Keyboard className="h-3 w-3" />
-        <Shortcut k="←" label="skip" />
-        <Shortcut k="→" label="add to sprint" />
-        <Shortcut k="↑" label="defer to backlog" />
-        <Shortcut k="↓" label="snooze 24h" />
-        <Shortcut k="esc" label="close" />
-      </div>
+      {/* Footer toolbar — action buttons + keyboard hints anchored
+          together so the bottom of the planner reads as one chrome
+          strip, not two disconnected floating rows. ChromeBar drops
+          the top border so it can sit flush against the deck above. */}
+      <ChromeBar className="flex flex-col items-center gap-2 border-t border-b-0 px-5 pt-3 pb-3">
+        <ActionBar
+          onSwipe={(a) => flyOff(a, vectorFor(a))}
+          remaining={remaining}
+          selectedCount={selected.length}
+          onLockIn={lockIn}
+        />
+        <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground">
+          <Keyboard className="h-3 w-3" />
+          <Shortcut k="←" label="skip" />
+          <Shortcut k="→" label="add to sprint" />
+          <Shortcut k="↑" label="defer to backlog" />
+          <Shortcut k="↓" label="snooze 24h" />
+          <Shortcut k="esc" label="close" />
+        </div>
+      </ChromeBar>
     </div>
   );
 
@@ -466,8 +472,10 @@ function ActionBar({
   selectedCount: number;
   onLockIn: () => void;
 }) {
+  // Padding/border handled by the parent <ChromeBar> footer — keep the
+  // ActionBar purely about the button cluster layout.
   return (
-    <div className="flex items-center justify-center gap-2 px-5 pb-2">
+    <div className="flex items-center justify-center gap-2">
       <Button
         variant="outline"
         size="lg"

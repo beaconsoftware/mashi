@@ -20,6 +20,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChromeBar } from "@/components/layout/primitives";
 import { Input } from "@/components/ui/input";
 import { useSprintStore } from "@/store/sprint-store";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
@@ -73,8 +74,9 @@ export function PlannerPrioritizeList({ eligibleItems }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border/30 px-5 py-2">
+      {/* Filter bar — ChromeBar so the controls read against ambient
+          album art while the list body below stays card-opaque. */}
+      <ChromeBar className="flex flex-wrap items-center gap-2 px-5 py-2">
         <FilterIcon className="h-3 w-3 text-muted-foreground" />
         <Input
           value={query}
@@ -136,10 +138,12 @@ export function PlannerPrioritizeList({ eligibleItems }: Props) {
             </Button>
           )}
         </div>
-      </div>
+      </ChromeBar>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      {/* List body — opaque card surface so item rows read against
+          bright album art. The ambient layer keeps showing in the
+          gaps between toolbar / list / footer. */}
+      <div className="flex-1 overflow-y-auto bg-card">
         {filtered.length === 0 ? (
           <div className="p-8 text-center text-[12px] text-muted-foreground">
             {eligibleItems.length === 0
@@ -160,8 +164,9 @@ export function PlannerPrioritizeList({ eligibleItems }: Props) {
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between border-t border-border/30 px-5 py-2.5">
+      {/* Footer — ChromeBar (no bottom border) anchored to the
+          viewport edge. */}
+      <ChromeBar className="flex items-center justify-between border-t border-b-0 px-5 py-2.5">
         <div className="text-[11px] text-muted-foreground">
           {filtered.length} of {eligibleItems.length} shown · {selected.length} in
           sprint
@@ -180,7 +185,7 @@ export function PlannerPrioritizeList({ eligibleItems }: Props) {
             Lock in {selected.length > 0 ? `(${selected.length})` : ""}
           </Button>
         </div>
-      </div>
+      </ChromeBar>
     </div>
   );
 }

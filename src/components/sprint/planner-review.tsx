@@ -107,7 +107,7 @@ export function PlannerReview() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-card">
+    <div className="flex h-full flex-col">
       <PlannerHeader phase="review" onCancel={exit} />
 
       <div className="flex-1 overflow-y-auto p-4">
