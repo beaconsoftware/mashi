@@ -1,76 +1,37 @@
 "use client";
 
-import { useRef } from "react";
 import { usePathname } from "next/navigation";
-import { useGSAP } from "@gsap/react";
-import { gsap, EASE, DUR, withMotion } from "@/lib/animation";
 
 /**
- * Animate page content on every route change so navigation feels lively
- * instead of flat-loading.
+ * Page transition wrapper. Currently a no-op pass-through.
  *
- * Keyed on pathname: each time the URL changes, React re-mounts the inner
- * wrapper, which gives GSAP a fresh node to animate from scratch. The
- * status bar above and chat panel beside stay put — only the actual page
- * content gets the bouncy entry.
+ * History: this used to do a GSAP opacity-fade (then a translateY slide)
+ * on every route change. After the doctrine migration most dashboard
+ * pages contain multiple <ChromeBar> strips (each `backdrop-blur-sm`).
+ * Animating ANY property on a parent of `backdrop-filter` descendants
+ * is a canonical Chromium jank pattern — the cached composite is
+ * invalidated every frame, the browser re-samples the ambient layer
+ * through every blur 60×/sec, and the animation drops to ~2-10fps on
+ * /sprint, /linear, /notes, /inbox, /calendar. Both opacity and
+ * transform tweens hit this. CSS-vs-GSAP doesn't matter; the cost
+ * is in the filter recompute, not the JS scheduling.
  *
- * Reduced-motion users get the plain render (handled by withMotion in the
- * shared animation utility).
+ * Pragmatic choice: render snap. An instant page is faster-feeling
+ * than a choppy fade. If we ever want the entry animation back, the
+ * structural fix is to animate ONLY a child element that has no
+ * backdrop-filter siblings — not the wrapper.
+ *
+ * The `usePathname` hook stays so this component remains a clean
+ * extension point if we later add a route-aware transition (e.g.
+ * different motion per route, or skip-on-backdrop-heavy routes).
  */
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-
-  useGSAP(
-    () => {
-      if (!wrapRef.current) return;
-      withMotion(() => {
-        // PERF: animating opacity (or transform) on a parent that has
-        // backdrop-filter descendants is a Chromium jank pattern — the
-        // browser has to re-sample the ambient layer through every
-        // blur on every frame because the cached composite is
-        // invalidated. After the doctrine migration most pages now
-        // contain multiple <ChromeBar> strips (each `backdrop-blur-sm`),
-        // so the previous DUR.base (420ms) opacity tween dropped to
-        // ~2fps on /sprint, /linear, /notes, /inbox, /calendar.
-        //
-        // Mitigations applied:
-        //   1. Shorter duration — pain is over in ~180ms instead of 420.
-        //   2. power3.out ease — settles cleanly, no overshoot beyond 1.
-        //      back.out(1.4) prolonged the recompute window by ~80ms.
-        //   3. translateY only (no opacity). Translate3d composites on
-        //      the GPU without invalidating the backdrop-filter pass on
-        //      siblings BELOW the moving content. Opacity invalidates
-        //      every backdrop-filter descendant.
-        //
-        // If the route content briefly appears 6px below its final
-        // resting position before clearProps fires, that's the
-        // interruption case the previous comment warned about — but
-        // useGSAP scopes the tween to wrapRef, and the new mount key
-        // forces a fresh node so there's no in-flight tween to
-        // collide with.
-        gsap.fromTo(
-          wrapRef.current,
-          { y: 6 },
-          {
-            y: 0,
-            duration: DUR.micro,
-            ease: EASE.out,
-            clearProps: "all",
-          }
-        );
-      });
-    },
-    { dependencies: [pathname] }
-  );
-
+  // Key forces a fresh mount per route so any internal "enter"
+  // animations baked into individual page components (planner hero
+  // entry, etc.) re-trigger reliably. The wrapper itself does no work.
   return (
-    <div
-      ref={wrapRef}
-      key={pathname}
-      className="flex min-h-0 flex-1 flex-col"
-      style={{ willChange: "transform" }}
-    >
+    <div key={pathname} className="flex min-h-0 flex-1 flex-col">
       {children}
     </div>
   );

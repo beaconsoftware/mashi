@@ -165,6 +165,40 @@ parent an explicit z-class (`z-chrome`) so its whole stacking context
 is lifted, not just its inline contents. The `<ChromeBar>` primitive
 bakes this in — use it instead of hand-rolling.
 
+### Stacking buckets — z-index is not enough
+
+The doctrine declares `GROUND = 0 < SHELL = 10 < PAGE_CHROME = 40` etc.
+True on paper, but CSS painting order doesn't compare z-index numbers
+first — it compares **stacking buckets**, defined by the CSS 2.1
+painting-order spec:
+
+  1. The stacking context root background
+  2. Negative-z descendants
+  3. **Non-positioned block-level descendants** (in DOM order)
+  4. Non-positioned floats
+  5. Non-positioned inlines
+  6. **Positioned descendants with `z-index: 0` / `auto`** (in DOM order)
+  7. Positioned descendants with positive z-index (sorted by z)
+
+Bucket 6 paints AFTER bucket 3. So an `<AmbientGround>`
+(`fixed inset-0 z-ground`, z:0 — positioned, bucket 6) WILL paint on
+top of an unpositioned `<main>` (bucket 3) even though z-ground numerically
+equals what `<main>` would resolve to. This bit us on /sprint
+(and every dashboard route once Spotify ambient mounted): page content
+was rendered, then album art painted over it.
+
+**Rule: every shell-level container that sibling-stacks with the ambient
+must be `position: relative` (no z-index needed — DOM order wins inside
+bucket 6).** Today that means `<header>`, `<aside>` (sidebar), `<main>`,
+ChatPanel root, and any future fullscreen sibling of `<AmbientGround>`.
+`<header>` and Sidebar were already positioned via `z-chrome` /
+`z-sidebar`; `<main>` was the one missing it.
+
+`pnpm audit:layers` greps for unpositioned `<main>` / `<aside>` /
+`<article>` to catch new offenders. If you legitimately want an inline
+`<section>` that doesn't need positioning, it's not flagged — only the
+shell-level semantic containers are.
+
 ### Single overlay portal
 
 AppShell mounts `<OverlayRoot />` once. Anything that wants to be a
