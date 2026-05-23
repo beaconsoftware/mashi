@@ -50,10 +50,13 @@ EXCLUDE_FILES=(
   "src/components/sprint/planner-prioritize-swipe.tsx"
   "src/components/s2d/review-deck.tsx"
   # shadcn-doctrine TODO: this file has a hand-rolled <aside role=dialog>
-  # that should be a shadcn <Sheet>. Migration is non-trivial because
-  # the side panel lives INSIDE the FocusOverlay portal — shadcn Sheet
-  # portals to body by default. Tracked at the callsite. Grandfathered
-  # here so the audit can land and catch new violations elsewhere.
+  # that should be a shadcn <Sheet>. Blocker: the side panel is
+  # ABSOLUTE-positioned inside the FocusOverlay portal so it only covers
+  # the focus area, not the sidebar. shadcn Sheet uses `fixed` + portals
+  # to body, which would cover the sidebar (MODAL=150 > SIDEBAR=110) and
+  # break the "sidebar always reachable" rule. Migration needs a new
+  # <InOverlaySheet> primitive that wraps Radix Dialog with container=
+  # focusOverlayRef + absolute positioning. Tracked at the callsite.
   "src/components/sprint/sprint-active-mode-multi.tsx"
   # shadcn-doctrine TODO (PR 2 of 3 — Select migration): every entry
   # below has at least one raw <select> styled with Tailwind. Migrating
@@ -66,6 +69,9 @@ EXCLUDE_FILES=(
   "src/components/inbox/inbox-view.tsx"
   "src/components/linear/linear-view.tsx"
   "src/components/notes/notes-view.tsx"
+  # Note: ApiKeyDialog already migrated to shadcn <Dialog>. The remaining
+  # violation is a raw <select> in the company-picker (line ~468) —
+  # tracked as part of the Select migration above.
   "src/components/settings/connections-manager.tsx"
   "src/components/sprint/planner-prioritize-list.tsx"
   "src/components/sprint/planner-review.tsx"
@@ -117,7 +123,6 @@ EXCLUDE_FILES=(
   "src/components/settings/api-tokens-manager.tsx"
   "src/components/settings/slack-channel-picker.tsx"
   "src/components/settings/usage-view.tsx"
-  "src/components/spotlight/spotlight-modal.tsx"
   "src/components/spotlight/spotlight-trigger.tsx"
   "src/components/sprint/planner-prioritize-shell.tsx"
   "src/components/sprint/planner-schedule.tsx"

@@ -21,6 +21,14 @@ import { SlackChannelPicker } from "@/components/settings/slack-channel-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { LinearOAuthProvider } from "@/lib/oauth/providers/linear";
 import { GmailOAuthProvider } from "@/lib/oauth/providers/gmail";
@@ -628,74 +636,71 @@ function ApiKeyDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="space-y-3 p-5">
-          <div className="flex items-center gap-2">
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
             <Key className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold">Add {prettyProvider(provider)} API key</h3>
-            <button
-              onClick={onClose}
-              className="ml-auto text-muted-foreground hover:text-foreground"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <p className="text-[12px] text-muted-foreground">
-            {provider === "fireflies" ? (
-              "Grab a key from app.fireflies.ai → Settings → Developer Settings."
-            ) : provider === "linear" ? (
-              <>
-                In Linear, switch to the workspace you want to connect → click
-                your avatar (top-left) →{" "}
-                <span className="font-medium text-foreground">Preferences</span> →{" "}
-                <span className="font-medium text-foreground">Security & access</span> →
-                scroll to <span className="font-medium text-foreground">Personal API keys</span>{" "}
-                → New key with scopes{" "}
-                <span className="font-mono">read, write, issues:create, comments:create</span>.
-                One key per workspace.
-                <br />
-                <br />
-                <span className="text-foreground/70">
-                  Can&apos;t see &quot;Personal API keys&quot;? Your workspace admin has
-                  restricted creation. Ask them to set{" "}
-                  <span className="font-medium text-foreground">
-                    Workspace settings → Security & access → API key creation
-                  </span>{" "}
-                  to <span className="font-mono">All members</span>, or have them
-                  create a key on your behalf.
-                </span>
-              </>
-            ) : (
-              "Paste your API key."
-            )}
-          </p>
-          <Input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="API key"
-            autoFocus
-            disabled={submitting}
-          />
-          {error && (
-            <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-[12px] text-destructive">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{error}</span>
+            Add {prettyProvider(provider)} API key
+          </DialogTitle>
+          {/* asChild → render as <div> so we can nest <br>, <span>,
+              etc. without invalid <p>-inside-<p> HTML. */}
+          <DialogDescription asChild>
+            <div className="text-[12px] text-muted-foreground">
+              {provider === "fireflies" ? (
+                "Grab a key from app.fireflies.ai → Settings → Developer Settings."
+              ) : provider === "linear" ? (
+                <>
+                  In Linear, switch to the workspace you want to connect → click
+                  your avatar (top-left) →{" "}
+                  <span className="font-medium text-foreground">Preferences</span> →{" "}
+                  <span className="font-medium text-foreground">Security & access</span> →
+                  scroll to <span className="font-medium text-foreground">Personal API keys</span>{" "}
+                  → New key with scopes{" "}
+                  <span className="font-mono">read, write, issues:create, comments:create</span>.
+                  One key per workspace.
+                  <br />
+                  <br />
+                  <span className="text-foreground/70">
+                    Can&apos;t see &quot;Personal API keys&quot;? Your workspace admin has
+                    restricted creation. Ask them to set{" "}
+                    <span className="font-medium text-foreground">
+                      Workspace settings → Security & access → API key creation
+                    </span>{" "}
+                    to <span className="font-mono">All members</span>, or have them
+                    create a key on your behalf.
+                  </span>
+                </>
+              ) : (
+                "Paste your API key."
+              )}
             </div>
-          )}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={submit} disabled={submitting || apiKey.trim().length < 8}>
-              {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Connect"}
-            </Button>
+          </DialogDescription>
+        </DialogHeader>
+        <Input
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="API key"
+          autoFocus
+          disabled={submitting}
+        />
+        {error && (
+          <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-[12px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{error}</span>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={submit} disabled={submitting || apiKey.trim().length < 8}>
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Connect"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
