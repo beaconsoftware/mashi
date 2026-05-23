@@ -1,19 +1,31 @@
 "use client";
 
-// translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
+// translucency-audit-ok: file — <mark> uses bg-primary/30 for search-term
+// highlight (sanctioned scale doesn't include a "light tint over text"
+// step). Surface chrome itself goes through shadcn primitives, which
+// are doctrine-compliant.
 
 /**
  * ⌘K spotlight: keyword search across S2D, Gmail, Slack, Linear,
- * meetings, calendar — rendered as a centered modal. Keyboard-first:
- * ↑/↓ to move between hits, ↵ to select, Esc to close.
+ * meetings, calendar — rendered as a centered command palette.
+ * Keyboard-first: ↑/↓ to move between hits, ↵ to select, Esc to close.
+ *
+ * Built on shadcn <Dialog> + <Command> (cmdk + Radix Dialog). Radix
+ * Dialog gives us Esc / click-outside / focus-trap; cmdk's <Command>
+ * gives us keyboard nav + scroll-into-view of the active item.
+ *
+ * We pass `shouldFilter={false}` to cmdk because search is done by
+ * `useSpotlight` against the TanStack Query caches we already have —
+ * cmdk's built-in filter would drop items whose `value` doesn't
+ * include the search string, but our snippet matches can come from
+ * the description, not the title.
  *
  * Search runs client-side over the same TanStack Query caches the
  * dashboard already uses — no extra network on keystroke.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Search,
   Mail,
   MessageSquare,
   GitBranch,
@@ -21,10 +33,23 @@ import {
   Calendar as CalIcon,
   KanbanSquare,
   ExternalLink,
-  X,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import {
   useSpotlight,
@@ -49,36 +74,12 @@ export function SpotlightModal() {
   const router = useRouter();
   const setSelectedItem = useS2DStore((s) => s.setSelectedItem);
   const { query, setQuery, debounced, hits, grouped } = useSpotlight();
-  const [activeIdx, setActiveIdx] = useState(0);
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Reset active hit whenever the result set changes — otherwise the
-  // user types and the previously-highlighted row becomes meaningless.
+  // Clear stale query when the dialog closes so reopening doesn't show
+  // last session's results before the user types.
   useEffect(() => {
-    setActiveIdx(0);
-  }, [debounced]);
-
-  // Re-focus the input every time we open. Also clear stale query so
-  // re-opening doesn't show last session's results before the user types.
-  useEffect(() => {
-    if (open) {
-      requestAnimationFrame(() => inputRef.current?.focus());
-    } else {
-      setQuery("");
-    }
+    if (!open) setQuery("");
   }, [open, setQuery]);
-
-  // Flattened list for keyboard nav. Mirrors render order so the
-  // visual highlight matches activeIdx 1:1.
-  const flat = useMemo(() => grouped.flatMap(([, list]) => list), [grouped]);
-
-  // Scroll the active row into view as the user arrows through results.
-  useEffect(() => {
-    if (!listRef.current) return;
-    const el = listRef.current.querySelector<HTMLElement>(`[data-idx="${activeIdx}"]`);
-    if (el) el.scrollIntoView({ block: "nearest" });
-  }, [activeIdx]);
 
   function selectHit(h: SpotlightHit) {
     setOpen(false);
@@ -98,92 +99,103 @@ export function SpotlightModal() {
     }
   }
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      setOpen(false);
-      return;
-    }
-    if (!flat.length) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIdx((i) => Math.min(i + 1, flat.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIdx((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const h = flat[activeIdx];
-      if (h) selectHit(h);
-    }
-  }
-
-  if (!open) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-modal flex items-start justify-center bg-background/70 px-4 pt-[12vh] backdrop-blur-sm"
-      onClick={() => setOpen(false)}
-    >
-      <div
-        className="w-full max-w-2xl overflow-hidden rounded-lg border border-border/60 bg-card shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={onKeyDown}
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent
+        showCloseButton={false}
+        className="top-[12vh] translate-y-0 max-w-2xl gap-0 overflow-hidden p-0"
       >
-        {/* Input row */}
-        <div className="flex items-center gap-2 border-b border-border/40 px-3">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <Input
-            ref={inputRef}
+        <DialogHeader className="sr-only">
+          <DialogTitle>Spotlight search</DialogTitle>
+          <DialogDescription>
+            Search across S2D, Gmail, Slack, Linear, meetings, and calendar.
+          </DialogDescription>
+        </DialogHeader>
+        <Command shouldFilter={false} className="bg-card">
+          <CommandInput
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search S2D, Gmail, Slack, Linear, meetings, calendar…"
-            className="h-11 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+            onValueChange={setQuery}
+            placeholder="Search S2D, Gmail, Slack, Linear, meetings, calendar..."
           />
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="rounded p-1 text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-            aria-label="Close"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        {/* Results */}
-        <ScrollArea className="max-h-[60vh]">
-          <div ref={listRef} className="p-2">
+          <CommandList className="max-h-[60vh]">
             {!debounced ? (
-              <EmptyHint />
-            ) : flat.length === 0 ? (
-              <div className="px-2 py-8 text-center text-[12px] text-muted-foreground">
-                Nothing found for &quot;{query}&quot;.
-              </div>
+              <CommandEmpty>
+                <EmptyHint />
+              </CommandEmpty>
+            ) : hits.length === 0 ? (
+              <CommandEmpty>
+                <span className="text-muted-foreground">
+                  Nothing found for &quot;{query}&quot;.
+                </span>
+              </CommandEmpty>
             ) : (
-              <SpotlightResults
-                grouped={grouped}
-                activeIdx={activeIdx}
-                onHover={setActiveIdx}
-                onSelect={selectHit}
-                query={debounced}
-              />
+              grouped.map(([source, list], groupIdx) => {
+                const meta = SPOTLIGHT_SOURCE_META[source];
+                const Icon = SOURCE_ICONS[source];
+                // Fragment (not <div>) so cmdk's keyboard nav can
+                // traverse CommandItems across groups without the
+                // wrapper breaking the descendant search.
+                return (
+                  <Fragment key={source}>
+                    {groupIdx > 0 && <CommandSeparator />}
+                    <CommandGroup
+                      heading={
+                        <span className="flex items-center gap-2">
+                          <Icon className={cn("h-3 w-3", meta.color)} />
+                          <span>{meta.label}</span>
+                          <span className="font-mono opacity-70">{list.length}</span>
+                        </span>
+                      }
+                    >
+                      {list.map((h) => (
+                        <CommandItem
+                          key={`${h.source}-${h.id}`}
+                          // Unique value per item so cmdk's selection
+                          // (highlighted row) can track which one is
+                          // active. With shouldFilter=false the value
+                          // is just an id — never matched against the
+                          // query.
+                          value={`${h.source}-${h.id}`}
+                          onSelect={() => selectHit(h)}
+                          className="items-start"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="line-clamp-1 text-[13px] font-medium text-foreground/90">
+                              {highlight(h.title, debounced)}
+                            </div>
+                            {h.snippet && (
+                              <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+                                {highlight(h.snippet, debounced)}
+                              </div>
+                            )}
+                            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/70">
+                              {h.meta}
+                            </div>
+                          </div>
+                          {h.external && (
+                            <ExternalLink className="mt-1 h-3 w-3 shrink-0 text-muted-foreground" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </Fragment>
+                );
+              })
+            )}
+          </CommandList>
+          <div className="flex items-center justify-between border-t border-border/40 px-3 py-1.5 text-[10px] text-muted-foreground/80">
+            <span>
+              <Kbd>↑</Kbd> <Kbd>↓</Kbd> navigate · <Kbd>↵</Kbd> open · <Kbd>esc</Kbd> close
+            </span>
+            {debounced && (
+              <span>
+                {hits.length} result{hits.length === 1 ? "" : "s"}
+              </span>
             )}
           </div>
-        </ScrollArea>
-
-        {/* Footer hint */}
-        <div className="flex items-center justify-between border-t border-border/40 px-3 py-1.5 text-[10px] text-muted-foreground/80">
-          <span>
-            <Kbd>↑</Kbd> <Kbd>↓</Kbd> navigate · <Kbd>↵</Kbd> open · <Kbd>esc</Kbd> close
-          </span>
-          {debounced && (
-            <span>
-              {flat.length} result{flat.length === 1 ? "" : "s"}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
+        </Command>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -195,80 +207,6 @@ function EmptyHint() {
         Type to look across board items, meetings, messages, Linear issues,
         and calendar events. Runs locally over your cached data.
       </div>
-    </div>
-  );
-}
-
-function SpotlightResults({
-  grouped,
-  activeIdx,
-  onHover,
-  onSelect,
-  query,
-}: {
-  grouped: ReadonlyArray<readonly [SpotlightSource, SpotlightHit[]]>;
-  activeIdx: number;
-  onHover: (idx: number) => void;
-  onSelect: (h: SpotlightHit) => void;
-  query: string;
-}) {
-  // Track running index so we can map (group, position) → flat index for
-  // matching against activeIdx.
-  let runningIdx = 0;
-  return (
-    <div className="space-y-3">
-      {grouped.map(([source, list]) => {
-        const meta = SPOTLIGHT_SOURCE_META[source];
-        const Icon = SOURCE_ICONS[source];
-        return (
-          <section key={source}>
-            <div className="mb-1 flex items-center gap-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <Icon className={cn("h-3 w-3", meta.color)} />
-              {meta.label}
-              <span className="font-mono opacity-70">{list.length}</span>
-            </div>
-            <ul>
-              {list.map((h) => {
-                const idx = runningIdx++;
-                const active = idx === activeIdx;
-                return (
-                  <li key={`${h.source}-${h.id}`}>
-                    <button
-                      type="button"
-                      data-idx={idx}
-                      onMouseEnter={() => onHover(idx)}
-                      onClick={() => onSelect(h)}
-                      className={cn(
-                        "flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors",
-                        active
-                          ? "bg-accent/40 text-foreground"
-                          : "hover:bg-accent/20",
-                      )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="line-clamp-1 text-[13px] font-medium text-foreground/90">
-                          {highlight(h.title, query)}
-                        </div>
-                        {h.snippet && (
-                          <div className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
-                            {highlight(h.snippet, query)}
-                          </div>
-                        )}
-                        <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/70">
-                          {h.meta}
-                        </div>
-                      </div>
-                      {h.external && (
-                        <ExternalLink className="mt-1 h-3 w-3 shrink-0 text-muted-foreground" />
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        );
-      })}
     </div>
   );
 }

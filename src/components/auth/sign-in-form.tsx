@@ -1,5 +1,11 @@
 "use client";
 
+// translucency-audit-ok: file — glassmorphic sign-in card uses
+// intentional off-scale alphas (white/[0.04], white/[0.08]) for the
+// frosted-glass effect over the animated aurora background. The
+// sanctioned in-app scale (/15/40/55/60/80/95) is too opaque for this
+// look. Scoped to this one page; doesn't escape into in-app chrome.
+
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
@@ -76,19 +82,25 @@ export function SignInForm() {
   }
 
   return (
-    <Card>
-      <CardContent className="p-5 space-y-3">
+    // Glassmorphic card: heavy backdrop-blur + low-opacity background +
+    // soft white border so it reads as frosted glass over the animated
+    // aurora behind it. The shadcn Card defaults (bg-card opaque) would
+    // hide the aurora entirely — overrides flip it to a glass surface.
+    // translucency-audit-ok: sign-in is a one-off surface, intentional
+    // off-scale alpha for the glassmorphic effect that's the design goal.
+    <Card className="border-white/10 bg-white/[0.04] shadow-2xl shadow-black/40 backdrop-blur-2xl">
+      <CardContent className="space-y-3 p-5">
         <Button
           onClick={signInWithGoogle}
           disabled={signing}
           variant="outline"
-          className="w-full gap-2 h-10 text-sm"
+          className="h-10 w-full gap-2 border-white/10 bg-white/[0.04] text-sm backdrop-blur-md hover:bg-white/[0.08]"
         >
           <GoogleGlyph />
           {signing ? "Redirecting to Google…" : "Continue with Google"}
         </Button>
         {error && (
-          <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-[12px] text-destructive">
+          <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-[12px] text-destructive backdrop-blur-md">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{error}</span>
           </div>

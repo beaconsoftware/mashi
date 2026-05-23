@@ -160,3 +160,87 @@
   .z-modal    { z-index: 150; }
   .z-toast    { z-index: 200; }
 }
+
+/* ----------------------------------------------------------------
+   Sign-in aurora — animated mesh-gradient background.
+   Four large blurred blobs drift on independent yoyos while a parent
+   filter: hue-rotate rotates the entire palette. All composited on
+   the GPU (transform + filter), no JS, no per-frame layout/paint.
+   See src/components/auth/sign-in-background.tsx.
+---------------------------------------------------------------- */
+@keyframes sign-in-hue-cycle {
+  from { filter: hue-rotate(0deg); }
+  to   { filter: hue-rotate(360deg); }
+}
+@keyframes sign-in-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(120px, -60px, 0) scale(1.08); }
+}
+@keyframes sign-in-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-100px, 80px, 0) scale(1.1); }
+}
+@keyframes sign-in-drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(80px, 100px, 0) scale(0.94); }
+}
+@keyframes sign-in-drift-d {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-140px, -40px, 0) scale(1.05); }
+}
+
+.sign-in-aurora {
+  animation: sign-in-hue-cycle 32s linear infinite;
+  will-change: filter;
+}
+
+.sign-in-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(96px);
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+.sign-in-blob-a {
+  top: -120px;
+  left: -80px;
+  width: 620px;
+  height: 620px;
+  /* Amber — the Mashi accent. Seed of the palette. */
+  background: radial-gradient(closest-side, hsl(38 95% 60% / 0.7), transparent 70%);
+  animation: sign-in-drift-a 19s ease-in-out infinite;
+}
+.sign-in-blob-b {
+  bottom: -100px;
+  right: -100px;
+  width: 540px;
+  height: 540px;
+  /* Violet — counterpoint warmth-to-cool. */
+  background: radial-gradient(closest-side, hsl(278 88% 60% / 0.65), transparent 70%);
+  animation: sign-in-drift-b 23s ease-in-out infinite;
+}
+.sign-in-blob-c {
+  top: 28%;
+  left: 48%;
+  width: 420px;
+  height: 420px;
+  /* Teal — center-of-frame highlight. */
+  background: radial-gradient(closest-side, hsl(182 92% 55% / 0.55), transparent 70%);
+  animation: sign-in-drift-c 27s ease-in-out infinite;
+}
+.sign-in-blob-d {
+  bottom: 18%;
+  left: 18%;
+  width: 360px;
+  height: 360px;
+  /* Magenta — fills the lower-left vignette. */
+  background: radial-gradient(closest-side, hsl(338 90% 60% / 0.5), transparent 70%);
+  animation: sign-in-drift-d 31s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sign-in-aurora,
+  .sign-in-blob {
+    animation: none !important;
+  }
+}
