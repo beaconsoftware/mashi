@@ -765,12 +765,23 @@ function DetailPanel({
         onClick={onClose}
       />
       {/* shadcn-doctrine TODO: migrate to <Sheet side="right"> from
-          src/components/ui/sheet.tsx. Not trivial because shadcn Sheet
-          (Radix Dialog) portals to body, and this side panel needs to
-          live INSIDE the FocusOverlay portal so it sits at z-focus.
-          Solvable with a custom container ref, but out of scope for the
-          doctrine landing PR. Grandfathered in scripts/audit-layers.sh
-          EXCLUDE_FILES with this TODO. */}
+          src/components/ui/sheet.tsx.
+          Blocker: this side panel is ABSOLUTE-positioned inside the
+          FocusOverlay (so it only covers the focus area, not the
+          sidebar). shadcn Sheet (Radix Dialog) uses `fixed inset-y-0`
+          and portals to document.body — switching would mean the panel
+          covers the whole viewport including the sidebar nav, breaking
+          the "sidebar always wins" rule (z-sidebar 110 > z-modal 150 is
+          NOT true; we'd need to re-jig the z-scale).
+          Two options when we revisit:
+            1) Add a `container` prop forwarded to Radix Portal + change
+               positioning to `absolute` via className override. Brittle.
+            2) Add a new `<InOverlaySheet>` primitive in
+               src/components/layout/primitives.tsx that wraps Radix
+               Dialog with container={focusOverlayRef.current} and
+               absolute positioning.
+          Grandfathered in scripts/audit-layers.sh EXCLUDE_FILES until
+          we do option 2. */}
       <aside
         role="dialog"
         aria-label="Item detail"
