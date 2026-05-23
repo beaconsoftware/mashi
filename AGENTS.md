@@ -384,6 +384,85 @@ If you find yourself wanting a primitive that doesn't exist, add it to
 `src/components/layout/primitives.tsx` rather than hand-rolling. Other
 features will benefit from the same surface.
 
+## Component library doctrine — shadcn first, always
+
+**Hard rule: every interactive primitive comes from `src/components/ui/`.**
+That folder is shadcn/ui. Buttons, inputs, dialogs, dropdowns, popovers,
+toasts, selects — all of it. Never hand-roll a primitive when a shadcn
+version exists. Never replace shadcn with a custom equivalent.
+
+This doctrine exists because we shipped without it once and ended up
+with hand-rolled modals (`SpotlightModal`), bespoke dropdown menus
+(`slack-channel-picker`), custom toast systems (`notification-hub`)
+that all do roughly the same thing in subtly different, less-accessible
+ways. shadcn primitives are accessibility-correct, keyboard-correct,
+and visually consistent. Hand-rolled ones aren't.
+
+### When you need a primitive that isn't in `src/components/ui/` yet
+
+shadcn's catalog is comprehensive. Almost everything you'd want exists.
+Before adding ANYTHING:
+
+1. **Survey shadcn first.** Open https://ui.shadcn.com/docs/components
+   (or use the shadcn MCP server) and look at the full list. Don't pick
+   the first match — pick the one whose visual + UX shape fits the use
+   case. Many primitives overlap:
+   - **Modal-ish surfaces:** `Dialog` (centered modal), `AlertDialog`
+     (destructive confirmation, blocks dismissal), `Sheet`
+     (slide-from-edge panel), `Drawer` (mobile-bottom-up sheet).
+   - **List-of-choices:** `Select` (single value, native-feeling),
+     `Combobox` (typeable, filterable), `Command` (cmd-K search),
+     `DropdownMenu` (action menu), `RadioGroup` (visible exclusive
+     choice), `Menubar` (multi-tier menu like a desktop app's).
+   - **Notifications:** `Sonner` (preferred — toast lib), `Toast`
+     (legacy — only if Sonner doesn't fit).
+   - **Layout:** `Resizable` (panels), `ScrollArea` (custom scrollbar),
+     `Separator`, `Sidebar`.
+   - **Disclosure:** `Accordion` (vertical), `Collapsible` (single),
+     `Tabs`, `HoverCard`, `Tooltip`, `Popover`.
+   - **Inputs:** `Input`, `Textarea`, `Checkbox`, `Switch`, `Slider`,
+     `Toggle`, `ToggleGroup`, `InputOTP`, `DatePicker`, `Calendar`.
+   - **Data:** `Table`, `DataTable`, `Pagination`, `Progress`, `Chart`,
+     `Skeleton`.
+
+2. **Install via the CLI** so it follows our `components.json` config:
+   ```bash
+   npx shadcn@latest add <name>
+   ```
+   This drops the source into `src/components/ui/<name>.tsx`, picks
+   up our `cn` alias, our `lucide` icon library, and our `globals.css`
+   tokens automatically.
+
+3. **Use it as-is, or compose on top** in a Mashi-specific wrapper
+   somewhere outside `ui/`. Never edit the shadcn source to add
+   product-specific logic — wrap it instead.
+
+### What stays Mashi-specific (built on top, not replacing)
+
+- **Layout primitives** in `src/components/layout/primitives.tsx`
+  (`ChromeBar`, `Surface`, `EmptyState`, `FocusOverlay`, `AmbientGround`,
+  `OverlayRoot`, `SectionHeader`). These compose Tailwind + the
+  doctrine — they're not primitives, they're product chrome.
+- **Feature views** (`SprintPage`, `S2DBoard`, `CalendarView`,
+  `LinearView`, `NotesView`, etc.).
+- **Animation orchestration** via GSAP. Animation is behavior, not a
+  primitive — it operates ON shadcn components, doesn't replace them.
+
+### Hand-rolled-primitive checklist (when reviewing a PR)
+
+Audit pings if you see:
+- `<button>` with onClick + Tailwind styling outside `ui/`. Use `<Button>`.
+- `<input>`, `<textarea>`, `<select>` raw outside `ui/`. Use the
+  shadcn version (add it via the CLI if it doesn't exist).
+- `position: fixed`/`absolute` + `inset-0` + `role="dialog"` patterns.
+  Use `Dialog` / `AlertDialog` / `Sheet` / `Drawer`.
+- Custom popover that calls `useRef` + `useState(open)` to position
+  itself. Use `Popover` / `DropdownMenu` / `HoverCard`.
+- Custom toast / notification queue. Use `Sonner`.
+
+`pnpm audit:layers` enforces the raw-button + hand-rolled-modal checks.
+The rest is reviewer discipline.
+
 ## React Compiler / lint quirks
 
 The React Compiler ESLint plugin is strict. Patterns that look fine but error:

@@ -262,9 +262,16 @@ function BannerCallout({ banner, onClose }: { banner: NonNullable<Banner>; onClo
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       )}
       <span className="flex-1">{banner.msg}</span>
-      <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onClose}
+        className="h-5 w-5 text-muted-foreground hover:text-foreground"
+        aria-label="Dismiss"
+      >
         <X className="h-3.5 w-3.5" />
-      </button>
+      </Button>
     </div>
   );
 }

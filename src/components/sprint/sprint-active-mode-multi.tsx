@@ -764,6 +764,13 @@ function DetailPanel({
         className="absolute inset-0 z-20 bg-background/70 backdrop-blur-sm"
         onClick={onClose}
       />
+      {/* shadcn-doctrine TODO: migrate to <Sheet side="right"> from
+          src/components/ui/sheet.tsx. Not trivial because shadcn Sheet
+          (Radix Dialog) portals to body, and this side panel needs to
+          live INSIDE the FocusOverlay portal so it sits at z-focus.
+          Solvable with a custom container ref, but out of scope for the
+          doctrine landing PR. Grandfathered in scripts/audit-layers.sh
+          EXCLUDE_FILES with this TODO. */}
       <aside
         role="dialog"
         aria-label="Item detail"

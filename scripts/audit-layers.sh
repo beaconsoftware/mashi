@@ -49,6 +49,12 @@ EXCLUDE_FILES=(
   "src/components/onboard/sync-step.tsx"
   "src/components/sprint/planner-prioritize-swipe.tsx"
   "src/components/s2d/review-deck.tsx"
+  # shadcn-doctrine TODO: this file has a hand-rolled <aside role=dialog>
+  # that should be a shadcn <Sheet>. Migration is non-trivial because
+  # the side panel lives INSIDE the FocusOverlay portal — shadcn Sheet
+  # portals to body by default. Tracked at the callsite. Grandfathered
+  # here so the audit can land and catch new violations elsewhere.
+  "src/components/sprint/sprint-active-mode-multi.tsx"
 )
 
 build_exclude_grep() {
@@ -83,7 +89,53 @@ scan 'z-\[\d+\]' "Arbitrary z-[N] classes — use z-ground/z-chrome/.../z-toast"
 # 2. Inline style with numeric zIndex.
 scan 'zIndex\s*:\s*\d+' "Inline numeric zIndex — import Z from @/lib/layers"
 
-# 3. Unpositioned semantic shell containers. Per the CSS paint-order
+# 3. Raw <button> / <input> / <select> / <textarea> outside ui/. The
+# shadcn doctrine (AGENTS.md "Component library doctrine") says every
+# interactive primitive must come from src/components/ui/. If the
+# shadcn version doesn't exist yet, add it via `npx shadcn add`. This
+# scan flags the easy escapes — hand-rolled raw HTML buttons styled
+# with Tailwind that should be <Button> instead.
+shadcn_raw_html() {
+  local label="$1"
+  local pattern="$2"
+  local hits
+  hits=$("${FINDER[@]}" "$pattern" src/components 2>/dev/null \
+    | grep -v 'src/components/ui/' \
+    | grep -vE "(${EXCLUDE_RE})" \
+    || true)
+  if [ -n "$hits" ]; then
+    echo "=== $label — use src/components/ui/* (AGENTS.md: Component library doctrine) ==="
+    echo "$hits"
+    echo
+    violations=$((violations + 1))
+  fi
+}
+# Pattern note: [[:space:]>] works in both POSIX grep AND ripgrep-PCRE
+# (`\s` doesn't work inside a bracket class in POSIX `grep -E`, which is
+# the fallback when ripgrep isn't installed on the runner).
+shadcn_raw_html 'Raw <button> outside ui/' '<button[[:space:]>]'
+shadcn_raw_html 'Raw <input> outside ui/' '<input[[:space:]>]'
+shadcn_raw_html 'Raw <select> outside ui/' '<select[[:space:]>]'
+shadcn_raw_html 'Raw <textarea> outside ui/' '<textarea[[:space:]>]'
+
+# 4. Hand-rolled modal patterns. Anything with `role="dialog"` outside
+# ui/ is almost certainly a hand-rolled Dialog/AlertDialog/Sheet/Drawer.
+hand_rolled_modal() {
+  local hits
+  hits=$("${FINDER[@]}" 'role="dialog"' src/components 2>/dev/null \
+    | grep -v 'src/components/ui/' \
+    | grep -vE "(${EXCLUDE_RE})" \
+    || true)
+  if [ -n "$hits" ]; then
+    echo "=== Hand-rolled modal (role=\"dialog\") outside ui/ — use shadcn Dialog/AlertDialog/Sheet/Drawer ==="
+    echo "$hits"
+    echo
+    violations=$((violations + 1))
+  fi
+}
+hand_rolled_modal
+
+# 5. Unpositioned semantic shell containers. Per the CSS paint-order
 # spec, positioned descendants with z-index:0 (e.g. <AmbientGround>'s
 # `fixed inset-0 z-ground`) paint AFTER non-positioned block-level
 # descendants — so an unpositioned <main>, <aside>, <article> or
