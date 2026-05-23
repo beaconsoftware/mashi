@@ -193,7 +193,7 @@ function Toolbar({
             variant="outline"
             size="icon"
             onClick={() => shift(view === "week" ? -7 : -1)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded border border-border/40 text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="mashi-icon-glow inline-flex h-7 w-7 items-center justify-center rounded border border-border/40 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Previous"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
@@ -212,7 +212,7 @@ function Toolbar({
             variant="outline"
             size="icon"
             onClick={() => shift(view === "week" ? 7 : 1)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded border border-border/40 text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="mashi-icon-glow inline-flex h-7 w-7 items-center justify-center rounded border border-border/40 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Next"
           >
             <ChevronRight className="h-3.5 w-3.5" />

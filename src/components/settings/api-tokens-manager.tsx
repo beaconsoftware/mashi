@@ -203,7 +203,7 @@ export function ApiTokensManager() {
                     size="icon"
                     onClick={() => revoke(t.id)}
                     aria-label="Revoke"
-                    className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                    className="mashi-icon-glow h-5 w-5 text-muted-foreground hover:text-destructive"
                     title="Revoke"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

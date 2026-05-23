@@ -94,7 +94,7 @@ export function SignInForm() {
           onClick={signInWithGoogle}
           disabled={signing}
           variant="outline"
-          className="h-10 w-full gap-2 border-white/10 bg-white/[0.04] text-sm backdrop-blur-md hover:bg-white/[0.08]"
+          className="mashi-glow-focus h-10 w-full gap-2 border-white/10 bg-white/[0.04] text-sm backdrop-blur-md hover:bg-white/[0.08]"
         >
           <GoogleGlyph />
           {signing ? "Redirecting to Google…" : "Continue with Google"}

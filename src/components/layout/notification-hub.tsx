@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { NavIcon } from "@/components/layout/primitives";
 import { gsap, withMotion, EASE, DUR } from "@/lib/animation";
 import { cn } from "@/lib/utils";
 
@@ -91,12 +92,10 @@ export function NotificationHub() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
+        <NavIcon
           type="button"
-          variant="ghost"
-          size="icon"
           aria-label={count > 0 ? `${count} updates` : "No updates"}
-          className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="relative h-8 w-8"
         >
           <Bell className="h-4 w-4" />
           {count > 0 && (
@@ -109,7 +108,7 @@ export function NotificationHub() {
               {count > 99 ? "99+" : count}
             </span>
           )}
-        </Button>
+        </NavIcon>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between border-b border-border/40 px-3 py-2">
@@ -141,7 +140,7 @@ export function NotificationHub() {
                     type="button"
                     variant="ghost"
                     onClick={() => openItem(it.id)}
-                    className="block h-auto w-full justify-start whitespace-normal rounded-none px-3 py-2 text-left font-normal hover:bg-accent/40"
+                    className="mashi-magnetic block h-auto w-full justify-start whitespace-normal rounded-none px-3 py-2 text-left font-normal hover:bg-accent/40"
                   >
                     <div className="mb-1 flex items-center gap-1.5">
                       {it.source_type && <SourceIcon type={it.source_type} />}

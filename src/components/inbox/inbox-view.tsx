@@ -199,7 +199,7 @@ export function InboxView() {
                     variant="ghost"
                     onClick={() => setSelectedId(m.id)}
                     className={cn(
-                      "block h-auto w-full justify-start whitespace-normal rounded-none px-3 py-2.5 text-left font-normal transition-colors hover:bg-accent/30",
+                      "mashi-magnetic block h-auto w-full justify-start whitespace-normal rounded-none px-3 py-2.5 text-left font-normal transition-colors hover:bg-accent/30",
                       selectedId === m.id && "bg-accent/50"
                     )}
                   >

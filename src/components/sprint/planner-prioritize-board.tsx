@@ -160,7 +160,7 @@ function BoardCard({
     <div
       onClick={onToggle}
       className={cn(
-        "group cursor-pointer rounded-md border border-border/60 bg-card p-2.5 transition-colors hover:border-primary/40 hover:bg-accent/30",
+        "mashi-magnetic group cursor-pointer rounded-md border border-border/60 bg-card p-2.5 transition-colors hover:border-primary/40 hover:bg-accent/30",
         checked && "border-primary/60 bg-primary/5 ring-1 ring-primary/40"
       )}
     >

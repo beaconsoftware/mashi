@@ -225,7 +225,7 @@ function ListRow({
         variant="ghost"
         onClick={onToggle}
         className={cn(
-          "flex h-auto w-full items-center justify-start gap-2 whitespace-normal rounded-none px-5 py-2 text-left font-normal transition-colors hover:bg-accent/20",
+          "mashi-magnetic flex h-auto w-full items-center justify-start gap-2 whitespace-normal rounded-none px-5 py-2 text-left font-normal transition-colors hover:bg-accent/20",
           selected && "bg-primary/10 hover:bg-primary/15"
         )}
       >

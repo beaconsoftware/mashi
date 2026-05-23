@@ -198,7 +198,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
             size="icon"
             variant="ghost"
             onClick={() => transport("prev")}
-            className="h-6 w-6"
+            className="mashi-icon-glow h-6 w-6"
             aria-label="Previous track"
           >
             <SkipBack className="h-3.5 w-3.5" />
@@ -207,7 +207,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
             size="icon"
             variant="ghost"
             onClick={() => transport(playing ? "pause" : "play")}
-            className="h-6 w-6"
+            className="mashi-icon-glow h-6 w-6"
             aria-label={playing ? "Pause" : "Play"}
           >
             {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -216,7 +216,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
             size="icon"
             variant="ghost"
             onClick={() => transport("next")}
-            className="h-6 w-6"
+            className="mashi-icon-glow h-6 w-6"
             aria-label="Next track"
           >
             <SkipForward className="h-3.5 w-3.5" />
@@ -241,7 +241,7 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
           size="icon"
           variant="ghost"
           onClick={() => setExpanded((v) => !v)}
-          className="h-6 w-6"
+          className="mashi-icon-glow h-6 w-6"
           aria-label={expanded ? "Hide queue" : "Show queue"}
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}

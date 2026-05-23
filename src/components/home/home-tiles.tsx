@@ -74,7 +74,7 @@ function TileError({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
         variant="ghost"
         size="icon"
         onClick={onDismiss}
-        className="h-4 w-4 text-muted-foreground hover:text-foreground"
+        className="mashi-icon-glow h-4 w-4 text-muted-foreground hover:text-foreground"
         aria-label="Dismiss"
       >
         <X className="h-3 w-3" />
@@ -418,7 +418,7 @@ export function ReviewQueueTile({ items }: { items: S2DItem[] }) {
           size="sm"
           onClick={() => router.push("/s2d?review=1")}
           disabled={pending.length === 0}
-          className="mt-1 h-7 gap-1.5"
+          className="mashi-glow-focus mt-1 h-7 gap-1.5"
         >
           <ArrowRight className="h-3 w-3" />
           Start swipe deck
@@ -509,7 +509,7 @@ export function UpdatesTile({ items }: { items: S2DItem[] }) {
                   size="icon"
                   onClick={() => markRead(it.id)}
                   aria-label="Mark read"
-                  className="h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100"
+                  className="mashi-icon-glow h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100"
                   title="Mark read"
                 >
                   <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />

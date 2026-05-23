@@ -176,7 +176,7 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
           size="icon"
           onClick={() => setAdding((v) => !v)}
           aria-label={`Add ${meta.label} item`}
-          className="h-5 w-5 rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="mashi-icon-glow h-5 w-5 rounded text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           {adding ? <X className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
         </Button>
@@ -248,7 +248,7 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
                   size="icon"
                   onClick={() => setError(null)}
                   aria-label="Dismiss error"
-                  className="h-4 w-4 text-muted-foreground hover:text-foreground"
+                  className="mashi-icon-glow h-4 w-4 text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -275,7 +275,7 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
                   size="icon"
                   onClick={() => setError(null)}
                   aria-label="Dismiss error"
-                  className="h-4 w-4 text-muted-foreground hover:text-foreground"
+                  className="mashi-icon-glow h-4 w-4 text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3 w-3" />
                 </Button>

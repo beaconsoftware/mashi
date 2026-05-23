@@ -294,7 +294,7 @@ export function SprintComplete() {
               size="icon"
               onClick={() => setBanner(null)}
               aria-label="Dismiss"
-              className="h-5 w-5 text-muted-foreground hover:text-foreground"
+              className="mashi-icon-glow h-5 w-5 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
             </Button>
