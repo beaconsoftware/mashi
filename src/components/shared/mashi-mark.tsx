@@ -3,20 +3,20 @@
  *
  * A record / sonar-target hybrid. Composition:
  *   - Large solid black disk centered on the canvas (the "vinyl").
- *   - Yellow center dot (the spindle / bullseye).
- *   - Yellow concentric contour rings INSIDE the black disk,
+ *   - Blue center dot (the spindle / bullseye).
+ *   - Blue concentric contour rings INSIDE the black disk,
  *     radiating outward from the dot like uneven sound reverberations.
  *     Each ring is an arc-with-gaps (varying stroke-dasharray) so the
  *     rings feel like a live audio waveform rather than a perfect
  *     target.
  *
- * Yellow accents are hardcoded to the brand yellow so the mark reads
- * the same whatever surface it sits on. The black disk is currentColor
- * so the disk recolors naturally when nested in a non-default-text
- * environment.
+ * Blue accents are hardcoded to Brand Blue (Beacon #09377E) so the mark
+ * reads the same whatever surface it sits on. The black disk is
+ * currentColor so the disk recolors naturally when nested in a
+ * non-default-text environment.
  */
 
-const BRAND_YELLOW = "hsl(43 96% 56%)";
+const BRAND_BLUE = "hsl(217 87% 26%)";
 
 export function MashiMark({
   size = 24,
@@ -42,11 +42,11 @@ export function MashiMark({
       {/* Solid black disk — the body of the mark. */}
       <circle cx="16" cy="16" r="13.5" fill="currentColor" stroke="none" />
 
-      {/* Yellow reverberation rings inside the disk. Each ring uses a
+      {/* Blue reverberation rings inside the disk. Each ring uses a
           distinct stroke-dasharray + rotation so the gaps fall at
           different angular positions — reads as a live waveform with
           uneven peaks instead of a clean concentric target. */}
-      <g stroke={BRAND_YELLOW} fill="none" strokeLinecap="round">
+      <g stroke={BRAND_BLUE} fill="none" strokeLinecap="round">
         <circle
           cx="16"
           cy="16"
@@ -76,8 +76,8 @@ export function MashiMark({
         />
       </g>
 
-      {/* Yellow center dot — the bullseye. */}
-      <circle cx="16" cy="16" r="1.7" fill={BRAND_YELLOW} stroke="none" />
+      {/* Blue center dot — the bullseye. */}
+      <circle cx="16" cy="16" r="1.7" fill={BRAND_BLUE} stroke="none" />
     </svg>
   );
 }
