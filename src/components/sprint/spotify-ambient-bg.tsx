@@ -79,20 +79,30 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
     });
   }, [layers.show]);
 
+  // PERF: previously this ran an infinite rotate+scale yoyo timeline
+  // (24s sine) on the root so the album art slowly drifted while music
+  // played. Looked nice — but it was a continuous transform animation
+  // on the layer that every <ChromeBar>'s backdrop-blur samples, which
+  // forced the browser to re-blur every ChromeBar on every frame for
+  // the entire session. With multiple bars stacked on /sprint and a
+  // page transition on top, that was the dominant cost in the 2fps
+  // navigation jank.
+  //
+  // Replaced with a one-shot static set: scale 1.1 so the art slightly
+  // oversizes the viewport (gives the displacement filter pixels to
+  // pull from at the edges so we don't get void/black at the boundary).
+  // No rotation, no perpetual JS loop. The track-change crossfade
+  // below is the only animation left on the ambient layer, and it
+  // fires once per song, not per frame.
+  //
+  // `playing` is preserved as a dep in case we ever want to bring a
+  // gated motion back (e.g. a 0.05Hz CSS sway while playing). Today it
+  // intentionally does nothing.
   useEffect(() => {
     if (!rootRef.current) return;
     withMotion(() => {
       gsap.killTweensOf(rootRef.current);
-      const target = rootRef.current;
-      gsap.set(target, { rotate: 0, scale: 1.1 });
-      const tl = gsap.timeline({ repeat: -1, yoyo: true });
-      const speed = playing ? 1 : 0.15;
-      tl.to(target, {
-        rotate: 8,
-        scale: 1.18,
-        duration: 24 / Math.max(speed, 0.15),
-        ease: "sine.inOut",
-      });
+      gsap.set(rootRef.current, { rotate: 0, scale: 1.1 });
     });
   }, [playing]);
 
@@ -125,8 +135,15 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
             <feDisplacementMap in="SourceGraphic" in2="noise" scale="24" />
           </filter>
           {/* Grain overlay filter — sharp noise so it reads as film grain.
-              The animation shifts baseFrequency over time which produces
-              a subtle, slow shimmer without per-frame canvas work. */}
+              PERF: the baseFrequency used to animate over 22s for a
+              shimmer effect, but `<animate>` on an SVG filter
+              parameter is the same kind of continuous invalidation as
+              the GSAP rotate loop above — every ChromeBar's
+              backdrop-blur has to re-sample because the noise pattern
+              changes. Now a static seed. The grain still reads as
+              texture, just not shimmery. Worth the cost — it was
+              forcing a per-frame blur recompute for an effect almost
+              no one would consciously notice. */}
           <filter id="mashi-spotify-grain" x="0%" y="0%" width="100%" height="100%">
             <feTurbulence
               type="fractalNoise"
@@ -134,14 +151,7 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
               numOctaves="2"
               stitchTiles="stitch"
               seed="7"
-            >
-              <animate
-                attributeName="baseFrequency"
-                dur="22s"
-                values="0.85;0.95;0.85"
-                repeatCount="indefinite"
-              />
-            </feTurbulence>
+            />
             <feColorMatrix
               type="matrix"
               values="0 0 0 0 1
