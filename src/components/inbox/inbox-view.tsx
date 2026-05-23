@@ -3,11 +3,12 @@
 // translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
 
 import { useMemo, useState } from "react";
-import { Mail, MessageSquare, Filter, AlertCircle, Inbox, ExternalLink } from "lucide-react";
+import { Mail, MessageSquare, AlertCircle, Inbox, ExternalLink } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ChromeBar, EmptyState } from "@/components/layout/primitives";
 import { cn } from "@/lib/utils";
 import { useInboxMessages, type InboxMessage } from "@/hooks/use-inbox";
 import { useCompanies } from "@/hooks/use-s2d";
@@ -83,9 +84,9 @@ export function InboxView() {
   }, [messages]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-card">
       {/* Filter bar */}
-      <div className="border-b border-border/40 bg-secondary/10 px-4 py-2.5">
+      <ChromeBar className="px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <FilterPill
             active={priorityFilter === "all"}
@@ -159,7 +160,7 @@ export function InboxView() {
             className="ml-auto h-7 w-56 text-[12px]"
           />
         </div>
-      </div>
+      </ChromeBar>
 
       {/* Split view: list + detail */}
       <div className="flex min-h-0 flex-1">
@@ -171,7 +172,12 @@ export function InboxView() {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <EmptyState />
+            <div className="flex h-full items-center justify-center p-6">
+              <EmptyState
+                title="No messages match"
+                subtitle="Try clearing a filter or broadening your search."
+              />
+            </div>
           ) : (
             <ul className="divide-y divide-border/40">
               {filtered.map((m) => (
@@ -195,8 +201,12 @@ export function InboxView() {
           {selected ? (
             <MessageDetail message={selected} />
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
-              Pick a message to read it.
+            <div className="flex h-full items-center justify-center p-8">
+              <EmptyState
+                icon={<Mail className="h-5 w-5" />}
+                title="Pick a message"
+                subtitle="Select a message on the left to read its preview and triage notes."
+              />
             </div>
           )}
         </div>
@@ -376,17 +386,6 @@ function MessageDetail({ message }: { message: InboxMessage }) {
           </div>
         </div>
       </ScrollArea>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="flex h-64 flex-col items-center justify-center gap-2 p-8 text-center">
-      <Filter className="h-6 w-6 text-muted-foreground/60" />
-      <p className="text-sm text-muted-foreground">
-        No messages match those filters.
-      </p>
     </div>
   );
 }

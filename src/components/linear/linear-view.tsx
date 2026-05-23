@@ -7,6 +7,7 @@ import { GitBranch, ExternalLink, User } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { ChromeBar, EmptyState } from "@/components/layout/primitives";
 import { cn } from "@/lib/utils";
 import { useLinearIssues, type LinearIssueRow } from "@/hooks/use-linear-issues";
 import { useCompanies } from "@/hooks/use-s2d";
@@ -60,8 +61,8 @@ export function LinearView() {
   }, [issues, companyFilter, statusFilter, assignedToMe, search]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-border/40 bg-secondary/10 px-4 py-2.5">
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <ChromeBar className="px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
             {filtered.length} of {issues.length}
@@ -113,7 +114,7 @@ export function LinearView() {
             className="ml-auto h-7 w-64 text-[12px]"
           />
         </div>
-      </div>
+      </ChromeBar>
 
       <ScrollArea className="flex-1">
         {isLoading ? (
@@ -123,8 +124,11 @@ export function LinearView() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex h-64 items-center justify-center text-center text-sm text-muted-foreground">
-            No issues match.
+          <div className="flex h-full items-center justify-center p-8">
+            <EmptyState
+              title="No issues match"
+              subtitle="Try clearing a filter or broadening your search."
+            />
           </div>
         ) : (
           <table className="w-full text-[12px]">

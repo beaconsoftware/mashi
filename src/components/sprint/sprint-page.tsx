@@ -122,10 +122,10 @@ function MinimizedSplash() {
   const unminimize = useSprintStore((s) => s.unminimize);
   return (
     <div className="flex h-full flex-1 items-center justify-center p-8">
-      {/* Backdrop-blurred card so the copy stays legible against the
-          ambient album-art layer when Spotify is playing during a
-          minimized sprint. */}
-      <div className="max-w-md space-y-4 rounded-2xl border border-border/40 bg-background/60 px-8 py-8 text-center backdrop-blur-sm">
+      {/* Opaque card — the splash is the only thing on screen and the
+          user needs to find their way back. Translucent /60 reads as a
+          haze against bright album art and the "Resume" CTA disappears. */}
+      <div className="max-w-md space-y-4 rounded-2xl border border-border/40 bg-card px-8 py-8 text-center shadow-md">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
           <Sparkles className="h-5 w-5 text-muted-foreground" />
         </div>
@@ -162,10 +162,11 @@ function IdleSplash({ onStart }: { onStart: () => void }) {
 
   return (
     <div ref={rootRef} className="flex h-full flex-1 items-center justify-center p-8">
-      {/* Backdrop-blurred card mirrors the empty-state pattern from
-          <EmptyState> — the splash sits over the ambient album-art layer
-          and needs its own opaque surface to read. */}
-      <div className="max-w-md space-y-4 rounded-2xl border border-border/40 bg-background/60 px-8 py-8 text-center backdrop-blur-sm">
+      {/* Opaque card — the landing screen has no Spotify context yet and
+          we need the CTA to read clearly against whatever ambient is up.
+          The translucent /60 hand-roll washed out against bright album
+          art (Sabrina Carpenter / Feather etc.). */}
+      <div className="max-w-md space-y-4 rounded-2xl border border-border/40 bg-card px-8 py-8 text-center shadow-md">
         <div ref={sparkleRef} className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15">
           <Sparkles className="h-5 w-5 text-primary" />
         </div>

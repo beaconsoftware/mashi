@@ -146,7 +146,7 @@ export function PlannerPrioritizeShell() {
 
   // Normal path — render the chosen view with a toggle.
   return (
-    <div className="flex h-full w-full flex-col">
+    <div className="flex h-full w-full flex-col bg-card">
       {/* View toggle row */}
       <div className="flex items-center justify-between border-b border-border/30 px-5 py-2">
         <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
