@@ -83,6 +83,33 @@ scan 'z-\[\d+\]' "Arbitrary z-[N] classes — use z-ground/z-chrome/.../z-toast"
 # 2. Inline style with numeric zIndex.
 scan 'zIndex\s*:\s*\d+' "Inline numeric zIndex — import Z from @/lib/layers"
 
+# 3. Unpositioned semantic shell containers. Per the CSS paint-order
+# spec, positioned descendants with z-index:0 (e.g. <AmbientGround>'s
+# `fixed inset-0 z-ground`) paint AFTER non-positioned block-level
+# descendants — so an unpositioned <main>, <aside>, <article> or
+# <section> sibling of the ambient layer renders BEHIND it. The fix is
+# always `relative` (no z-index needed; DOM order wins). See AGENTS.md
+# "Stacking buckets". This catches the regression that bit the sprint
+# album-art-over-foreground bug.
+#
+# False positives: rare. Inline-flow <section>s inside text content
+# usually don't matter. If you hit one that's intentional, add the
+# file to EXCLUDE_FILES with a comment justifying it.
+shell_unpositioned() {
+  local hits
+  hits=$("${FINDER[@]}" '<(main|aside|article)\s+className="[^"]*"' src/ 2>/dev/null \
+    | grep -vE "(${EXCLUDE_RE})" \
+    | grep -vE 'className="[^"]*\b(relative|absolute|fixed|sticky)\b' \
+    || true)
+  if [ -n "$hits" ]; then
+    echo "=== Unpositioned <main>/<aside>/<article> — add 'relative' (AGENTS.md: Stacking buckets) ==="
+    echo "$hits"
+    echo
+    violations=$((violations + 1))
+  fi
+}
+shell_unpositioned
+
 if [ "$violations" -gt 0 ]; then
   echo "Layer doctrine violations found. See AGENTS.md 'Layout doctrine'." >&2
   exit 1
