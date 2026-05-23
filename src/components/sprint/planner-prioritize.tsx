@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { useS2DItems } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
+import { ChromeBar } from "@/components/layout/primitives";
 import { Input } from "@/components/ui/input";
 import {
   ArrowRight,
@@ -544,7 +545,7 @@ export function PlannerHeader({
   ];
   const activeIdx = steps.findIndex((s) => s.key === phase);
   return (
-    <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
+    <ChromeBar className="flex items-center justify-between px-4 py-3">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-sm font-semibold">Sprint planner</span>
@@ -568,6 +569,6 @@ export function PlannerHeader({
           </li>
         ))}
       </ol>
-    </div>
+    </ChromeBar>
   );
 }

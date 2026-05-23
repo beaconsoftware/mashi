@@ -79,9 +79,9 @@ export function PlannerPrioritizeBoard({ eligibleItems }: Props) {
           return (
             <div
               key={status}
-              className="flex h-full min-h-0 w-72 shrink-0 flex-col rounded-md border border-border/40 bg-secondary/20"
+              className="flex h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden rounded-md border border-border/40 bg-card"
             >
-              <div className="flex items-center justify-between border-b border-border/40 px-3 py-2.5">
+              <div className="flex items-center justify-between border-b border-border/40 bg-background/55 px-3 py-2.5 backdrop-blur-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground/80">
                     {meta.label}

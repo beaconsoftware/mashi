@@ -20,6 +20,7 @@ import { LayoutGrid, List, Columns3 } from "lucide-react";
 import { useS2DItems } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
+import { ChromeBar } from "@/components/layout/primitives";
 import { PlannerPrioritizeSwipe } from "./planner-prioritize-swipe";
 import { PlannerPrioritizeList } from "./planner-prioritize-list";
 import { PlannerPrioritizeBoard } from "./planner-prioritize-board";
@@ -145,15 +146,22 @@ export function PlannerPrioritizeShell() {
   }
 
   // Normal path — render the chosen view with a toggle.
+  //
+  // Hierarchy intent: keep the ambient album-art layer visible (sprint
+  // is the one place we want it) by NOT painting an opaque wrapper.
+  // Instead, every strip of foreground chrome (this toggle row, the
+  // swipe progress row, the action bar) wraps with <ChromeBar> so it
+  // reads cleanly against bright art. The actual focal point — the
+  // CardFace / list / board — keeps its own opaque bg-card so it
+  // stands out against the ambient. See AGENTS.md "Layout doctrine".
   return (
-    <div className="flex h-full w-full flex-col bg-card">
-      {/* View toggle row */}
-      <div className="flex items-center justify-between border-b border-border/30 px-5 py-2">
+    <div className="flex h-full w-full flex-col">
+      <ChromeBar className="flex items-center justify-between px-5 py-2">
         <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
           Plan sprint · {eligible.length} eligible
         </div>
         <ViewToggle view={view} onChange={switchView} />
-      </div>
+      </ChromeBar>
 
       {view === "card" ? (
         <PlannerPrioritizeSwipe eligibleItems={eligible} />
