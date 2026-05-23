@@ -7,6 +7,7 @@ import { Mic, Users, Calendar as CalendarIcon, ListChecks } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { ChromeBar, EmptyState } from "@/components/layout/primitives";
 import { cn } from "@/lib/utils";
 import { useMeetings, useActionItemsForMeeting } from "@/hooks/use-meetings";
 import { useCompanies } from "@/hooks/use-s2d";
@@ -42,8 +43,8 @@ export function NotesView() {
   const selected = filtered.find((m) => m.id === selectedId) ?? null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-border/40 bg-secondary/10 px-4 py-2.5">
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <ChromeBar className="px-4 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
             {meetings.length} meetings
@@ -68,7 +69,7 @@ export function NotesView() {
             className="ml-auto h-7 w-64 text-[12px]"
           />
         </div>
-      </div>
+      </ChromeBar>
 
       <div className="flex min-h-0 flex-1">
         <ScrollArea className="w-[420px] shrink-0 border-r border-border/40">
@@ -79,8 +80,11 @@ export function NotesView() {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex h-64 items-center justify-center text-center text-sm text-muted-foreground">
-              No meetings match.
+            <div className="flex h-full items-center justify-center p-6">
+              <EmptyState
+                title="No meetings match"
+                subtitle="Try clearing a filter or broadening your search."
+              />
             </div>
           ) : (
             <ul className="divide-y divide-border/40">
@@ -135,8 +139,12 @@ export function NotesView() {
           {selected ? (
             <MeetingDetail meeting={selected} />
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
-              Pick a meeting to see its summary and action items.
+            <div className="flex h-full items-center justify-center p-8">
+              <EmptyState
+                icon={<Mic className="h-5 w-5" />}
+                title="Pick a meeting"
+                subtitle="Select a meeting on the left to see its summary and extracted action items."
+              />
             </div>
           )}
         </div>

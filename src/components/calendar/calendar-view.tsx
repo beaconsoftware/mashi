@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChromeBar, EmptyState } from "@/components/layout/primitives";
 import { cn } from "@/lib/utils";
 import { useCalendarEvents, type CalendarEventRow } from "@/hooks/use-calendar";
 import { useCompanies } from "@/hooks/use-s2d";
@@ -70,7 +71,7 @@ export function CalendarView() {
   const selected = events.find((e) => e.id === selectedId) ?? null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-card">
       <Toolbar
         view={view}
         setView={setView}
@@ -119,8 +120,12 @@ export function CalendarView() {
           {selected ? (
             <EventDetail event={selected} />
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
-              Pick an event to see details.
+            <div className="flex h-full items-center justify-center p-8">
+              <EmptyState
+                icon={<CalIcon className="h-5 w-5" />}
+                title="Pick an event"
+                subtitle="Click a calendar event to see its details, attendees, and links."
+              />
             </div>
           )}
         </div>
@@ -173,7 +178,7 @@ function Toolbar({
       : "Agenda";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-secondary/10 px-4 py-2">
+    <ChromeBar className="flex flex-wrap items-center gap-2 px-4 py-2">
       <div className="flex items-center gap-0.5 rounded-md border border-border/40 bg-card p-0.5">
         <ViewBtn icon={<CalendarDays className="h-3 w-3" />} active={view === "week"} onClick={() => setView("week")} label="Week" />
         <ViewBtn icon={<LayoutGrid className="h-3 w-3" />} active={view === "day"} onClick={() => setView("day")} label="Day" />
@@ -229,7 +234,7 @@ function Toolbar({
           )}
         </div>
       )}
-    </div>
+    </ChromeBar>
   );
 }
 
