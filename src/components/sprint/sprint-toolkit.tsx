@@ -103,25 +103,29 @@ export function SprintToolkit({ item, active = true }: Props) {
           />
         ))}
         {!expanded && secondary.length > 0 && (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => setExpanded(true)}
-            className="inline-flex items-center gap-1 rounded-md border border-dashed border-border/40 bg-card/40 px-2 py-1 text-[10px] text-muted-foreground hover:bg-secondary/40"
+            className="inline-flex h-auto items-center gap-1 rounded-md border border-dashed border-border/40 bg-card/40 px-2 py-1 text-[10px] font-normal text-muted-foreground hover:bg-secondary/40"
             title="Show all actions"
           >
             <ChevronDown className="h-2.5 w-2.5" />
             +{secondary.length} more
-          </button>
+          </Button>
         )}
         {expanded && (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => setExpanded(false)}
-            className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] text-muted-foreground hover:bg-secondary/40"
+            className="inline-flex h-auto items-center gap-1 rounded-md border border-border/40 bg-card/40 px-2 py-1 text-[10px] font-normal text-muted-foreground hover:bg-secondary/40"
           >
             <ChevronRight className="h-2.5 w-2.5" />
             collapse
-          </button>
+          </Button>
         )}
       </div>
 
@@ -161,20 +165,22 @@ function Chip({
   active: boolean;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       onClick={onClick}
       title={action.hint ?? action.label}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] transition-colors",
+        "inline-flex h-auto items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-normal transition-colors",
         active
-          ? "border-primary/60 bg-primary/15 text-foreground"
+          ? "border-primary/60 bg-primary/15 text-foreground hover:bg-primary/20 hover:text-foreground"
           : "border-border/40 bg-card/60 text-foreground/80 hover:bg-secondary/40"
       )}
     >
       <Sparkles className="h-2.5 w-2.5" />
       {action.label}
-    </button>
+    </Button>
   );
 }
 
@@ -289,13 +295,15 @@ function ActionDrawer({
         {streaming && (
           <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
         )}
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={onClose}
-          className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+          className="ml-auto h-auto px-1 py-0.5 text-[10px] font-normal text-muted-foreground hover:text-foreground"
         >
           close
-        </button>
+        </Button>
       </div>
 
       <Textarea

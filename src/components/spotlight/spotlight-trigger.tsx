@@ -7,14 +7,17 @@
  */
 import { Search } from "lucide-react";
 import { useSpotlightModal } from "@/components/spotlight/spotlight-context";
+import { Button } from "@/components/ui/button";
 
 export function SpotlightTrigger() {
   const { setOpen } = useSpotlightModal();
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       onClick={() => setOpen(true)}
-      className="group flex h-7 items-center gap-2 rounded-md border border-border/40 bg-background/40 px-2 text-[11px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+      className="group flex h-7 items-center gap-2 rounded-md border border-border/40 bg-background/40 px-2 text-[11px] font-normal text-muted-foreground transition-colors hover:border-border hover:text-foreground"
       title="Search (⌘K)"
     >
       <Search className="h-3 w-3" />
@@ -22,6 +25,6 @@ export function SpotlightTrigger() {
       <kbd className="hidden rounded border border-border/40 bg-background/60 px-1 py-px font-mono text-[9px] sm:inline">
         ⌘K
       </kbd>
-    </button>
+    </Button>
   );
 }

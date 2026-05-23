@@ -259,13 +259,16 @@ export function ChatPanel() {
       {messages.length <= 1 && !streaming && starters.length > 0 && (
         <div className="grid grid-cols-2 gap-1.5 px-3 pb-2">
           {starters.map((s) => (
-            <button
+            <Button
               key={s}
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setDraft(s)}
-              className="rounded-md border border-border/50 bg-card px-2 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="h-auto rounded-md border border-border/50 bg-card px-2 py-1.5 text-left text-[11px] font-normal text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               {s}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -414,7 +417,9 @@ export function ChatSummonPill() {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-widget flex justify-end p-4">
-      <button
+      <Button
+        type="button"
+        variant="outline"
         ref={pillRef}
         onClick={toggleChat}
         onMouseEnter={onEnter}
@@ -433,7 +438,7 @@ export function ChatSummonPill() {
         <span className="ml-1 rounded border border-border/40 bg-secondary/60 px-1 font-mono text-[9px] text-muted-foreground">
           ⌘ /
         </span>
-      </button>
+      </Button>
     </div>
   );
 }

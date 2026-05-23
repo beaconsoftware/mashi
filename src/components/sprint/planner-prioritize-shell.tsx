@@ -183,48 +183,54 @@ function ViewToggle({
 }) {
   return (
     <div className="inline-flex items-center gap-px rounded-md border border-border/40 p-px">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => onChange("card")}
         className={cn(
-          "flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors",
+          "flex h-auto items-center gap-1 rounded px-2 py-1 text-[11px] font-normal transition-colors",
           view === "card"
-            ? "bg-primary text-primary-foreground"
+            ? "bg-primary text-primary-foreground hover:bg-primary/95 hover:text-primary-foreground"
             : "text-muted-foreground hover:text-foreground"
         )}
         aria-pressed={view === "card"}
       >
         <LayoutGrid className="h-3 w-3" />
         Card
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => onChange("list")}
         className={cn(
-          "flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors",
+          "flex h-auto items-center gap-1 rounded px-2 py-1 text-[11px] font-normal transition-colors",
           view === "list"
-            ? "bg-primary text-primary-foreground"
+            ? "bg-primary text-primary-foreground hover:bg-primary/95 hover:text-primary-foreground"
             : "text-muted-foreground hover:text-foreground"
         )}
         aria-pressed={view === "list"}
       >
         <List className="h-3 w-3" />
         List
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => onChange("board")}
         className={cn(
-          "flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors",
+          "flex h-auto items-center gap-1 rounded px-2 py-1 text-[11px] font-normal transition-colors",
           view === "board"
-            ? "bg-primary text-primary-foreground"
+            ? "bg-primary text-primary-foreground hover:bg-primary/95 hover:text-primary-foreground"
             : "text-muted-foreground hover:text-foreground"
         )}
         aria-pressed={view === "board"}
       >
         <Columns3 className="h-3 w-3" />
         Board
-      </button>
+      </Button>
     </div>
   );
 }

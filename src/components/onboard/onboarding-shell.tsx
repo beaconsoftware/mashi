@@ -165,13 +165,15 @@ export function OnboardingShell({
 
       <div className="flex items-center justify-end gap-3">
         {allowSkip && !canAdvance && !advancing && (
-          <button
+          <Button
             type="button"
+            variant="link"
+            size="sm"
             onClick={advance}
-            className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="h-auto px-0 py-0 text-[11px] font-normal text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           >
             Skip for now →
-          </button>
+          </Button>
         )}
         <Button
           ref={ctaRef}

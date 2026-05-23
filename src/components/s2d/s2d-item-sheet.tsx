@@ -136,14 +136,16 @@ function ItemSheetBody({ item }: { item: S2DItem }) {
         </div>
         {item.ticket_number != null && (
           <div className="flex items-center gap-2 pr-8">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => navigator.clipboard?.writeText(`MASH-${item.ticket_number}`)}
-              className="rounded border border-border/50 bg-secondary/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className="h-auto rounded border border-border/50 bg-secondary/40 px-1.5 py-0.5 font-mono text-[10px] font-normal text-muted-foreground hover:bg-secondary hover:text-foreground"
               title="Copy ticket ID"
             >
               MASH-{item.ticket_number}
-            </button>
+            </Button>
           </div>
         )}
         <SheetTitle className="text-base leading-snug pr-8">{item.title}</SheetTitle>
@@ -236,12 +238,15 @@ function UnseenUpdateCallout({
           {summary ?? "Mashi added new information to this item."}
         </span>
       </div>
-      <button
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
         onClick={onMarkRead}
-        className="shrink-0 rounded border border-border/50 bg-card/60 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="h-auto shrink-0 rounded border border-border/50 bg-card/60 px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         Mark read
-      </button>
+      </Button>
     </div>
   );
 }
@@ -795,13 +800,15 @@ function SnoozePopover({ item, setBanner }: { item: S2DItem; setBanner: (b: Bann
           Snooze until…
         </div>
         {SNOOZE_OPTIONS.map((s) => (
-          <button
+          <Button
             key={s.label}
+            type="button"
+            variant="ghost"
             onClick={() => snooze(s.iso(), s.label)}
-            className="block w-full rounded px-2 py-1.5 text-left text-[12px] hover:bg-accent"
+            className="block h-auto w-full justify-start whitespace-normal rounded px-2 py-1.5 text-left text-[12px] font-normal hover:bg-accent"
           >
             {s.label}
-          </button>
+          </Button>
         ))}
       </PopoverContent>
     </Popover>

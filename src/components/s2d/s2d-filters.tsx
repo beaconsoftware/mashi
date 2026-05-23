@@ -12,6 +12,7 @@ import {
 } from "@/types";
 import { cn } from "@/lib/utils";
 import { ChromeBar } from "@/components/layout/primitives";
+import { Button } from "@/components/ui/button";
 
 export interface S2DFilterState {
   companies: Set<string>;
@@ -215,13 +216,16 @@ export function S2DFilters({
       {anyActive && (
         <>
           <Divider />
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={clearAll}
-            className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="inline-flex h-auto items-center gap-1 rounded-full border border-border/40 px-2 py-0.5 text-[11px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="h-2.5 w-2.5" />
             Clear
-          </button>
+          </Button>
         </>
       )}
 
@@ -265,17 +269,20 @@ function Chip({
   accent?: string;
 }) {
   return (
-    <button
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+        "inline-flex h-auto items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-normal transition-colors",
         active
-          ? "border-primary/50 bg-primary/15 text-foreground"
+          ? "border-primary/50 bg-primary/15 text-foreground hover:bg-primary/15 hover:text-foreground"
           : "border-border/40 text-muted-foreground hover:bg-accent/40 hover:text-foreground"
       )}
       style={active && accent ? { boxShadow: `0 0 10px -2px ${accent}` } : undefined}
     >
       {children}
-    </button>
+    </Button>
   );
 }

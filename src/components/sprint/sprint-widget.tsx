@@ -7,6 +7,7 @@ import { Maximize2, Check, Pause, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGSAP } from "@gsap/react";
 import { slideUp } from "@/lib/animation";
+import { Button } from "@/components/ui/button";
 
 /**
  * Sticky floating widget for minimized sprint state. Shows the first active
@@ -109,36 +110,52 @@ export function SprintWidget() {
             {overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs)}
           </div>
           <div className="flex items-center gap-0.5">
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => completeBlock(current.s2dItemId, "done")}
-              className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label="Done"
+              className="h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title="Done"
             >
               <Check className="h-3.5 w-3.5" />
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={paused ? resume : pause}
-              className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label={paused ? "Resume" : "Pause"}
+              className="h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title={paused ? "Resume" : "Pause"}
             >
               {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={unminimize}
-              className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label="Open"
+              className="h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title="Open"
             >
               <Maximize2 className="h-3.5 w-3.5" />
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => {
                 if (confirm("Exit sprint?")) exitSprint();
               }}
-              className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
+              aria-label="Exit"
+              className="h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
               title="Exit"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
         </div>
       </div>

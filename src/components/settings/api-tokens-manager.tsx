@@ -140,12 +140,15 @@ export function ApiTokensManager() {
                 {copied ? "Copied" : "Copy"}
               </Button>
             </div>
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setNewPlaintext(null)}
-              className="text-[11px] text-muted-foreground hover:text-foreground"
+              className="h-auto px-1 py-0.5 text-[11px] font-normal text-muted-foreground hover:text-foreground"
             >
               I&apos;ve saved it — dismiss
-            </button>
+            </Button>
           </div>
         )}
       </section>
@@ -194,13 +197,17 @@ export function ApiTokensManager() {
                   </div>
                 </div>
                 {!t.revoked_at && (
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => revoke(t.id)}
-                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="Revoke"
+                    className="h-5 w-5 text-muted-foreground hover:text-destructive"
                     title="Revoke"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                 )}
               </li>
             ))}

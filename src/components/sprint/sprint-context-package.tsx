@@ -446,13 +446,16 @@ function FallbackPackage({ item }: { item: S2DItem }) {
   return (
     <div className="rounded-lg border border-border/40 bg-card/60 p-3 text-[11px] text-muted-foreground">
       No pre-built package for this pathway yet.{" "}
-      <button
+      <Button
+        type="button"
+        variant="link"
+        size="sm"
         onClick={() => setSelected(item.id)}
-        className="inline-flex items-center gap-1 text-foreground/80 underline-offset-2 hover:underline"
+        className="inline-flex h-auto items-center gap-1 px-0 py-0 text-[11px] font-normal text-foreground/80 underline-offset-2 hover:underline"
       >
         <MessageSquare className="h-3 w-3" />
         Open detail panel
-      </button>{" "}
+      </Button>{" "}
       for the full context + actions.
     </div>
   );

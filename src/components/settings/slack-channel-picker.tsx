@@ -182,12 +182,16 @@ export function SlackChannelPicker({
             <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
               <span>{error}</span>
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setError(null)}
-                className="ml-auto text-muted-foreground hover:text-foreground"
+                aria-label="Dismiss"
+                className="ml-auto h-4 w-4 text-muted-foreground hover:text-foreground"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </div>
           )}
 
@@ -210,12 +214,13 @@ export function SlackChannelPicker({
                   const isNew = checked && !originalSelected.has(c.id);
                   return (
                     <li key={c.id}>
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
                         onClick={() => toggle(c.id)}
                         className={cn(
-                          "flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-secondary/40",
-                          checked && "bg-primary/5"
+                          "flex h-auto w-full items-start justify-start gap-2.5 whitespace-normal rounded-none px-3 py-2 text-left font-normal hover:bg-secondary/40",
+                          checked && "bg-primary/5 hover:bg-primary/10"
                         )}
                       >
                         <div
@@ -255,7 +260,7 @@ export function SlackChannelPicker({
                             </div>
                           )}
                         </div>
-                      </button>
+                      </Button>
                     </li>
                   );
                 })}

@@ -69,13 +69,16 @@ function TileError({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
     <div className="flex items-start gap-1.5 rounded border border-destructive/40 bg-destructive/10 p-1.5 text-[11px] text-destructive">
       <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
       <span className="flex-1">{msg}</span>
-      <button
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
         onClick={onDismiss}
-        className="text-muted-foreground hover:text-foreground"
+        className="h-4 w-4 text-muted-foreground hover:text-foreground"
         aria-label="Dismiss"
       >
         <X className="h-3 w-3" />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -309,10 +312,13 @@ export function AiCommandTile() {
         icon={<Sparkles className="h-3 w-3 text-primary" />}
         title="Mashi command"
         right={
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             onClick={() => runPass("reconcile")}
             disabled={running != null}
-            className="inline-flex items-center gap-1 rounded border border-border/40 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="inline-flex h-auto items-center gap-1 rounded border border-border/40 px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
             title="Re-run reconcile pass"
           >
             {running === "reconcile" ? (
@@ -321,7 +327,7 @@ export function AiCommandTile() {
               <RefreshCw className="h-3 w-3" />
             )}
             Re-brief
-          </button>
+          </Button>
         }
       />
       <div className="flex flex-1 flex-col gap-2 p-3">
@@ -340,23 +346,29 @@ export function AiCommandTile() {
         />
         <div className="flex flex-wrap gap-1">
           {COMMAND_TEMPLATES.map((t) => (
-            <button
+            <Button
               key={t}
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => dispatchToChat(t)}
-              className="rounded-full border border-border/50 bg-secondary/40 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="h-auto rounded-full border border-border/50 bg-secondary/40 px-2 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               {t}
-            </button>
+            </Button>
           ))}
         </div>
         <div className="mt-auto flex items-center justify-between">
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => runPass("consolidate")}
             disabled={running != null}
-            className="text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+            className="h-auto px-1 py-0.5 text-[10px] font-normal text-muted-foreground hover:text-foreground disabled:opacity-50"
           >
             {running === "consolidate" ? "Consolidating…" : "Consolidate dupes"}
-          </button>
+          </Button>
           <Button size="sm" onClick={submit} disabled={!text.trim()} className="gap-1.5 h-7">
             <ArrowRight className="h-3.5 w-3.5" />
             Send
@@ -478,9 +490,11 @@ export function UpdatesTile({ items }: { items: S2DItem[] }) {
                 key={it.id}
                 className="group flex items-start gap-2 px-3 py-2 hover:bg-accent/30"
               >
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
                   onClick={() => open(it.id)}
-                  className="min-w-0 flex-1 text-left"
+                  className="block h-auto min-w-0 flex-1 justify-start whitespace-normal rounded-none p-0 text-left font-normal hover:bg-transparent"
                 >
                   <div className="line-clamp-1 text-[12px] font-medium">{it.title}</div>
                   {it.last_update_summary && (
@@ -488,14 +502,18 @@ export function UpdatesTile({ items }: { items: S2DItem[] }) {
                       {it.last_update_summary}
                     </div>
                   )}
-                </button>
-                <button
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => markRead(it.id)}
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
+                  aria-label="Mark read"
+                  className="h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100"
                   title="Mark read"
                 >
                   <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -570,9 +588,11 @@ export function CalendarStripTile({
               const mm = t.getMinutes().toString().padStart(2, "0");
               return (
                 <li key={e.id}>
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
                     onClick={() => setExpanded(isExpanded ? null : e.id)}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent/30"
+                    className="flex h-auto w-full items-center justify-start gap-2 whitespace-normal rounded-none px-3 py-1.5 text-left font-normal hover:bg-accent/30"
                   >
                     <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
                       {hh}:{mm}
@@ -583,18 +603,20 @@ export function CalendarStripTile({
                         {prep.length} prep
                       </span>
                     )}
-                  </button>
+                  </Button>
                   {isExpanded && prep.length > 0 && (
                     <ul className="bg-secondary/20 pb-1">
                       {prep.map((p) => (
                         <li key={p.id}>
-                          <button
+                          <Button
+                            type="button"
+                            variant="ghost"
                             onClick={() => openItem(p.id)}
-                            className="flex w-full items-center gap-2 px-5 py-1 text-left text-[11px] text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                            className="flex h-auto w-full items-center justify-start gap-2 whitespace-normal rounded-none px-5 py-1 text-left text-[11px] font-normal text-muted-foreground hover:bg-accent/40 hover:text-foreground"
                           >
                             <PriorityDot priority={p.priority} />
                             <span className="line-clamp-1 flex-1">{p.title}</span>
-                          </button>
+                          </Button>
                         </li>
                       ))}
                     </ul>
@@ -650,12 +672,14 @@ export function QuickKnockTile({ items }: { items: S2DItem[] }) {
                 className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30"
               >
                 {it.source_type && <SourceIcon type={it.source_type} />}
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
                   onClick={() => open(it.id)}
-                  className="line-clamp-1 min-w-0 flex-1 text-left text-[12px]"
+                  className="line-clamp-1 h-auto min-w-0 flex-1 justify-start rounded-none px-0 py-0 text-left text-[12px] font-normal hover:bg-transparent"
                 >
                   {it.title}
-                </button>
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -735,9 +759,11 @@ export function WaitingTile({ items }: { items: S2DItem[] }) {
                 key={it.id}
                 className="group flex items-center gap-2 px-3 py-1.5 hover:bg-accent/30"
               >
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
                   onClick={() => open(it.id)}
-                  className="min-w-0 flex-1 text-left"
+                  className="block h-auto min-w-0 flex-1 justify-start whitespace-normal rounded-none px-0 py-0 text-left font-normal hover:bg-transparent"
                 >
                   <div className="line-clamp-1 text-[12px]">{it.title}</div>
                   {it.queue_reason && (
@@ -745,7 +771,7 @@ export function WaitingTile({ items }: { items: S2DItem[] }) {
                       {it.queue_reason}
                     </div>
                   )}
-                </button>
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -811,10 +837,12 @@ export function PortfolioTile({
         <ul className="divide-y divide-border/30">
           {sorted.map((c) => (
             <li key={c.id}>
-              <button
+              <Button
+                type="button"
+                variant="ghost"
                 onClick={() => onToggle(c.id)}
                 className={cn(
-                  "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-accent/30",
+                  "flex h-auto w-full items-center justify-start gap-2 whitespace-normal rounded-none px-3 py-1.5 text-left font-normal hover:bg-accent/30",
                   active === c.id && "bg-primary/10"
                 )}
               >
@@ -826,7 +854,7 @@ export function PortfolioTile({
                 <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
                   {c.open}
                 </span>
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

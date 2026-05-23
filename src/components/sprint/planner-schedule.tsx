@@ -441,16 +441,18 @@ function BlockRow({
         isDragging && "opacity-50"
       )}
     >
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         {...listeners}
         {...attributes}
-        className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
+        className="h-5 w-5 cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
         title="Drag to move"
         aria-label="Drag block"
       >
         <GripVertical className="h-3.5 w-3.5" />
-      </button>
+      </Button>
       {badge}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
@@ -463,21 +465,27 @@ function BlockRow({
         <div className="line-clamp-1 text-[13px] text-foreground/90">{item.title}</div>
       </div>
       <div className="flex items-center gap-0.5">
-        <button
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => onBump(block.s2dItemId, -10)}
-          className="rounded border border-border/40 px-1.5 text-[11px] hover:bg-accent"
+          className="h-auto rounded border border-border/40 px-1.5 py-0 text-[11px] font-normal hover:bg-accent"
           aria-label="Decrease duration"
         >
           −
-        </button>
+        </Button>
         <span className="w-12 text-center font-mono text-[11px]">{block.durationMin}m</span>
-        <button
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => onBump(block.s2dItemId, 10)}
-          className="rounded border border-border/40 px-1.5 text-[11px] hover:bg-accent"
+          className="h-auto rounded border border-border/40 px-1.5 py-0 text-[11px] font-normal hover:bg-accent"
           aria-label="Increase duration"
         >
           +
-        </button>
+        </Button>
       </div>
     </div>
   );

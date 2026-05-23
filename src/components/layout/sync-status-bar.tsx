@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useGSAP } from "@gsap/react";
 import { gsap, EASE, slideDown, withMotion } from "@/lib/animation";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -300,13 +301,16 @@ function ResultBar({
       </div>
       <span className="truncate">{lastResult.msg}</span>
       {!isErr && <Sparkles className="h-3 w-3 shrink-0 opacity-60" />}
-      <button
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
         onClick={onClear}
-        className="ml-auto rounded p-0.5 opacity-60 hover:bg-foreground/10 hover:opacity-100"
         aria-label="Dismiss"
+        className="ml-auto h-5 w-5 rounded p-0.5 opacity-60 hover:bg-foreground/10 hover:opacity-100"
       >
         <X className="h-3.5 w-3.5" />
-      </button>
+      </Button>
     </div>
   );
 }
