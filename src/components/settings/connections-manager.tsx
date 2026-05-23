@@ -331,7 +331,7 @@ export function ConnectionsManager({
             variant="ghost"
             size="icon"
             onClick={() => setBanner(null)}
-            className="h-5 w-5 text-muted-foreground hover:text-foreground"
+            className="mashi-icon-glow h-5 w-5 text-muted-foreground hover:text-foreground"
             aria-label="Dismiss"
           >
             <X className="h-3.5 w-3.5" />
@@ -556,7 +556,7 @@ function ProviderRow({
                       onClick={() => onSync(c.id, meta.key)}
                       disabled={syncingIds.has(c.id)}
                       aria-label="Sync now"
-                      className="h-6 w-6"
+                      className="mashi-icon-glow h-6 w-6"
                       title="Sync now"
                     >
                       <RefreshCw
@@ -576,7 +576,7 @@ function ProviderRow({
                   // Quieter by default — only goes red on hover. The
                   // primary CTA for a stale connection is Reauth (above),
                   // not Disconnect.
-                  className="h-6 w-6 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
+                  className="mashi-icon-glow h-6 w-6 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive"
                   title="Disconnect this account"
                 >
                   <Unplug className="h-3.5 w-3.5" />

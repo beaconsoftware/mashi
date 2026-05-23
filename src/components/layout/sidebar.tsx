@@ -106,7 +106,7 @@ export function Sidebar() {
             <TooltipTrigger asChild>
               <Link
                 href="/settings/connections"
-                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <Plug className="h-4 w-4" />
               </Link>
@@ -117,7 +117,7 @@ export function Sidebar() {
             <TooltipTrigger asChild>
               <Link
                 href="/settings/style"
-                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <Mic className="h-4 w-4" />
               </Link>
@@ -131,7 +131,7 @@ export function Sidebar() {
             <TooltipTrigger asChild>
               <Link
                 href="/settings/usage"
-                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <Activity className="h-4 w-4" />
               </Link>
@@ -145,7 +145,7 @@ export function Sidebar() {
             <TooltipTrigger asChild>
               <Link
                 href="/settings/api-tokens"
-                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <KeyRound className="h-4 w-4" />
               </Link>

@@ -307,7 +307,7 @@ function ResultBar({
         size="icon"
         onClick={onClear}
         aria-label="Dismiss"
-        className="ml-auto h-5 w-5 rounded p-0.5 opacity-60 hover:bg-foreground/10 hover:opacity-100"
+        className="mashi-icon-glow ml-auto h-5 w-5 rounded p-0.5 opacity-60 hover:bg-foreground/10 hover:opacity-100"
       >
         <X className="h-3.5 w-3.5" />
       </Button>

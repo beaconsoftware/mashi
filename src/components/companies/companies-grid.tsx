@@ -32,7 +32,7 @@ export function CompaniesGrid() {
           <Link
             key={c.id}
             href={`/s2d?company=${encodeURIComponent(c.id)}`}
-            className="group rounded-md border border-border/40 bg-card p-4 transition-colors hover:border-border hover:bg-accent/30"
+            className="mashi-magnetic group rounded-md border border-border/40 bg-card p-4 transition-colors hover:border-border hover:bg-accent/30"
           >
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color_hex }} />

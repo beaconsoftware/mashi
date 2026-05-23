@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { ArrowUp, Sparkles, PanelRightClose, AlertTriangle, Square } from "lucide-react";
 import { useGSAP } from "@gsap/react";
 import { Button } from "@/components/ui/button";
+import { NavIcon } from "@/components/layout/primitives";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppStore } from "@/store/app-store";
@@ -235,9 +236,9 @@ export function ChatPanel() {
           <span>Mashi</span>
           <span className="font-mono text-[10px] text-muted-foreground">claude-opus-4-7</span>
         </div>
-        <Button variant="ghost" size="icon" onClick={toggleChat} aria-label="Close chat">
+        <NavIcon onClick={toggleChat} aria-label="Close chat">
           <PanelRightClose className="h-4 w-4" />
-        </Button>
+        </NavIcon>
       </header>
 
       <div ref={scrollerRef} className="flex-1 overflow-y-auto">

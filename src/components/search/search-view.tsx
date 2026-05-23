@@ -194,7 +194,7 @@ export function SearchView() {
                             href={h.href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-start gap-2 px-3 py-2 transition-colors hover:bg-accent/30"
+                            className="mashi-magnetic flex items-start gap-2 px-3 py-2 transition-colors hover:bg-accent/30"
                           >
                             <HitContent hit={h} query={debounced} />
                             <ExternalLink className="mt-1 h-3 w-3 shrink-0 text-muted-foreground" />
@@ -202,7 +202,7 @@ export function SearchView() {
                         ) : (
                           <Link
                             href={h.href}
-                            className="flex items-start gap-2 px-3 py-2 transition-colors hover:bg-accent/30"
+                            className="mashi-magnetic flex items-start gap-2 px-3 py-2 transition-colors hover:bg-accent/30"
                           >
                             <HitContent hit={h} query={debounced} />
                           </Link>

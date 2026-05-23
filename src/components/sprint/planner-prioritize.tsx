@@ -285,7 +285,7 @@ export function PlannerPrioritize() {
                         onClick={() => moveUp(i)}
                         disabled={i === 0}
                         aria-label="Move up"
-                        className="h-4 w-4 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                        className="mashi-icon-glow h-4 w-4 text-muted-foreground hover:text-foreground disabled:opacity-30"
                       >
                         <GripVertical className="h-3 w-3 rotate-90" />
                       </Button>
@@ -315,7 +315,7 @@ export function PlannerPrioritize() {
                         onClick={() => moveUp(i)}
                         disabled={i === 0}
                         aria-label="Move up"
-                        className="h-4 w-4 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30"
+                        className="mashi-icon-glow h-4 w-4 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30"
                       >
                         ↑
                       </Button>
@@ -326,7 +326,7 @@ export function PlannerPrioritize() {
                         onClick={() => moveDown(i)}
                         disabled={i === selected.length - 1}
                         aria-label="Move down"
-                        className="h-4 w-4 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30"
+                        className="mashi-icon-glow h-4 w-4 text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-30"
                       >
                         ↓
                       </Button>
@@ -338,7 +338,7 @@ export function PlannerPrioritize() {
                       onClick={() => toggle(it.id)}
                       title="Remove"
                       aria-label="Remove"
-                      className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                      className="mashi-icon-glow h-5 w-5 text-muted-foreground hover:text-destructive"
                     >
                       <X className="h-3.5 w-3.5" />
                     </Button>

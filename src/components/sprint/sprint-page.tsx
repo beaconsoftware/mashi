@@ -125,7 +125,7 @@ function MinimizedSplash() {
       {/* Opaque card — the splash is the only thing on screen and the
           user needs to find their way back. Translucent /60 reads as a
           haze against bright album art and the "Resume" CTA disappears. */}
-      <div className="max-w-md space-y-4 rounded-2xl border border-border/40 bg-card px-8 py-8 text-center shadow-md">
+      <div className="mashi-lift max-w-md space-y-4 rounded-2xl border border-border/40 bg-card px-8 py-8 text-center shadow-md">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
           <Sparkles className="h-5 w-5 text-muted-foreground" />
         </div>
@@ -134,7 +134,7 @@ function MinimizedSplash() {
           Your sprint is running in the background. Open the floating widget or
           tap below to bring it back full-screen.
         </p>
-        <Button onClick={unminimize} className="gap-1.5">
+        <Button onClick={unminimize} className="mashi-glow-focus gap-1.5">
           <Play className="h-3.5 w-3.5" />
           Resume full-screen
         </Button>
@@ -166,7 +166,7 @@ function IdleSplash({ onStart }: { onStart: () => void }) {
           we need the CTA to read clearly against whatever ambient is up.
           The translucent /60 hand-roll washed out against bright album
           art (Sabrina Carpenter / Feather etc.). */}
-      <div className="max-w-md space-y-4 rounded-2xl border border-border/40 bg-card px-8 py-8 text-center shadow-md">
+      <div className="mashi-lift max-w-md space-y-4 rounded-2xl border border-border/40 bg-card px-8 py-8 text-center shadow-md">
         <div ref={sparkleRef} className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15">
           <Sparkles className="h-5 w-5 text-primary" />
         </div>
@@ -175,7 +175,7 @@ function IdleSplash({ onStart }: { onStart: () => void }) {
           Pick what you&apos;ll work on, block out times, and Mashi will hold you to it
           with a focus timer and matching calendar invites.
         </p>
-        <Button size="lg" onClick={onStart} className="gap-2">
+        <Button size="lg" onClick={onStart} className="mashi-glow-focus gap-2">
           <Play className="h-4 w-4" />
           Start planning
         </Button>

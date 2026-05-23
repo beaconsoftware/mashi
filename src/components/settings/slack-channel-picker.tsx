@@ -188,7 +188,7 @@ export function SlackChannelPicker({
                 size="icon"
                 onClick={() => setError(null)}
                 aria-label="Dismiss"
-                className="ml-auto h-4 w-4 text-muted-foreground hover:text-foreground"
+                className="mashi-icon-glow ml-auto h-4 w-4 text-muted-foreground hover:text-foreground"
               >
                 <X className="h-3 w-3" />
               </Button>

@@ -116,7 +116,7 @@ export function SprintWidget() {
               size="icon"
               onClick={() => completeBlock(current.s2dItemId, "done")}
               aria-label="Done"
-              className="h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="mashi-icon-glow h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title="Done"
             >
               <Check className="h-3.5 w-3.5" />
@@ -127,7 +127,7 @@ export function SprintWidget() {
               size="icon"
               onClick={paused ? resume : pause}
               aria-label={paused ? "Resume" : "Pause"}
-              className="h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="mashi-icon-glow h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title={paused ? "Resume" : "Pause"}
             >
               {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
@@ -138,7 +138,7 @@ export function SprintWidget() {
               size="icon"
               onClick={unminimize}
               aria-label="Open"
-              className="h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="mashi-icon-glow h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title="Open"
             >
               <Maximize2 className="h-3.5 w-3.5" />
@@ -151,7 +151,7 @@ export function SprintWidget() {
                 if (confirm("Exit sprint?")) exitSprint();
               }}
               aria-label="Exit"
-              className="h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
+              className="mashi-icon-glow h-6 w-6 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-destructive"
               title="Exit"
             >
               <X className="h-3.5 w-3.5" />
