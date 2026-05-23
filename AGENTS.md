@@ -463,6 +463,81 @@ Audit pings if you see:
 `pnpm audit:layers` enforces the raw-button + hand-rolled-modal checks.
 The rest is reviewer discipline.
 
+## Polish patterns — the implicit Mashi feel
+
+shadcn ships the boring polish for free: focus rings, ARIA, keyboard
+nav, open/close animations on Dialog/Popover/Tooltip via Radix's
+`data-state`. Mashi adds a layer on top — the rotate-and-glow on
+sidebar icons, the magnetic Y-lift on cards, the tactile press on
+CTAs. That polish used to be hand-applied per component. Now it's a
+small set of named utilities + smart defaults baked into the
+primitives. **You almost never have to think about it.**
+
+### Decision tree
+
+| The element is… | Use… |
+|---|---|
+| A button using `<Button>` (any variant except ghost/link) | Press feedback is baked in — nothing to do |
+| An icon-only nav trigger (sidebar, top-bar action, widget) | `<NavIcon>` from `src/components/layout/primitives.tsx` |
+| A row/card in a list, clickable | `.mashi-magnetic` className |
+| A focal/hero card (Now Move, Plan a sprint) | `.mashi-lift` className |
+| Cursor-tracking magnetic / parallax tilt (deck cards) | `useMagneticHover` / `useDeckCardHover` from `src/lib/animation/interactions.ts` |
+| A selection toggling on (S2D card selected, etc.) | `useSelectBurst` + `<span data-select-burst />` |
+| A custom CTA needing extra focus emphasis | `.mashi-glow-focus` className |
+| Hero entry on mount (sprint takeover, sign-in) | `heroEntry()` via `useGSAP` |
+
+### CSS utilities (in `src/app/globals.css`)
+
+- **`.mashi-magnetic`** — subtle Y-lift on hover. For rows, list items.
+- **`.mashi-lift`** — stronger lift + shadow on hover. For focal cards.
+- **`.mashi-icon-hover`** — rotate(8deg) + scale(1.1). Fires on direct
+  hover OR via a `group` parent. Apply to a child element inside a
+  larger interactive container.
+- **`.mashi-icon-glow`** — amber halo behind the element on hover via
+  a ::after pseudo. No extra DOM. Pair with `mashi-icon-hover` for the
+  full sidebar effect. `<NavIcon>` composes both for you.
+- **`.mashi-press`** — scale-down on `:active`. Baked into `<Button>`
+  for non-ghost variants; apply manually to other tactile surfaces.
+- **`.mashi-glow-focus`** — adds a primary-tinted glow OUTSIDE the
+  standard focus ring on `:focus-visible`. Layers on top of shadcn's
+  ring rather than replacing it.
+
+All utilities respect `prefers-reduced-motion: reduce` — transforms
+and transitions short-circuit to no-op.
+
+### JS-driven polish (in `src/lib/animation/interactions.ts`)
+
+Reach for these only when CSS can't express the effect:
+
+- **`useMagneticHover`** — soft / strong cursor-attract Y-lift with a
+  GSAP-driven box-shadow halo. Use on cockpit tiles, S2D rows.
+- **`useDeckCardHover`** — heavier with 3D parallax tilt that tracks
+  the cursor. Use on swipe-deck cards (planner prioritize, review).
+- **`useSelectBurst`** — one-shot ring expansion when an item
+  transitions to selected. Needs a `<span data-select-burst />` child
+  in the element being burst.
+
+### What NOT to do
+
+- **Don't hand-roll `group-hover:rotate-[Xdeg]` on icon-only buttons.**
+  Reach for `<NavIcon>` or apply `mashi-icon-hover` + `mashi-icon-glow`
+  to the className.
+- **Don't add `transition-transform hover:scale-105` to cards.** Use
+  `mashi-magnetic` or `mashi-lift` so every card in the app shares
+  one canonical motion curve + duration.
+- **Don't animate boxShadow with GSAP using `hsl(var(--*))` values** —
+  the parser chokes. Set the shadow imperatively via DOM style and
+  animate transform-only properties through GSAP. See AGENTS.md "GSAP
+  gotchas".
+
+### When polish IS bespoke
+
+The big moments — sprint launch, sprint complete recap, sign-in
+aurora, the onboard hero entries — earn their hand-craft. Those use
+GSAP timelines directly. The doctrine here covers the recurring
+polish so the bespoke moments aren't drowned out by every button also
+trying to be flashy.
+
 ## React Compiler / lint quirks
 
 The React Compiler ESLint plugin is strict. Patterns that look fine but error:

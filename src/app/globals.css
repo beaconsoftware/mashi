@@ -244,3 +244,136 @@
     animation: none !important;
   }
 }
+
+/* ----------------------------------------------------------------
+   Mashi polish — interactive feedback utilities.
+
+   Apply these to interactive elements to inherit the canonical Mashi
+   feel without re-rolling per-component CSS. The shadcn primitives in
+   src/components/ui/ apply the right defaults by variant; feature code
+   can layer additional classes for specific contexts.
+
+   These are PURE CSS (transform + filter + box-shadow). All composited
+   on the GPU, no JS scheduling, no main-thread cost. Use these for
+   the hover/press/focus polish; reach for the JS hooks in
+   src/lib/animation/interactions.ts (useMagneticHover, useDeckCardHover,
+   useSelectBurst) only when you need cursor-tracking, parallax tilt, or
+   one-shot bursts that CSS can't express cleanly.
+
+   Decision tree (also documented in AGENTS.md "Polish patterns"):
+
+   - Subtle row / card hover  →  .mashi-magnetic
+   - Stronger hero / focal card  →  .mashi-lift
+   - Nav-icon / icon-only ghost button  →  .mashi-icon-hover + .mashi-icon-glow
+   - Primary CTA press feedback  →  .mashi-press (already baked into <Button>)
+   - Custom focus ring with primary glow  →  .mashi-glow-focus
+---------------------------------------------------------------- */
+
+/* Subtle Y-lift for rows, list items, panel triggers. The smallest
+   reactive feedback in the system — applied to anything clickable that
+   shouldn't visually shout. */
+.mashi-magnetic {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.mashi-magnetic:hover {
+  transform: translateY(-1px);
+}
+
+/* Stronger lift for focal cards (Now Move on cockpit, Sprint widget,
+   hero CTAs). Pairs with a shadow change so the card reads as lifting
+   off the page, not just nudging. */
+.mashi-lift {
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 220ms ease-out;
+}
+.mashi-lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 24px -8px hsl(0 0% 0% / 0.45),
+    0 4px 8px -4px hsl(0 0% 0% / 0.3);
+}
+
+/* Icon hover: rotate + scale. The sidebar nav icon pattern, extracted
+   for reuse. Works as a direct hover OR via a `group` parent —
+   `.group:hover .mashi-icon-hover` also fires, so apply this to an
+   <Icon /> inside a button and the icon transforms when the parent is
+   hovered. */
+.mashi-icon-hover {
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+.mashi-icon-hover:hover,
+.group:hover > .mashi-icon-hover,
+.group:hover .mashi-icon-hover {
+  transform: rotate(8deg) scale(1.1);
+}
+
+/* Soft amber halo behind an element. Apply alongside .mashi-icon-hover
+   for the full sidebar feel. The halo is a ::after pseudo-element so no
+   extra DOM — just a single class on the element. */
+.mashi-icon-glow {
+  position: relative;
+  isolation: isolate;
+}
+.mashi-icon-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: hsl(var(--primary) / 0);
+  filter: blur(12px);
+  transition: background 240ms ease-out;
+  pointer-events: none;
+}
+.mashi-icon-glow:hover::after,
+.group:hover > .mashi-icon-glow::after,
+.group:hover .mashi-icon-glow::after {
+  background: hsl(var(--primary) / 0.25);
+}
+
+/* Tactile press feedback — scale down slightly on :active. Already
+   baked into the shadcn <Button> default + outline + secondary +
+   destructive variants. Apply manually to other interactive surfaces
+   (custom toggles, swatches) where the user expects the "I clicked
+   this" feedback. */
+.mashi-press {
+  transition: transform 100ms ease-out;
+  will-change: transform;
+}
+.mashi-press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Focus ring with a primary-tinted glow. Layers on top of shadcn's
+   default ring without replacing it — the inner solid ring keeps the
+   accessibility contrast, the outer glow adds the Mashi flavor. Apply
+   to elements that need extra emphasis on focus (CTAs in heroes,
+   sign-in button). */
+.mashi-glow-focus:focus-visible {
+  box-shadow:
+    0 0 0 2px hsl(var(--ring)),
+    0 0 12px hsl(var(--primary) / 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mashi-magnetic,
+  .mashi-lift,
+  .mashi-icon-hover,
+  .mashi-press {
+    transition: none !important;
+  }
+  .mashi-magnetic:hover,
+  .mashi-lift:hover,
+  .mashi-icon-hover:hover,
+  .group:hover > .mashi-icon-hover,
+  .group:hover .mashi-icon-hover,
+  .mashi-press:active {
+    transform: none !important;
+  }
+  .mashi-icon-glow::after {
+    transition: none !important;
+  }
+}

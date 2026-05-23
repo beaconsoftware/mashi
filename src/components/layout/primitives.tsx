@@ -5,6 +5,7 @@
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -211,6 +212,54 @@ export const Surface = forwardRef<
     >
       {children}
     </div>
+  );
+});
+
+/**
+ * Nav-icon trigger. The canonical Mashi feel for any icon-only button
+ * that sits in a navigation context — sidebar, top-bar quick actions,
+ * floating widget triggers, the sync-status chip.
+ *
+ * Composes on top of the shadcn `<Button variant="ghost" size="icon">`
+ * (which already gives focus ring, press feedback, and a subtle
+ * rotate-on-hover for the child svg from `buttonVariants`) and adds the
+ * canonical amber halo via `.mashi-icon-glow`. The result is the same
+ * "soft warmth on hover" the sidebar nav has, available for free
+ * anywhere you'd previously hand-roll a rotate+glow icon button.
+ *
+ * Use this instead of stacking `mashi-icon-hover + mashi-icon-glow`
+ * yourself — that combo is for cases where Button doesn't fit (e.g.
+ * a raw <a> tag wrapping an icon). For ordinary icon-only buttons,
+ * just reach for <NavIcon>.
+ *
+ * Tones:
+ *   - subtle  (default) — muted foreground, accent hover. Sidebar feel.
+ *   - primary           — primary-tinted text. Used for "this action is
+ *                         affirmative" affordances (e.g. the chat
+ *                         summon pill).
+ */
+export const NavIcon = forwardRef<
+  HTMLButtonElement,
+  Omit<React.ComponentProps<typeof Button>, "size" | "variant"> & {
+    /** Visual variant. `primary` adds a primary tint; `subtle` is the
+     *  default for sidebar / chrome triggers. */
+    tone?: "subtle" | "primary";
+  }
+>(function NavIcon({ className, tone = "subtle", children, ...rest }, ref) {
+  return (
+    <Button
+      ref={ref}
+      variant="ghost"
+      size="icon"
+      className={cn(
+        "mashi-icon-glow",
+        tone === "primary" && "text-primary hover:bg-primary/10 hover:text-primary",
+        className
+      )}
+      {...rest}
+    >
+      {children}
+    </Button>
   );
 });
 
