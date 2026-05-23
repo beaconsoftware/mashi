@@ -44,7 +44,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <div className="flex min-h-0 flex-1">
           <Sidebar />
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* CSS stacking gotcha: AmbientGround is fixed inset-0 with
+              z-ground (=0). Per the painting-order spec, positioned
+              elements with z-index:0 paint AFTER non-positioned block
+              descendants — so an unpositioned <main> would render
+              BEHIND the ambient album art the moment Spotify state
+              arrives and the art layer mounts. The header + sidebar
+              avoid this by already being position:relative.
+              `relative` here (no z-index) promotes main into the same
+              z:auto/0 painting bucket as AmbientGround; DOM order
+              (main is later) wins and main paints on top, where it
+              belongs. */}
+          <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {children}
           </main>
           <ChatPanel />
