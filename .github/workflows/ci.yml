@@ -60,12 +60,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: verify
-    # The visual job runs but doesn't fail the PR on diff yet — baselines
-    # are still being established and the dashboard data depends on
-    # seeded Supabase fixtures (see tests/visual/README.md). Once a
-    # canonical test user is provisioned in CI, flip continue-on-error
-    # to false. The job artifact (diff report) is uploaded either way so
-    # reviewers can spot regressions even while the gate is soft.
+    # GATED OFF until a CI Supabase test user is provisioned. The
+    # Playwright scaffolding (config, auth setup, dashboard-routes spec)
+    # is committed and ready, but with placeholder Supabase env the dev
+    # server can't boot in CI and the suite times out. To re-enable:
+    #   1. Run scripts/seed-ci-test-user.ts against prod Supabase.
+    #   2. Add SUPABASE_SERVICE_ROLE_KEY, PLAYWRIGHT_TEST_USER_ID,
+    #      PLAYWRIGHT_TEST_USER_EMAIL, NEXT_PUBLIC_SUPABASE_URL,
+    #      NEXT_PUBLIC_SUPABASE_ANON_KEY as GitHub Actions repo secrets.
+    #   3. Replace the placeholder env block below with `secrets.*` refs.
+    #   4. `pnpm test:visual:update` locally to capture baselines, commit them.
+    #   5. Remove `if: false` and (once stable) flip continue-on-error to false.
+    # See tests/visual/README.md for the full playbook.
+    if: false
     continue-on-error: true
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
