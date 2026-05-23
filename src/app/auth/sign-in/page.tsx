@@ -20,8 +20,8 @@ export default function SignInPage() {
       <SignInBackground />
       <div className="relative z-shell w-full max-w-sm space-y-6">
         <div className="space-y-2 text-center">
-          {/* Logo tile with a soft amber halo so the brand reads as
-              warmth-on-glow rather than a flat square. The blur sits
+          {/* Logo tile with a soft primary-blue halo so the brand reads
+              as glow-on-aurora rather than a flat square. The blur sits
               behind the tile via `before:` — no extra DOM. */}
           <div className="relative mx-auto h-12 w-12">
             <div

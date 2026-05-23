@@ -4,8 +4,13 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ----------------------------------------------------------------
-   Mashi — dark theme with amber S2D accent
+   Mashi — dark theme with Beacon Blue UI accent
    Tailwind v4 token system. See spec section 3.
+
+   Brand vs UI: the standalone brand color (logo tile, favicon) is
+   Beacon Blue #09377E (HSL 217 87% 26%). The in-app `--primary` token
+   is a brighter blue at HSL 217 91% 53%, lightness-matched to the
+   previous amber so existing shadow/glow math keeps working.
 ---------------------------------------------------------------- */
 
 @theme inline {
@@ -55,8 +60,8 @@
   --card-foreground: 240 10% 4%;
   --popover: 0 0% 100%;
   --popover-foreground: 240 10% 4%;
-  --primary: 43 96% 56%;
-  --primary-foreground: 240 10% 4%;
+  --primary: 217 91% 53%;
+  --primary-foreground: 0 0% 98%;
   --secondary: 240 5% 96%;
   --secondary-foreground: 240 6% 10%;
   --muted: 240 5% 96%;
@@ -67,7 +72,7 @@
   --destructive-foreground: 0 0% 98%;
   --border: 240 6% 90%;
   --input: 240 6% 90%;
-  --ring: 43 96% 56%;
+  --ring: 217 91% 53%;
 }
 
 .dark {
@@ -77,8 +82,8 @@
   --card-foreground: 240 5% 90%;
   --popover: 240 8% 8%;
   --popover-foreground: 240 5% 94%;
-  --primary: 43 96% 56%;
-  --primary-foreground: 240 10% 4%;
+  --primary: 217 91% 53%;
+  --primary-foreground: 0 0% 98%;
   --secondary: 240 5% 13%;
   --secondary-foreground: 240 5% 64%;
   --muted: 240 5% 11%;
@@ -89,7 +94,7 @@
   --destructive-foreground: 0 0% 98%;
   --border: 240 5% 14%;
   --input: 240 5% 12%;
-  --ring: 43 96% 56%;
+  --ring: 217 91% 53%;
 }
 
 :root,
@@ -133,7 +138,7 @@
 
   :focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px hsl(43 96% 56% / 0.5);
+    box-shadow: 0 0 0 2px hsl(217 91% 53% / 0.5);
   }
 }
 
@@ -206,8 +211,8 @@
   left: -80px;
   width: 620px;
   height: 620px;
-  /* Amber — the Mashi accent. Seed of the palette. */
-  background: radial-gradient(closest-side, hsl(38 95% 60% / 0.7), transparent 70%);
+  /* Beacon UI Blue — the Mashi accent. Seed of the palette. */
+  background: radial-gradient(closest-side, hsl(217 91% 53% / 0.7), transparent 70%);
   animation: sign-in-drift-a 19s ease-in-out infinite;
 }
 .sign-in-blob-b {
@@ -310,9 +315,9 @@
   transform: rotate(8deg) scale(1.1);
 }
 
-/* Soft amber halo behind an element. Apply alongside .mashi-icon-hover
-   for the full sidebar feel. The halo is a ::after pseudo-element so no
-   extra DOM — just a single class on the element. */
+/* Soft primary-tinted halo behind an element. Apply alongside
+   .mashi-icon-hover for the full sidebar feel. The halo is a ::after
+   pseudo-element so no extra DOM — just a single class on the element. */
 .mashi-icon-glow {
   position: relative;
   isolation: isolate;
