@@ -1,22 +1,15 @@
 import { ImageResponse } from "next/og";
 
 /**
- * Dynamic favicon — record-disk / sonar-target mark.
+ * Dynamic favicon — minimalist torch on the UI Primary blue tile.
  *
- * Tile color is UI Primary blue (HSL 217 91% 53%) — the SAME color as
- * the in-app logo tile (`bg-primary`) so the favicon and the sidebar
- * mark read as one identity. Previously the favicon used the deeper
- * Beacon Brand Blue (#09377E, HSL 217 87% 26%) under the theory that
- * a standalone surface needs higher contrast against light browser
- * chrome, but in practice the visual mismatch with the in-app logo
- * was more jarring than any contrast win.
+ * A simple white flame with a short rectangular handle at the base.
+ * Asymmetric apex (the highest point is slightly right of center)
+ * gives the flame a subtle windblown character without ornamentation.
  *
- * Brand Blue is still the canonical Beacon color for marketing /
- * print surfaces; in-product (favicon + sidebar + sign-in tile) we
- * use the brighter UI Primary for consistency.
- *
- * Black disk inside the tile, WHITE concentric reverberation rings +
- * WHITE spindle dot for max contrast against the black disk.
+ * Tile = `--primary` (HSL 217 91% 53%) so the favicon matches the
+ * in-app sidebar logo + sign-in tile. Flame + handle are pure white
+ * for max contrast at any browser-chrome theme.
  */
 
 export const size = { width: 32, height: 32 };
@@ -39,51 +32,15 @@ export default function Icon() {
           borderRadius: 6,
         }}
       >
-        <svg
-          viewBox="0 0 32 32"
-          width="26"
-          height="26"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* Solid black disk — fills most of the tile. */}
-          <circle cx="16" cy="16" r="13.5" fill="black" stroke="none" />
+        <svg viewBox="0 0 32 32" width="22" height="22" fill={WHITE} stroke="none">
+          {/* Flame — asymmetric teardrop. Apex starts at x=17 (slightly
+              right of center) to suggest a wind-tilted top edge. The
+              lower curves narrow back toward the handle. */}
+          <path d="M17 5 C 12 10, 9 16, 12 22 C 13 25, 15 25.5, 16 25 C 17 25.5, 19 25, 20 22 C 23 16, 22 9, 17 5 Z" />
 
-          {/* Uneven white reverberation rings inside the disk. */}
-          <circle
-            cx="16"
-            cy="16"
-            r="10.5"
-            stroke={WHITE}
-            strokeWidth="0.9"
-            strokeDasharray="9 5 14 4 7 6"
-            opacity="0.55"
-            transform="rotate(12 16 16)"
-          />
-          <circle
-            cx="16"
-            cy="16"
-            r="8"
-            stroke={WHITE}
-            strokeWidth="1"
-            strokeDasharray="11 4 6 5 16 3"
-            opacity="0.75"
-            transform="rotate(-30 16 16)"
-          />
-          <circle
-            cx="16"
-            cy="16"
-            r="5.5"
-            stroke={WHITE}
-            strokeWidth="1.1"
-            strokeDasharray="14 3 9 4"
-            opacity="0.95"
-            transform="rotate(48 16 16)"
-          />
-
-          {/* White spindle dot — the bullseye. */}
-          <circle cx="16" cy="16" r="1.7" fill={WHITE} stroke="none" />
+          {/* Handle — short rounded rectangle below the flame. Kept
+              compact so the flame dominates at favicon scale. */}
+          <rect x="14" y="25" width="4" height="3" rx="1" />
         </svg>
       </div>
     ),
