@@ -145,8 +145,14 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
     <div
       ref={setNodeRef}
       className={cn(
-        "flex h-full min-h-0 w-72 shrink-0 flex-col rounded-md border border-border/40 bg-secondary/20 transition-colors",
-        isOver && "border-primary/50 bg-primary/5"
+        // Column body. The SectionHeader sits flush at the top; the body
+        // needs enough chrome to read as a contiguous column over the
+        // ambient album-art ground. bg-card/60 + backdrop-blur is the
+        // canonical "card over busy ambient" recipe; overflow-hidden
+        // clips the header's square top corners into the column's
+        // rounded-md so the strip and the body read as one surface.
+        "flex h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden rounded-md border border-border/40 bg-card/60 backdrop-blur-sm transition-colors",
+        isOver && "border-primary/50 bg-primary/10"
       )}
     >
       <SectionHeader className="justify-between py-2.5">

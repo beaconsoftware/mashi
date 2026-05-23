@@ -73,9 +73,11 @@ export function ReviewColumn({ items }: Props) {
     <div
       ref={setNodeRef}
       className={cn(
-        "flex h-full min-h-0 w-80 shrink-0 flex-col rounded-md border bg-secondary/20 transition-colors",
+        // See s2d-column.tsx for rationale on bg-card/60 + backdrop-blur
+        // + overflow-hidden. Same shape, wider column, accent border.
+        "flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden rounded-md border bg-card/60 backdrop-blur-sm transition-colors",
         "border-primary/40 ring-1 ring-primary/10",
-        isOver && "bg-primary/5"
+        isOver && "bg-primary/10"
       )}
     >
       <SectionHeader tone="accent" className="justify-between py-2.5">
