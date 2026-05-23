@@ -1,30 +1,19 @@
 /**
  * MashiMark — the brand logo.
  *
- * A record / sonar-target hybrid. Composition:
- *   - Large solid black disk centered on the canvas (the "vinyl").
- *   - WHITE center dot (the spindle / bullseye).
- *   - WHITE concentric contour rings INSIDE the black disk,
- *     radiating outward from the dot like uneven sound reverberations.
- *     Each ring is an arc-with-gaps (varying stroke-dasharray) so the
- *     rings feel like a live audio waveform rather than a perfect
- *     target.
+ * A minimalist torch: a white flame with a short rectangular handle.
+ * The apex of the flame is slightly right of center to suggest
+ * windblown motion without ornamentation.
  *
- * White spindle + rings give the mark maximum contrast on any
- * background (the surrounding tile is usually Brand Blue or
- * --primary, but the logo also gets dropped onto neutral surfaces and
- * needs to read everywhere). The black disk is `currentColor` so the
- * disk recolors naturally when nested in a non-default-text
- * environment.
+ * The mark is intentionally simple and renders cleanly from favicon
+ * scale (16-32px) up through hero-tile scale (48-64px). The whole
+ * mark is white via `currentColor`, so it inherits the parent text
+ * color — drop it inside a `bg-primary text-primary-foreground` tile
+ * and it picks up the right color automatically (white in dark mode).
  *
- * Brand Blue is still the canonical surrounding TILE color (see
- * src/app/icon.tsx for the favicon, and the sign-in page logo tile
- * which uses `bg-primary`). The mark itself doesn't render the tile —
- * its parent does.
+ * Matches the favicon at `src/app/icon.tsx` — same flame path, same
+ * handle, same tile color (UI Primary blue).
  */
-
-const WHITE = "hsl(0 0% 100%)";
-
 export function MashiMark({
   size = 24,
   className,
@@ -42,49 +31,16 @@ export function MashiMark({
       className={className}
       role="img"
       aria-label={title}
-      fill="none"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      fill="currentColor"
+      stroke="none"
     >
-      {/* Solid black disk — the body of the mark. */}
-      <circle cx="16" cy="16" r="13.5" fill="currentColor" stroke="none" />
+      {/* Flame — asymmetric teardrop. Apex starts at x=17 (slightly
+          right of center) to suggest a wind-tilted top edge. The
+          lower curves narrow back toward the handle. */}
+      <path d="M17 5 C 12 10, 9 16, 12 22 C 13 25, 15 25.5, 16 25 C 17 25.5, 19 25, 20 22 C 23 16, 22 9, 17 5 Z" />
 
-      {/* White reverberation rings inside the disk. Each ring uses a
-          distinct stroke-dasharray + rotation so the gaps fall at
-          different angular positions — reads as a live waveform with
-          uneven peaks instead of a clean concentric target. */}
-      <g stroke={WHITE} fill="none" strokeLinecap="round">
-        <circle
-          cx="16"
-          cy="16"
-          r="10.5"
-          strokeWidth="0.9"
-          strokeDasharray="9 5 14 4 7 6"
-          opacity="0.55"
-          transform="rotate(12 16 16)"
-        />
-        <circle
-          cx="16"
-          cy="16"
-          r="8"
-          strokeWidth="1"
-          strokeDasharray="11 4 6 5 16 3"
-          opacity="0.75"
-          transform="rotate(-30 16 16)"
-        />
-        <circle
-          cx="16"
-          cy="16"
-          r="5.5"
-          strokeWidth="1.1"
-          strokeDasharray="14 3 9 4"
-          opacity="0.95"
-          transform="rotate(48 16 16)"
-        />
-      </g>
-
-      {/* White center dot — the bullseye. */}
-      <circle cx="16" cy="16" r="1.7" fill={WHITE} stroke="none" />
+      {/* Handle — short rounded rectangle below the flame. */}
+      <rect x="14" y="25" width="4" height="3" rx="1" />
     </svg>
   );
 }
