@@ -3,20 +3,27 @@
  *
  * A record / sonar-target hybrid. Composition:
  *   - Large solid black disk centered on the canvas (the "vinyl").
- *   - Blue center dot (the spindle / bullseye).
- *   - Blue concentric contour rings INSIDE the black disk,
+ *   - WHITE center dot (the spindle / bullseye).
+ *   - WHITE concentric contour rings INSIDE the black disk,
  *     radiating outward from the dot like uneven sound reverberations.
  *     Each ring is an arc-with-gaps (varying stroke-dasharray) so the
  *     rings feel like a live audio waveform rather than a perfect
  *     target.
  *
- * Blue accents are hardcoded to Brand Blue (Beacon #09377E) so the mark
- * reads the same whatever surface it sits on. The black disk is
- * currentColor so the disk recolors naturally when nested in a
- * non-default-text environment.
+ * White spindle + rings give the mark maximum contrast on any
+ * background (the surrounding tile is usually Brand Blue or
+ * --primary, but the logo also gets dropped onto neutral surfaces and
+ * needs to read everywhere). The black disk is `currentColor` so the
+ * disk recolors naturally when nested in a non-default-text
+ * environment.
+ *
+ * Brand Blue is still the canonical surrounding TILE color (see
+ * src/app/icon.tsx for the favicon, and the sign-in page logo tile
+ * which uses `bg-primary`). The mark itself doesn't render the tile —
+ * its parent does.
  */
 
-const BRAND_BLUE = "hsl(217 87% 26%)";
+const WHITE = "hsl(0 0% 100%)";
 
 export function MashiMark({
   size = 24,
@@ -42,11 +49,11 @@ export function MashiMark({
       {/* Solid black disk — the body of the mark. */}
       <circle cx="16" cy="16" r="13.5" fill="currentColor" stroke="none" />
 
-      {/* Blue reverberation rings inside the disk. Each ring uses a
+      {/* White reverberation rings inside the disk. Each ring uses a
           distinct stroke-dasharray + rotation so the gaps fall at
           different angular positions — reads as a live waveform with
           uneven peaks instead of a clean concentric target. */}
-      <g stroke={BRAND_BLUE} fill="none" strokeLinecap="round">
+      <g stroke={WHITE} fill="none" strokeLinecap="round">
         <circle
           cx="16"
           cy="16"
@@ -76,8 +83,8 @@ export function MashiMark({
         />
       </g>
 
-      {/* Blue center dot — the bullseye. */}
-      <circle cx="16" cy="16" r="1.7" fill={BRAND_BLUE} stroke="none" />
+      {/* White center dot — the bullseye. */}
+      <circle cx="16" cy="16" r="1.7" fill={WHITE} stroke="none" />
     </svg>
   );
 }
