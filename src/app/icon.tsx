@@ -1,23 +1,28 @@
 import { ImageResponse } from "next/og";
 
 /**
- * Dynamic favicon — record-disk / sonar-target mark on the Beacon
- * Blue brand tile. Black disk inside the tile, WHITE concentric arc
- * reverberations + WHITE spindle dot inside the disk.
+ * Dynamic favicon — record-disk / sonar-target mark.
  *
- * Tile color is Brand Blue (#09377E, HSL 217 87% 26%), the standalone
- * Beacon mark color. The disk reverberations and spindle use white so
- * the mark reads with maximum contrast on browser chrome regardless
- * of tab color or OS theme. The in-app UI primary is a brighter blue
- * (HSL 217 91% 53%) used for `--primary` / `bg-primary`; the favicon
- * stands alone on browser chrome so it uses the deeper brand value
- * for the tile.
+ * Tile color is UI Primary blue (HSL 217 91% 53%) — the SAME color as
+ * the in-app logo tile (`bg-primary`) so the favicon and the sidebar
+ * mark read as one identity. Previously the favicon used the deeper
+ * Beacon Brand Blue (#09377E, HSL 217 87% 26%) under the theory that
+ * a standalone surface needs higher contrast against light browser
+ * chrome, but in practice the visual mismatch with the in-app logo
+ * was more jarring than any contrast win.
+ *
+ * Brand Blue is still the canonical Beacon color for marketing /
+ * print surfaces; in-product (favicon + sidebar + sign-in tile) we
+ * use the brighter UI Primary for consistency.
+ *
+ * Black disk inside the tile, WHITE concentric reverberation rings +
+ * WHITE spindle dot for max contrast against the black disk.
  */
 
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
 
-const BRAND_BLUE = "hsl(217 87% 26%)";
+const UI_PRIMARY = "hsl(217 91% 53%)";
 const WHITE = "hsl(0 0% 100%)";
 
 export default function Icon() {
@@ -27,7 +32,7 @@ export default function Icon() {
         style={{
           width: "100%",
           height: "100%",
-          background: BRAND_BLUE,
+          background: UI_PRIMARY,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
