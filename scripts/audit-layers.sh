@@ -55,6 +55,77 @@ EXCLUDE_FILES=(
   # portals to body by default. Tracked at the callsite. Grandfathered
   # here so the audit can land and catch new violations elsewhere.
   "src/components/sprint/sprint-active-mode-multi.tsx"
+  # shadcn-doctrine TODO (PR 2 of 3 — Select migration): every entry
+  # below has at least one raw <select> styled with Tailwind. Migrating
+  # to shadcn <Select> is non-trivial (different API: onValueChange not
+  # onChange, requires SelectTrigger/SelectContent/SelectItem children,
+  # popover-based instead of native dropdown — visual + interaction
+  # change per page). Tracked as a follow-up PR. Each entry leaves the
+  # audit clean today so the regex fix can land and catch any NEW raw
+  # primitives going forward.
+  "src/components/inbox/inbox-view.tsx"
+  "src/components/linear/linear-view.tsx"
+  "src/components/notes/notes-view.tsx"
+  "src/components/settings/connections-manager.tsx"
+  "src/components/sprint/planner-prioritize-list.tsx"
+  "src/components/sprint/planner-review.tsx"
+  "src/components/sprint/sprint-complete.tsx"
+  "src/components/s2d/s2d-column.tsx"
+  "src/components/s2d/review-column.tsx"
+  # shadcn-doctrine TODO (also PR 2): hand-rolled checkbox <input
+  # type="checkbox"> and range <input type="range">. shadcn <Checkbox>
+  # and <Slider> aren't in ui/ yet — needs `npx shadcn add checkbox
+  # slider`. Migrations:
+  #   - <input type="checkbox"> → <Checkbox> (onChange → onCheckedChange,
+  #     click-stopPropagation interaction needs verification per callsite)
+  #   - <input type="range"> → <Slider> (value is an array, onValueChange
+  #     not onChange; visual is a different control)
+  "src/components/s2d/s2d-board.tsx"
+  "src/components/sprint/spotify-player.tsx"
+  "src/components/sprint/planner-prioritize.tsx"
+  "src/components/sprint/planner-prioritize-board.tsx"
+  # shadcn-doctrine TODO (PR 2): two collapsible-disclosure <button>s
+  # for expandable sections. Right primitive is shadcn <Collapsible> +
+  # CollapsibleTrigger (`npx shadcn add collapsible`). Migration is a
+  # structural change — Trigger handles state via Radix, not local
+  # useState. Worth doing as part of the Select/Checkbox PR.
+  "src/components/s2d/item-context-panel.tsx"
+  # shadcn-doctrine TODO (PR 2): bulk legacy raw <button> grandfather.
+  # All these files have multi-line JSX buttons that the previous audit
+  # regex missed. They generally fall into a few categories:
+  #   - Icon-only / ghost buttons → should be <Button variant="ghost">
+  #     with size="icon" and an aria-label.
+  #   - Collapsible disclosure triggers → shadcn <Collapsible>.
+  #   - Custom dropdown / popover triggers → shadcn <Popover> /
+  #     <DropdownMenu>.
+  #   - Tab-strip buttons → shadcn <Tabs>.
+  # Plan: PR 2 migrates these file-by-file, removing entries from this
+  # list as each lands clean. Grandfathered here so the new regex can
+  # enforce against NEW violations going forward.
+  "src/components/calendar/calendar-view.tsx"
+  "src/components/chat/chat-panel.tsx"
+  "src/components/home/home-cockpit.tsx"
+  "src/components/home/home-tiles.tsx"
+  "src/components/layout/notification-hub.tsx"
+  "src/components/layout/sidebar.tsx"
+  "src/components/layout/sync-status-bar.tsx"
+  "src/components/layout/sync-status-chip.tsx"
+  "src/components/onboard/onboarding-shell.tsx"
+  "src/components/onboard/portcos-step.tsx"
+  "src/components/s2d/s2d-filters.tsx"
+  "src/components/s2d/s2d-item-sheet.tsx"
+  "src/components/settings/api-tokens-manager.tsx"
+  "src/components/settings/slack-channel-picker.tsx"
+  "src/components/settings/usage-view.tsx"
+  "src/components/spotlight/spotlight-modal.tsx"
+  "src/components/spotlight/spotlight-trigger.tsx"
+  "src/components/sprint/planner-prioritize-shell.tsx"
+  "src/components/sprint/planner-schedule.tsx"
+  "src/components/sprint/sprint-active-mode.tsx"
+  "src/components/sprint/sprint-context-package.tsx"
+  "src/components/sprint/sprint-item-context.tsx"
+  "src/components/sprint/sprint-toolkit.tsx"
+  "src/components/sprint/sprint-widget.tsx"
 )
 
 build_exclude_grep() {
@@ -110,13 +181,16 @@ shadcn_raw_html() {
     violations=$((violations + 1))
   fi
 }
-# Pattern note: [[:space:]>] works in both POSIX grep AND ripgrep-PCRE
-# (`\s` doesn't work inside a bracket class in POSIX `grep -E`, which is
-# the fallback when ripgrep isn't installed on the runner).
-shadcn_raw_html 'Raw <button> outside ui/' '<button[[:space:]>]'
-shadcn_raw_html 'Raw <input> outside ui/' '<input[[:space:]>]'
-shadcn_raw_html 'Raw <select> outside ui/' '<select[[:space:]>]'
-shadcn_raw_html 'Raw <textarea> outside ui/' '<textarea[[:space:]>]'
+# Pattern note: `<tag` must be followed by whitespace, `>`, or
+# end-of-line (since JSX commonly writes the tag on its own line
+# with attrs on subsequent lines). `[[:space:]>]` alone misses the
+# EOL case because POSIX grep doesn't include the line terminator
+# in the line content. Group-alternation `([[:space:]>]|$)` covers
+# all three. Works in both POSIX grep -E and ripgrep -P.
+shadcn_raw_html 'Raw <button> outside ui/' '<button([[:space:]>]|$)'
+shadcn_raw_html 'Raw <input> outside ui/' '<input([[:space:]>]|$)'
+shadcn_raw_html 'Raw <select> outside ui/' '<select([[:space:]>]|$)'
+shadcn_raw_html 'Raw <textarea> outside ui/' '<textarea([[:space:]>]|$)'
 
 # 4. Hand-rolled modal patterns. Anything with `role="dialog"` outside
 # ui/ is almost certainly a hand-rolled Dialog/AlertDialog/Sheet/Drawer.

@@ -11,6 +11,7 @@ import type { S2DItem, S2DStatus, Pathway, Priority } from "@/types";
 import { STATUS_META, PATHWAY_META, PRIORITY_META } from "@/types";
 import { S2DItemCard } from "@/components/s2d/s2d-item-card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useCreateS2DItem } from "@/hooks/use-s2d";
 import { useGSAP } from "@gsap/react";
@@ -315,11 +316,15 @@ function EnrichedDraftCard({
         className="h-7 text-[12px] font-medium"
       />
 
-      <textarea
+      <Textarea
         value={draft.description}
         onChange={(e) => onChange({ ...draft, description: e.target.value })}
         rows={3}
-        className="w-full resize-none rounded border border-border/40 bg-secondary/30 px-2 py-1.5 text-[11px] leading-snug"
+        // Overrides for the shadcn Textarea defaults: drop the min-h-20
+        // floor (this is a compact 3-row input), drop the shadow, match
+        // the existing tight type scale. Border tone matches secondary
+        // tint of the surrounding draft surface.
+        className="min-h-0 w-full resize-none rounded border-border/40 bg-secondary/30 px-2 py-1.5 text-[11px] leading-snug shadow-none focus-visible:ring-1"
       />
 
       <div className="grid grid-cols-2 gap-1.5">
