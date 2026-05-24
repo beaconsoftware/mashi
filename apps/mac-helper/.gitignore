@@ -1,0 +1,10 @@
+node_modules/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/Cargo.lock
+.tauri/
+dist/
+*.icns
+# Icons are user-supplied locally; only the README is checked in.
+src-tauri/icons/*.png
+!src-tauri/icons/.gitkeep

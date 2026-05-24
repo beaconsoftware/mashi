@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mashi Helper</title>
+  </head>
+  <body>
+    <p>Mashi Helper is running in your menubar.</p>
+    <script>
+      // The tray menu is the real UI; this file exists only so Tauri has
+      // a valid bundled webview to render if someone launches the app
+      // bypassing the tray. Redirect to settings on load.
+      window.location.replace("settings.html");
+    </script>
+  </body>
+</html>
