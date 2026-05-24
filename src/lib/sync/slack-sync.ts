@@ -4,6 +4,8 @@ import { runTriageOnUnit, loadExistingForUnit } from "@/lib/triage/orchestrator"
 import { parallelMap } from "@/lib/utils/parallel";
 import { reconcileMessageReplies } from "@/lib/triage/reconcile";
 import { recordSyncFailure, formatSyncError } from "@/lib/oauth/reauth";
+import { emitCloudHeartbeats } from "@/lib/activity/cloud-feeder";
+import type { HeartbeatEvent } from "@/lib/activity/types";
 
 const SLACK_API = "https://slack.com/api";
 const INITIAL_LOOKBACK_DAYS = 7;
@@ -284,6 +286,23 @@ export async function syncSlackConnection(connectionId: string): Promise<{
     const created = triageResults.reduce((s, r) => s + (r?.created ?? 0), 0);
     const updated = triageResults.reduce((s, r) => s + (r?.updated ?? 0), 0);
     const closed = triageResults.reduce((s, r) => s + (r?.closed ?? 0), 0);
+
+    // Cloud feeder — emit `focus` heartbeats for channels where the
+    // user sent a message in this sync window. Signals active
+    // engagement; matcher proposes `in_progress` for matched S2D
+    // items. Opt-in gated; no-op if the watcher isn't enabled.
+    try {
+      const focusEvents = buildSlackFocusEvents({
+        pulled,
+        myUserId: me.user_id,
+        convLabel,
+      });
+      if (focusEvents.length > 0) {
+        await emitCloudHeartbeats({ userId: conn.user_id, events: focusEvents });
+      }
+    } catch (err) {
+      console.warn("[slack-sync] activity heartbeat emit failed:", err);
+    }
 
     // Auto-close items where the user has replied in the conversation
     let autoClosed = 0;
@@ -593,4 +612,53 @@ async function markSyncSuccess(
       last_synced_at: new Date().toISOString(),
     })
     .eq("id", connectionId);
+}
+
+// ============================================================================
+// Activity watcher — cloud feeder
+// ============================================================================
+
+/**
+ * Build one `focus` heartbeat per Slack conversation in which the user
+ * sent at least one message during this sync window. Active engagement
+ * is a "this work is in progress" signal — matcher proposes
+ * `in_progress` for matching S2D items still in todo/backlog/in_queue.
+ *
+ * We dedupe by conversation_id so a chatty day doesn't generate a
+ * heartbeat per message; the matcher's 30-min window dedup would also
+ * collapse them, but emitting once is cleaner and cheaper.
+ */
+function buildSlackFocusEvents(opts: {
+  pulled: Array<{ message: SlackMessage; conv: SlackConversation }>;
+  myUserId: string;
+  convLabel: (conv: SlackConversation) => string;
+}): HeartbeatEvent[] {
+  const { pulled, myUserId, convLabel } = opts;
+
+  // Latest user-sent message per conversation
+  const latestByConv = new Map<
+    string,
+    { conv: SlackConversation; ts: number }
+  >();
+  for (const p of pulled) {
+    if (p.message.user !== myUserId) continue;
+    const ts = parseFloat(p.message.ts) * 1000;
+    const prior = latestByConv.get(p.conv.id);
+    if (!prior || ts > prior.ts) {
+      latestByConv.set(p.conv.id, { conv: p.conv, ts });
+    }
+  }
+
+  const events: HeartbeatEvent[] = [];
+  for (const [convId, entry] of latestByConv.entries()) {
+    events.push({
+      surface: "slack",
+      identifier: convId,
+      title: convLabel(entry.conv),
+      url: `https://slack.com/app_redirect?channel=${encodeURIComponent(convId)}`,
+      signal_kind: "focus",
+      started_at: new Date(entry.ts).toISOString(),
+    });
+  }
+  return events;
 }
