@@ -39,8 +39,10 @@ export function MashiMark({
           lower curves narrow back toward the handle. */}
       <path d="M17 5 C 12 10, 9 16, 12 22 C 13 25, 15 25.5, 16 25 C 17 25.5, 19 25, 20 22 C 23 16, 22 9, 17 5 Z" />
 
-      {/* Handle — short rounded rectangle below the flame. */}
-      <rect x="14" y="25" width="4" height="3" rx="1" />
+      {/* Handle — longer rounded rectangle below the flame so the
+          torch reads as something you'd hold. Spans roughly 25% of
+          the icon height. */}
+      <rect x="14" y="25" width="4" height="6" rx="1" />
     </svg>
   );
 }
