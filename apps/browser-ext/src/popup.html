@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mashi</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #faf8f4;
+        --fg: #1a1a1a;
+        --muted: #6b6b6b;
+        --border: #e2dfd6;
+        --accent: #c87f3e;
+        --ok: #2f7a3a;
+        --paused: #b08338;
+        --err: #b3261e;
+        --card: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1a1814;
+          --fg: #f0ece4;
+          --muted: #9c9c9c;
+          --border: #2e2b25;
+          --card: #232019;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        width: 300px;
+        margin: 0;
+        padding: 14px;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .status {
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .dot.live {
+        background: var(--ok);
+      }
+      .dot.paused {
+        background: var(--paused);
+      }
+      .dot.err {
+        background: var(--err);
+      }
+      .info {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 6px 0 12px;
+        line-height: 1.5;
+      }
+      .actions {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      button {
+        flex: 1;
+        background: var(--card);
+        border: 1px solid var(--border);
+        color: var(--fg);
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 12px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      button.primary {
+        background: var(--accent);
+        color: white;
+        border-color: var(--accent);
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .err-banner {
+        font-size: 11px;
+        color: var(--err);
+        background: rgba(179, 38, 30, 0.08);
+        border-radius: 6px;
+        padding: 6px 8px;
+        margin-bottom: 8px;
+      }
+      .err-banner:empty {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="title">Mashi Activity Watcher</div>
+      <div class="status">
+        <span id="statusDot" class="dot"></span>
+        <span id="statusLabel">…</span>
+      </div>
+    </div>
+
+    <div class="info" id="info"></div>
+    <div class="err-banner" id="errBanner"></div>
+
+    <div id="pausePanel" hidden>
+      <div class="info">
+        Paused until <span id="pauseEnd"></span>. Heartbeats stopped.
+      </div>
+      <div class="actions">
+        <button id="resumeBtn" class="primary">Resume now</button>
+      </div>
+    </div>
+
+    <div id="livePanel">
+      <div class="actions">
+        <button data-pause="60">Pause 1h</button>
+        <button data-pause="240">Pause 4h</button>
+        <button data-pause="720">Pause today</button>
+      </div>
+    </div>
+
+    <div class="footer">
+      <a id="optionsLink" href="#">Options</a>
+      <a id="tokenLink" href="#" target="_blank">Get a token</a>
+    </div>
+
+    <script type="module" src="../dist/popup.js"></script>
+  </body>
+</html>

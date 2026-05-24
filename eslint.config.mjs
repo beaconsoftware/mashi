@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // DXT has its own tsconfig + node_modules; root lint shouldn't touch it.
     "dxt/**",
+    // Browser extension under apps/ has its own tsconfig (browser-targeted,
+    // @types/chrome); root lint doesn't apply.
+    "apps/**",
     // Claude Code worktrees + caches — these contain build artifacts
     // from sibling sessions that have no business being linted by the
     // root project.
