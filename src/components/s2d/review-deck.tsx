@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Sparkles,
   Check,
@@ -596,7 +597,18 @@ function Overlay({
   onClose: () => void;
   rootRef?: React.RefObject<HTMLDivElement | null>;
 }) {
-  return (
+  // Portal to #mashi-overlay-root so `fixed inset-0` resolves against the
+  // viewport. Without the portal, the ReviewColumn ancestor's
+  // backdrop-blur-sm creates a containing block for fixed-positioned
+  // descendants, trapping this overlay inside the column's bounding box
+  // (kanban-column-width takeover, not a real takeover).
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    setHost(document.getElementById("mashi-overlay-root"));
+  }, []);
+  if (!host) return null;
+  return createPortal(
     <div
       ref={rootRef}
       className="fixed inset-0 z-focus flex items-center justify-center"
@@ -611,7 +623,8 @@ function Overlay({
       }}
     >
       {children}
-    </div>
+    </div>,
+    host
   );
 }
 
