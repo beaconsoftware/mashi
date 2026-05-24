@@ -115,18 +115,25 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // through liveItemsById below.
   const deckRef = useRef<S2DItem[]>([]);
   const lastOpenRef = useRef(false);
+  // Tracks whether the user has actually swiped a card in THIS session.
+  // Used by DoneScreen to decide between the "Reviewed N items" celebration
+  // and the quieter "All caught up" empty state — without this, reopening
+  // a deck that's already empty boasts about a count from a prior session
+  // (or 0, which reads as a bug).
+  const hasSwipedRef = useRef(false);
   if (open && !lastOpenRef.current && items.length > 0) {
     deckRef.current = items.slice();
     lastOpenRef.current = true;
+    // Reset session state synchronously alongside the snapshot. A post-
+    // commit useEffect would let the first paint render against
+    // cursor/overrides from the previous session — producing a flash of
+    // the DoneScreen when the prior cursor sat past validIndices.length.
+    setCursor(0);
+    setOverrides({});
+    hasSwipedRef.current = false;
   } else if (!open && lastOpenRef.current) {
     lastOpenRef.current = false;
   }
-  useEffect(() => {
-    if (open) {
-      setCursor(0);
-      setOverrides({});
-    }
-  }, [open]);
 
   // Live lookup over the most recent items prop. The deck *order* is
   // pinned by the snapshot in deckRef, but per-item fields like
@@ -217,6 +224,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
       const swipedItem = current;
       const swipedId = swipedItem.id;
       const ticket = swipedItem.ticket_number;
+      hasSwipedRef.current = true;
       try {
         const o = overrides[swipedId] ?? {};
         const priority = o.priority ?? swipedItem.priority;
@@ -469,7 +477,11 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   if (!current) {
     return (
       <Overlay onClose={onClose}>
-        <DoneScreen onClose={onClose} count={deckRef.current.length} />
+        <DoneScreen
+          onClose={onClose}
+          count={deckRef.current.length}
+          swipedAny={hasSwipedRef.current}
+        />
       </Overlay>
     );
   }
@@ -949,7 +961,15 @@ function Shortcut({ k, label }: { k: string; label: string }) {
   );
 }
 
-function DoneScreen({ onClose, count }: { onClose: () => void; count: number }) {
+function DoneScreen({
+  onClose,
+  count,
+  swipedAny,
+}: {
+  onClose: () => void;
+  count: number;
+  swipedAny: boolean;
+}) {
   const ref = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
   useGSAP(
@@ -958,6 +978,29 @@ function DoneScreen({ onClose, count }: { onClose: () => void; count: number }) 
     },
     { scope: ref }
   );
+  // Only celebrate when the user actually swiped something in this session.
+  // Reopening an already-empty deck (or one whose items were all closed by
+  // background sync) used to brag "Reviewed N items" against a stale count;
+  // now it falls through to the same "All caught up" copy the ReviewColumn
+  // shows when there's nothing to do.
+  if (!swipedAny) {
+    return (
+      <div ref={ref} className="space-y-4 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/15">
+          <Sparkles className="h-6 w-6 text-primary" />
+        </div>
+        <h2 className="text-xl font-semibold">All caught up.</h2>
+        <p className="text-sm text-muted-foreground">
+          New items from Mashi will land here.
+        </p>
+        <div className="flex items-center justify-center gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Back to board
+          </Button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div ref={ref} className="space-y-4 text-center">
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/15">
@@ -965,9 +1008,7 @@ function DoneScreen({ onClose, count }: { onClose: () => void; count: number }) 
       </div>
       <h2 className="text-xl font-semibold">Review queue cleared</h2>
       <p className="text-sm text-muted-foreground">
-        {count > 0
-          ? `Reviewed ${count} ${count === 1 ? "item" : "items"}.`
-          : "No items needed review."}
+        {`Reviewed ${count} ${count === 1 ? "item" : "items"}.`}
       </p>
       <p className="text-[12px] text-muted-foreground/80">
         Want to keep swiping through backlog items?
