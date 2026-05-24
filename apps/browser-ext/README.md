@@ -1,8 +1,11 @@
 # Mashi Activity Watcher — Browser Extension
 
-A Chromium MV3 extension that sends tab-focus heartbeats to your Mashi
+An MV3 web extension that sends tab-focus heartbeats to your Mashi
 instance so it can suggest task state changes. Internal side-load only —
-not published to the Chrome Web Store.
+not published to any store.
+
+Supported browsers: **Chromium-based** (Chrome, Brave, Arc, Edge) and
+**Firefox 121+** (which accepts MV3 service-worker manifests as event pages).
 
 ## What it captures
 
@@ -53,6 +56,31 @@ not synced.
 
 The extension is now active. Switching tabs will send a heartbeat after
 5 seconds of dwell on each new tab.
+
+## Install (Firefox 121+)
+
+Firefox accepts the same manifest as Chromium MV3, but the install path
+goes through `about:debugging` rather than `about:addons` (the extension
+isn't signed by AMO).
+
+1. Build the extension (same as Chromium — `npm install && npm run build`).
+2. Open `about:debugging` in Firefox.
+3. Click **This Firefox** in the left sidebar.
+4. Click **Load Temporary Add-on…**
+5. Navigate to `apps/browser-ext/` and select **`manifest.json`**.
+6. The Mashi icon appears in the toolbar (or under the menu `>>` overflow).
+7. Right-click the icon → **Manage Extension** → **Preferences** to open
+   Options. Same flow from there: paste token, save, test.
+
+**Caveat:** "Load Temporary Add-on" extensions are removed when Firefox
+restarts. You'll need to re-load it on each Firefox launch until we
+ship a signed XPI. For day-to-day use this is fine — Firefox prompts
+once per session.
+
+Firefox versions older than 121 don't accept MV3 ``service_worker``
+manifests. The ``browser_specific_settings.gecko.strict_min_version``
+field in ``manifest.json`` enforces this; older Firefox will refuse to
+load. Upgrade your Firefox if you hit that.
 
 ## Using it
 
