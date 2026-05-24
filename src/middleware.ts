@@ -38,7 +38,10 @@ export async function middleware(req: NextRequest) {
     // MCP routes authenticate via Bearer token (mashi_api_tokens), not
     // via Supabase session. Skip the session gate so the DXT can call
     // them without an OAuth cookie.
-    pathname.startsWith("/api/mcp");
+    pathname.startsWith("/api/mcp") ||
+    // Cron entrypoint authenticates via CRON_SECRET Bearer header — Vercel
+    // cron has no Supabase session. Same carve-out shape as /api/mcp.
+    pathname === "/api/sync/all";
 
   if (!user && !isPublic) {
     const url = req.nextUrl.clone();
