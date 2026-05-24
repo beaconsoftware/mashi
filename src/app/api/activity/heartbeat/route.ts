@@ -19,6 +19,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { authenticateActivity } from "@/lib/activity/auth";
 import { runMatcher } from "@/lib/activity/matcher";
+import { checkRateLimit } from "@/lib/activity/rate-limit";
+import { log } from "@/lib/log";
 import type {
   HeartbeatEvent,
   HeartbeatRequest,
@@ -111,7 +113,7 @@ async function isWatcherActive(userId: string): Promise<boolean> {
 export async function POST(req: Request) {
   const auth = await authenticateActivity(req, { requireWriteScope: true });
   if (!auth.ok) return auth.response;
-  const { userId } = auth;
+  const { userId, via, tokenId } = auth;
 
   if (!(await isWatcherActive(userId))) {
     // Silently drop. The feeder can keep heartbeating; we just don't store.
@@ -131,6 +133,24 @@ export async function POST(req: Request) {
   const v = validateBody(body);
   if (!v.ok) return badRequest(v.message);
   const { source, client_id, events } = v.req;
+
+  // Rate limit by token, counting events (not requests). Session-auth web
+  // app reads skip this — those are low-volume and user-driven.
+  if (via === "bearer" && tokenId) {
+    const rl = checkRateLimit(tokenId, events.length);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: "Rate limit exceeded",
+          retry_after_sec: rl.retryAfterSec,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSec) },
+        }
+      );
+    }
+  }
 
   const supabase = createSupabaseServiceClient();
 
@@ -155,7 +175,12 @@ export async function POST(req: Request) {
     .insert(rows)
     .select("id");
   if (error) {
-    console.error("[activity/heartbeat] insert failed:", error);
+    log.error("activity_heartbeat.insert_failed", {
+      user_id: userId,
+      source,
+      row_count: rows.length,
+      message: error.message,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

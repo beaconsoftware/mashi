@@ -29,6 +29,7 @@
  */
 
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { log } from "@/lib/log";
 import type {
   ActivitySource,
   HeartbeatEvent,
@@ -180,6 +181,70 @@ export function canonicalize(rawUrl: string): string | null {
 }
 
 /**
+ * Per-user ignore lists. Loaded once per matcher invocation (batch lookup)
+ * so we don't hit the DB once per event.
+ *
+ * Domains are lower-cased on load; we compare against the URL's lower-cased
+ * hostname with both equality and suffix (`.${domain}`) match so a single
+ * entry `chase.com` covers `www.chase.com`, `secure.chase.com`, etc.
+ *
+ * Multi-tenancy: the read filters by user_id explicitly per AGENTS.md.
+ */
+async function loadIgnoreLists(
+  userId: string
+): Promise<{ apps: Set<string>; domains: string[] }> {
+  const supabase = createSupabaseServiceClient();
+  const { data } = await supabase
+    .from("activity_settings")
+    .select("ignore_apps, ignore_domains")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const apps = new Set<string>(
+    Array.isArray(data?.ignore_apps) ? (data?.ignore_apps as string[]) : []
+  );
+  const domainsRaw = Array.isArray(data?.ignore_domains)
+    ? (data?.ignore_domains as string[])
+    : [];
+  const domains = domainsRaw
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d.length > 0);
+
+  return { apps, domains };
+}
+
+/**
+ * Should the matcher skip this event because the user has the app or
+ * the URL's host on an ignore list?
+ *
+ * Returns the reason string when skipping, null otherwise. Caller logs.
+ */
+function shouldIgnore(
+  event: HeartbeatEvent,
+  ignore: { apps: Set<string>; domains: string[] }
+): string | null {
+  if (event.app && ignore.apps.has(event.app)) {
+    return `app:${event.app}`;
+  }
+  if (event.url && ignore.domains.length > 0) {
+    let host: string | null = null;
+    try {
+      host = new URL(event.url).hostname.toLowerCase();
+    } catch {
+      // Unparseable URL — fall through, no ignore match.
+    }
+    if (host) {
+      for (const domain of ignore.domains) {
+        if (host === domain || host.endsWith(`.${domain}`)) {
+          return `domain:${domain}`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * What state transition is plausible given an item's current status and the
  * incoming signal?
  *   - `in_progress` proposal makes sense when the item is unstarted
@@ -304,9 +369,25 @@ export async function runMatcher(opts: {
   const { userId, source, eventIdsByInput } = opts;
   const supabase = createSupabaseServiceClient();
 
+  // Load ignore lists once per invocation. Cheap (single row), and lets us
+  // short-circuit per-event without any further DB work for ignored apps /
+  // domains.
+  const ignore = await loadIgnoreLists(userId);
+
   const proposals: Array<MatchedSuggestion & { _eventId: string }> = [];
 
   for (const [event, eventId] of eventIdsByInput.entries()) {
+    const ignoreReason = shouldIgnore(event, ignore);
+    if (ignoreReason) {
+      // Quiet path — event still landed in activity_events for forensics,
+      // we just don't propose anything. Low-noise debug line for tracing
+      // false negatives without spamming prod logs.
+      console.debug(
+        `[activity-matcher] skip ${ignoreReason} (event ${eventId})`
+      );
+      continue;
+    }
+
     const candidate = await findCandidateItem({ userId, event });
     if (!candidate) continue;
 
@@ -380,7 +461,12 @@ export async function runMatcher(opts: {
 
   const { error } = await supabase.from("activity_suggestions").insert(rows);
   if (error) {
-    console.error("[activity-matcher] insert failed:", error);
+    log.error("activity_matcher.insert_failed", {
+      user_id: userId,
+      source,
+      row_count: rows.length,
+      message: error.message,
+    });
     return 0;
   }
   return rows.length;
