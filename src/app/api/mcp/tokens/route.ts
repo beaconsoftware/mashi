@@ -24,13 +24,29 @@ export async function GET() {
   return NextResponse.json({ tokens: data ?? [] });
 }
 
+// Scopes the API is willing to mint. Anything outside this set is
+// dropped silently from the request — caller can't grant itself
+// privileges that don't exist yet.
+const ALLOWED_SCOPES = new Set(["read", "activity:write"]);
+
 export async function POST(req: NextRequest) {
   const sb = await createSupabaseServerClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const body = (await req.json().catch(() => ({}))) as { name?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    name?: string;
+    scopes?: string[];
+  };
   const name = (body.name ?? "").trim() || "Untitled token";
+
+  // Validate requested scopes. Default to 'read' if nothing valid was
+  // requested. 'read' is always included so the token is at minimum
+  // useful.
+  const requested = Array.isArray(body.scopes) ? body.scopes : [];
+  const validated = Array.from(
+    new Set(["read", ...requested.filter((s) => ALLOWED_SCOPES.has(s))])
+  );
 
   const { plaintext, hash, prefix } = generateToken();
   const { data, error } = await sb
@@ -40,7 +56,7 @@ export async function POST(req: NextRequest) {
       name,
       token_hash: hash,
       token_prefix: prefix,
-      scopes: ["read"],
+      scopes: validated,
     })
     .select("id, name, token_prefix, scopes, created_at")
     .single();
