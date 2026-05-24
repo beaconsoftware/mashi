@@ -127,13 +127,35 @@ async function findCandidateItem(opts: {
 }
 
 /**
- * Drop tracking params, trailing slashes, fragments. Keeps schemes + paths
- * stable so equality compares meaningfully.
+ * Hosts whose URLs encode meaningful identity in the fragment (#...).
+ * For these we MUST preserve the fragment during canonicalization,
+ * otherwise distinct resources collapse to the same canonical URL.
+ *
+ * Gmail is the load-bearing example: `https://mail.google.com/mail/u/0/#all/<threadId>`
+ * — strip the fragment and every Gmail thread becomes the same string.
+ *
+ * Match on hostname suffix so subdomains (mail.google.com,
+ * github.com/<user>/<repo>) are covered without listing each one.
+ */
+const FRAGMENT_BEARING_HOSTS = ["mail.google.com"];
+
+/**
+ * Drop tracking params, trailing slashes, and (usually) fragments.
+ * Keeps schemes + paths stable so equality compares meaningfully.
+ *
+ * Fragments are kept on hosts that encode identity in them
+ * (see FRAGMENT_BEARING_HOSTS). For everything else we strip — most
+ * fragments are scroll positions or section anchors, not identity.
  */
 export function canonicalize(rawUrl: string): string | null {
   try {
     const u = new URL(rawUrl);
-    u.hash = "";
+    const hostKeepsFragment = FRAGMENT_BEARING_HOSTS.some(
+      (h) => u.hostname === h || u.hostname.endsWith(`.${h}`)
+    );
+    if (!hostKeepsFragment) {
+      u.hash = "";
+    }
     const stripParams = [
       "utm_source",
       "utm_medium",
