@@ -164,23 +164,24 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   }, [open, snapshot]);
 
   // The deck's snapshot is pinned on open so swipes don't reshuffle mid-
-  // session, but if a background sync closes an item or flips its
-  // needs_review flag while the user is mid-deck, we need to skip past it
-  // — otherwise an "approve" swipe writes status="<override>" against a
-  // row that's already status="done", overwriting the auto-close outcome.
-  // Build the list of snapshot indices that are still actionable. The
-  // cursor walks this list rather than the raw snapshot — so a
-  // background-closed item is silently skipped instead of stalling the
-  // deck on a stale card.
+  // session, but if a background sync flips an item's needs_review flag
+  // while the user is mid-deck we need to skip past it. We filter ONLY on
+  // needs_review — not on `status === "done"` — because for a Review item
+  // the `status` field is the AI's RECOMMENDED placement, not its current
+  // state. Triage can legitimately recommend `done` (e.g. "this looks
+  // already resolved, please confirm"), and filtering those out hid every
+  // such item from the deck — the 28-out-of-28 "All caught up" bug came
+  // from this. Items that are genuinely closed by a background sync flip
+  // needs_review to false in the same write, so the needs_review check
+  // alone catches the background-close case.
   const validIndices = useMemo(() => {
     return snapshot
       .map((it, i) => {
         const live = liveItemsById.get(it.id);
         // Keep snapshot fallback if the live row is missing (could be a
         // race where the row hasn't refetched yet); otherwise filter out
-        // anything already closed or no-longer flagged for review.
+        // anything no-longer flagged for review.
         if (!live) return i;
-        if (live.status === "done") return null;
         if (live.needs_review !== true) return null;
         return i;
       })
