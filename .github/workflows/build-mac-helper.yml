@@ -30,8 +30,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: apps/mac-helper/pnpm-lock.yaml
+          # No pnpm cache wired here — apps/mac-helper has no lockfile yet
+          # (Rust builds dominate cold-start time anyway, and the Cargo
+          # cache below handles that). If we ever commit a lockfile,
+          # restore `cache: pnpm` + `cache-dependency-path`.
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -78,7 +80,10 @@ jobs:
 
       - name: Install deps
         working-directory: apps/mac-helper
-        run: pnpm install --frozen-lockfile
+        # No `--frozen-lockfile`: the directory has no committed
+        # pnpm-lock.yaml yet. The first run will write one; once we
+        # commit it, switch this to --frozen-lockfile.
+        run: pnpm install
 
       - name: Generate iconset
         working-directory: apps/mac-helper
