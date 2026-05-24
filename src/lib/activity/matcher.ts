@@ -29,12 +29,19 @@
  * State-transition rules:
  *   - To propose `in_progress`: item.status IN ('backlog','todo','in_queue')
  *   - To propose `done`:        item.status = 'in_progress'
- *   - title_embed NEVER proposes `done` — too noisy for a destructive-feeling
- *     state change.
+ *   (Enforced in decideProposedState — that function is about status
+ *   machinery and doesn't move.)
  *
- * Confidence floor: per signal kind. Exact-ID / URL / cloud lifecycle stay at
- * 0.85; title_embed drops to 0.5 since it lives in the soft suggestion
- * range per PRD §8 (the UI never auto-promotes anyway — NG1).
+ * Confidence floors & per-pathway refusals live in matcher-config.ts.
+ * getMatcherPolicy({pathway, proposed_state, signal_kind}) returns
+ * either {allowed: false, reason} or {allowed: true, min_confidence}.
+ * Headline rules (see matcher-config.ts for the full table + reasoning):
+ *   - title_embed NEVER proposes `done` (any pathway).
+ *   - heads_down + in_progress + title_embed needs ≥ 0.85 similarity
+ *     (everything else on title_embed → in_progress stays at 0.5, the
+ *     soft suggestion range per PRD §8 — NG1 means the UI never
+ *     auto-promotes from there anyway).
+ *   - exact_id / url_match / cloud_lifecycle: 0.85 across the board.
  */
 
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -47,13 +54,8 @@ import type {
   ProposedState,
   SuggestionContext,
 } from "./types";
+import { getMatcherPolicy, type Pathway } from "./matcher-config";
 
-const MIN_CONFIDENCE: Record<MatcherSignalKind, number> = {
-  exact_id: 0.85,
-  url_match: 0.85,
-  cloud_lifecycle: 0.85,
-  title_embed: 0.5,
-};
 const DEDUP_WINDOW_MIN = 30;
 const TITLE_EMBED_REJECT_BACKOFF_MS = 24 * 60 * 60 * 1000;
 
@@ -106,6 +108,10 @@ interface CandidateItem {
   id: string;
   status: string;
   title: string;
+  // The S2D pathway the user (or triage) assigned to the item. Read
+  // by getMatcherPolicy so we can tighten the confidence floor on
+  // commitment-feeling pathways like heads_down.
+  pathway: string;
   match_kind: MatchKind;
   // Only present for title_embed matches; lets callers log the score.
   similarity?: number;
@@ -158,7 +164,7 @@ async function findTitleSimilarItem(opts: {
   // false` keeps the stage gate honest.
   const { data: items } = await supabase
     .from("s2d_items")
-    .select("id, status, title")
+    .select("id, status, title, pathway")
     .eq("user_id", userId)
     .eq("needs_review", false)
     .neq("status", "done")
@@ -172,6 +178,7 @@ async function findTitleSimilarItem(opts: {
   let bestId: string | null = null;
   let bestStatus = "";
   let bestTitle = "";
+  let bestPathway = "";
   let bestScore = 0;
   let mode: "jaccard" | "voyage" = "jaccard";
 
@@ -188,6 +195,7 @@ async function findTitleSimilarItem(opts: {
           bestId = items[i].id;
           bestStatus = items[i].status;
           bestTitle = items[i].title;
+          bestPathway = items[i].pathway;
         }
       }
       mode = "voyage";
@@ -202,6 +210,7 @@ async function findTitleSimilarItem(opts: {
       bestId = null;
       bestStatus = "";
       bestTitle = "";
+      bestPathway = "";
       bestScore = 0;
       mode = "jaccard";
     }
@@ -217,6 +226,7 @@ async function findTitleSimilarItem(opts: {
         bestId = item.id;
         bestStatus = item.status;
         bestTitle = item.title;
+        bestPathway = item.pathway;
       }
     }
     if (bestScore < JACCARD_THRESHOLD) return null;
@@ -228,6 +238,7 @@ async function findTitleSimilarItem(opts: {
     id: bestId,
     status: bestStatus,
     title: bestTitle,
+    pathway: bestPathway,
     match_kind: "title_embed",
     similarity: bestScore,
     embed_mode: mode,
@@ -259,7 +270,7 @@ async function findCandidateItem(opts: {
   if (event.identifier) {
     const { data } = await supabase
       .from("s2d_items")
-      .select("id, status, title")
+      .select("id, status, title, pathway")
       .eq("user_id", userId)
       .eq("needs_review", false)
       .eq("source_thread_id", event.identifier)
@@ -276,7 +287,7 @@ async function findCandidateItem(opts: {
     if (canonicalUrl) {
       const { data } = await supabase
         .from("s2d_items")
-        .select("id, status, title")
+        .select("id, status, title, pathway")
         .eq("user_id", userId)
         .eq("needs_review", false)
         .eq("source_url", canonicalUrl)
@@ -292,7 +303,7 @@ async function findCandidateItem(opts: {
   if (event.identifier) {
     const { data } = await supabase
       .from("s2d_items")
-      .select("id, status, title")
+      .select("id, status, title, pathway")
       .eq("user_id", userId)
       .eq("needs_review", false)
       .ilike("description", `%${event.identifier}%`)
@@ -637,9 +648,37 @@ export async function runMatcher(opts: {
     });
     if (!proposedState) continue;
 
-    // title_embed is never allowed to propose `done` — too noisy for a
-    // destructive-looking state change per PRD §8 + spec for v2.
-    if (candidate.match_kind === "title_embed" && proposedState === "done") {
+    // Map match_kind → signal_kind for both policy lookup AND the row
+    // we'll eventually insert. title_embed stays as-is; everything
+    // else collapses based on whether we're proposing done (cloud
+    // lifecycle) or in_progress (exact_id / url_match).
+    const signal_kind: MatcherSignalKind =
+      candidate.match_kind === "title_embed"
+        ? "title_embed"
+        : proposedState === "done"
+          ? "cloud_lifecycle"
+          : candidate.match_kind === "source_url"
+            ? "url_match"
+            : "exact_id";
+
+    // Single policy gate: refusals + per-(pathway, state, signal)
+    // floor live in matcher-config.ts. See getMatcherPolicy for the
+    // full table + cost-of-wrong reasoning.
+    const policy = getMatcherPolicy({
+      pathway: candidate.pathway as Pathway,
+      proposed_state: proposedState,
+      signal_kind,
+    });
+    if (!policy.allowed) {
+      log.info("activity_matcher.policy_refused", {
+        user_id: userId,
+        event_id: eventId,
+        item_id: candidate.id,
+        pathway: candidate.pathway,
+        proposed_state: proposedState,
+        signal_kind,
+        reason: policy.reason,
+      });
       continue;
     }
 
@@ -650,18 +689,7 @@ export async function runMatcher(opts: {
       similarity: candidate.similarity,
     });
 
-    // Per-signal-kind floor. title_embed sits in the soft suggestion
-    // range (0.5–0.7); everything else stays at 0.85.
-    const signal_kind: MatcherSignalKind =
-      candidate.match_kind === "title_embed"
-        ? "title_embed"
-        : proposedState === "done"
-          ? "cloud_lifecycle"
-          : candidate.match_kind === "source_url"
-            ? "url_match"
-            : "exact_id";
-
-    if (confidence < MIN_CONFIDENCE[signal_kind]) continue;
+    if (confidence < policy.min_confidence) continue;
 
     if (await isDeduped({ userId, itemId: candidate.id, proposedState })) continue;
 

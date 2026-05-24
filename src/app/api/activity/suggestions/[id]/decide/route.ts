@@ -16,9 +16,18 @@
 import { NextResponse } from "next/server";
 import { authenticateActivity } from "@/lib/activity/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { pushS2DStatusToLinear } from "@/lib/sync/linear-pushback";
+import { log } from "@/lib/log";
+import type { S2DStatus } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// resolved_via tag for items moved by confirming a watcher-generated
+// activity suggestion. Joins the existing tags ("manual", "auto_detected",
+// "auto_past_meeting") set elsewhere across review-deck, s2d-board, and the
+// triage pipeline.
+const RESOLVED_VIA_ACTIVITY_CONFIRM = "activity_confirm";
 
 type Decision = "confirm" | "reject" | "dismiss";
 const VALID_DECISIONS: Decision[] = ["confirm", "reject", "dismiss"];
@@ -74,9 +83,16 @@ export async function POST(
   if (decision === "confirm") {
     // Transition the s2d_item to proposed_state. Note: we use the service
     // client and explicitly scope by user_id (multi-tenancy invariants).
+    // Sets the same provenance + unseen-update fields a manual status
+    // change would set, so the notification hub pulses and the row shows
+    // a meaningful "Mashi touched this" summary.
     const itemUpdate: Record<string, unknown> = {
       status: suggestion.proposed_state,
       updated_at: nowIso,
+      resolved_via: RESOLVED_VIA_ACTIVITY_CONFIRM,
+      has_unseen_updates: true,
+      last_update_summary: `Moved to ${suggestion.proposed_state} after confirming detected activity`,
+      last_update_at: nowIso,
     };
     if (suggestion.proposed_state === "done") {
       itemUpdate.done_at = nowIso;
@@ -113,6 +129,41 @@ export async function POST(
     .eq("user_id", userId);
   if (sugErr) {
     return NextResponse.json({ error: sugErr.message }, { status: 500 });
+  }
+
+  // Mirror the local move to Linear for Linear-sourced items. Fire-and-
+  // forget: if Linear is unreachable, the item isn't Linear-sourced, or
+  // the workspace lacks a matching state, the function returns
+  // { ok: false, message } gracefully — we don't want a Linear blip to
+  // fail the user's confirm click. The local move is already committed
+  // above; Linear can re-sync from Mashi's state later if needed.
+  if (decision === "confirm") {
+    try {
+      const result = await pushS2DStatusToLinear({
+        s2dItemId: suggestion.s2d_item_id,
+        newStatus: suggestion.proposed_state as S2DStatus,
+        userId,
+      });
+      if (!result.ok) {
+        log.warn("activity_confirm.linear_pushback_skipped", {
+          s2dItemId: suggestion.s2d_item_id,
+          newStatus: suggestion.proposed_state,
+          message: result.message,
+        });
+      } else {
+        log.info("activity_confirm.linear_pushback_ok", {
+          s2dItemId: suggestion.s2d_item_id,
+          newStatus: suggestion.proposed_state,
+          message: result.message,
+        });
+      }
+    } catch (err) {
+      log.error("activity_confirm.linear_pushback_failed", {
+        s2dItemId: suggestion.s2d_item_id,
+        newStatus: suggestion.proposed_state,
+        error: err instanceof Error ? err.message : "unknown error",
+      });
+    }
   }
 
   return NextResponse.json({ ok: true, decision });
