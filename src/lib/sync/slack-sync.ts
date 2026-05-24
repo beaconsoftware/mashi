@@ -206,20 +206,44 @@ export async function syncSlackConnection(connectionId: string): Promise<{
       return name.startsWith("#") ? name : `#${name}`;
     };
 
-    // Persist raw messages
-    const messageRows = pulled.map((p) => ({
-      external_id: `slack:${conn.id}:${p.message.ts}`,
-      thread_id: p.message.thread_ts ?? p.message.ts,
-      source: "slack" as const,
-      user_id: conn.user_id,
-      company_id: conn.company_id,
-      connected_account_id: conn.id,
-      channel: convLabel(p.conv),
-      sender_name: userLabel(p.message.user),
-      sender_email: userMap.get(p.message.user ?? "")?.profile?.email ?? null,
-      preview: (p.message.text ?? "").slice(0, 240),
-      received_at: new Date(parseFloat(p.message.ts) * 1000).toISOString(),
-    }));
+    // Persist raw messages. Dedup by external_id first — a thread_broadcast
+    // (or any reply Slack returns from both conversations.history and
+    // conversations.replies) can otherwise appear twice in `pulled`. Postgres
+    // rejects an upsert that proposes the same constrained value twice in one
+    // statement with SQLSTATE 21000 ("ON CONFLICT DO UPDATE command cannot
+    // affect row a second time").
+    const seenExternalIds = new Set<string>();
+    const messageRows: Array<{
+      external_id: string;
+      thread_id: string;
+      source: "slack";
+      user_id: string;
+      company_id: string | null;
+      connected_account_id: string;
+      channel: string;
+      sender_name: string;
+      sender_email: string | null;
+      preview: string;
+      received_at: string;
+    }> = [];
+    for (const p of pulled) {
+      const external_id = `slack:${conn.id}:${p.message.ts}`;
+      if (seenExternalIds.has(external_id)) continue;
+      seenExternalIds.add(external_id);
+      messageRows.push({
+        external_id,
+        thread_id: p.message.thread_ts ?? p.message.ts,
+        source: "slack",
+        user_id: conn.user_id,
+        company_id: conn.company_id,
+        connected_account_id: conn.id,
+        channel: convLabel(p.conv),
+        sender_name: userLabel(p.message.user),
+        sender_email: userMap.get(p.message.user ?? "")?.profile?.email ?? null,
+        preview: (p.message.text ?? "").slice(0, 240),
+        received_at: new Date(parseFloat(p.message.ts) * 1000).toISOString(),
+      });
+    }
     const { error: upErr } = await supabase
       .from("messages")
       .upsert(messageRows, { onConflict: "user_id,external_id" });
