@@ -1,17 +1,18 @@
 /**
- * Matcher v1 — turn heartbeat events into activity_suggestions.
+ * Matcher v2 — turn heartbeat events into activity_suggestions.
  *
- * Only the cheap, high-confidence paths in v1:
- *   - exact_id:  the heartbeat carries an identifier (Linear MAP-123,
- *                Gmail thread id, Slack channel id, GitHub PR url) that
- *                matches an s2d_item's source_id OR appears in title /
- *                description.
- *   - url_match: heartbeat URL matches s2d_item.source_url byte-for-byte
- *                after canonicalization.
+ * Match paths, in order of confidence:
+ *   - exact_id:       the heartbeat carries an identifier (Linear MAP-123,
+ *                     Gmail thread id, Slack channel id, GitHub PR url) that
+ *                     matches an s2d_item's source_thread_id.
+ *   - url_match:      heartbeat URL matches s2d_item.source_url byte-for-byte
+ *                     after canonicalization.
+ *   - description_id: identifier appears inside an item's description.
+ *   - title_embed:    fuzzy title similarity (Jaccard token overlap, or
+ *                     Voyage embedding cosine if VOYAGE_API_KEY is set).
+ *                     v2 fallback — fires when none of the above hit.
  *   - cloud_lifecycle: signal_kind in ('close','merge','archive') from a
- *                cloud source — high-confidence Done indicator.
- *
- * Title-embedding fuzzy match is matcher v2; not in scope for P1.
+ *                     cloud source — high-confidence Done indicator.
  *
  * Stage gate: `s2d_items.needs_review = false`. Items still in the review
  * queue are off-limits, per PRD §2 G4.
@@ -20,16 +21,25 @@
  * within 30 minutes of the most recent one (regardless of status — even a
  * just-rejected suggestion stays quiet).
  *
+ * Anti-spam (title_embed only): suppress a fuzzy proposal if the user has
+ * REJECTED a title_embed suggestion for the same item in the last 24h.
+ * Fuzzy matches are the noisiest tier — explicit rejection is a strong
+ * signal we got it wrong on that item, so back off for a day.
+ *
  * State-transition rules:
  *   - To propose `in_progress`: item.status IN ('backlog','todo','in_queue')
  *   - To propose `done`:        item.status = 'in_progress'
- *   - Anything else: no suggestion.
+ *   - title_embed NEVER proposes `done` — too noisy for a destructive-feeling
+ *     state change.
  *
- * Confidence floor: 0.85. Below that, no suggestion ever fires.
+ * Confidence floor: per signal kind. Exact-ID / URL / cloud lifecycle stay at
+ * 0.85; title_embed drops to 0.5 since it lives in the soft suggestion
+ * range per PRD §8 (the UI never auto-promotes anyway — NG1).
  */
 
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { log } from "@/lib/log";
+import { cosineSimilarity, embed } from "@/lib/embeddings/voyage";
 import type {
   ActivitySource,
   HeartbeatEvent,
@@ -38,11 +48,51 @@ import type {
   SuggestionContext,
 } from "./types";
 
-const MIN_CONFIDENCE = 0.85;
+const MIN_CONFIDENCE: Record<MatcherSignalKind, number> = {
+  exact_id: 0.85,
+  url_match: 0.85,
+  cloud_lifecycle: 0.85,
+  title_embed: 0.5,
+};
 const DEDUP_WINDOW_MIN = 30;
+const TITLE_EMBED_REJECT_BACKOFF_MS = 24 * 60 * 60 * 1000;
+
+// Tuned thresholds for the title-similarity tier. Jaccard on short noisy
+// titles is sparse; embeddings are denser so the floor is higher.
+const JACCARD_THRESHOLD = 0.4;
+const VOYAGE_THRESHOLD = 0.65;
+// Cap on how many candidate items we score per event. Bounded so the
+// fuzzy path stays cheap even for users with deep backlogs.
+const TITLE_CANDIDATE_LIMIT = 50;
+
+// Stopwords + min token length picked to wipe out noise in 3-7 word
+// task titles without nuking signal-bearing short tokens (e.g. "S2D",
+// "API" survive because they're uppercased and the length filter
+// kicks in AFTER lowercasing).
+const STOPWORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "of",
+  "to",
+  "in",
+  "on",
+  "for",
+  "at",
+  "by",
+  "with",
+  "is",
+  "are",
+  "was",
+  "were",
+  "this",
+  "that",
+]);
 
 // Cloud-lifecycle signals that imply "Done"
 const DONE_SIGNAL_KINDS = new Set(["close", "merge", "archive"]);
+
+type MatchKind = "source_id" | "source_url" | "description_id" | "title_embed";
 
 interface MatchedSuggestion {
   s2d_item_id: string;
@@ -52,20 +102,150 @@ interface MatchedSuggestion {
   context: SuggestionContext;
 }
 
+interface CandidateItem {
+  id: string;
+  status: string;
+  title: string;
+  match_kind: MatchKind;
+  // Only present for title_embed matches; lets callers log the score.
+  similarity?: number;
+  embed_mode?: "jaccard" | "voyage";
+}
+
+/**
+ * Normalize a title into a token set for Jaccard. Lowercase, strip
+ * punctuation to spaces (so `cursor.tsx` → `cursor tsx`), drop stop
+ * words, drop tokens of length ≤ 2 (kills "a", "of", and noise like
+ * "vs").
+ */
+function tokenize(text: string): Set<string> {
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 2 && !STOPWORDS.has(t));
+  return new Set(tokens);
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersect = 0;
+  for (const t of a) if (b.has(t)) intersect++;
+  const union = a.size + b.size - intersect;
+  if (union === 0) return 0;
+  return intersect / union;
+}
+
+/**
+ * Fuzzy title-similarity candidate finder. Used as the 4th match path.
+ *
+ * Scoring strategy:
+ *   - If `VOYAGE_API_KEY` is set: batch-embed the event title + all
+ *     candidate titles, compare via cosine, threshold at 0.65.
+ *   - Otherwise: Jaccard token overlap, threshold at 0.4.
+ *
+ * Returns the single highest-scoring candidate above threshold, or null.
+ */
+async function findTitleSimilarItem(opts: {
+  userId: string;
+  eventTitle: string;
+}): Promise<CandidateItem | null> {
+  const { userId, eventTitle } = opts;
+  const supabase = createSupabaseServiceClient();
+
+  // Pull recently-active items. We deliberately drop items in `done` so
+  // we don't propose advancing an already-done thing. `needs_review =
+  // false` keeps the stage gate honest.
+  const { data: items } = await supabase
+    .from("s2d_items")
+    .select("id, status, title")
+    .eq("user_id", userId)
+    .eq("needs_review", false)
+    .neq("status", "done")
+    .order("updated_at", { ascending: false })
+    .limit(TITLE_CANDIDATE_LIMIT);
+
+  if (!items || items.length === 0) return null;
+
+  const useVoyage = !!process.env.VOYAGE_API_KEY;
+
+  let bestId: string | null = null;
+  let bestStatus = "";
+  let bestTitle = "";
+  let bestScore = 0;
+  let mode: "jaccard" | "voyage" = "jaccard";
+
+  if (useVoyage) {
+    try {
+      // Batch: [eventTitle, ...candidateTitles]. One round-trip even
+      // when scoring 50 items.
+      const vectors = await embed([eventTitle, ...items.map((i) => i.title)]);
+      const eventVec = vectors[0];
+      for (let i = 0; i < items.length; i++) {
+        const score = cosineSimilarity(eventVec, vectors[i + 1]);
+        if (score > bestScore) {
+          bestScore = score;
+          bestId = items[i].id;
+          bestStatus = items[i].status;
+          bestTitle = items[i].title;
+        }
+      }
+      mode = "voyage";
+      if (bestScore < VOYAGE_THRESHOLD) return null;
+    } catch (err) {
+      // Voyage failure must not poison the matcher run — fall back to
+      // Jaccard. Reset best-of-* trackers because Voyage may have
+      // partially populated them.
+      log.warn("activity_matcher.voyage_fallback", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      bestId = null;
+      bestStatus = "";
+      bestTitle = "";
+      bestScore = 0;
+      mode = "jaccard";
+    }
+  }
+
+  if (mode === "jaccard") {
+    const eventTokens = tokenize(eventTitle);
+    if (eventTokens.size === 0) return null;
+    for (const item of items) {
+      const score = jaccard(eventTokens, tokenize(item.title));
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = item.id;
+        bestStatus = item.status;
+        bestTitle = item.title;
+      }
+    }
+    if (bestScore < JACCARD_THRESHOLD) return null;
+  }
+
+  if (!bestId) return null;
+
+  return {
+    id: bestId,
+    status: bestStatus,
+    title: bestTitle,
+    match_kind: "title_embed",
+    similarity: bestScore,
+    embed_mode: mode,
+  };
+}
+
 /**
  * Find candidate s2d_items the user owns that could correspond to the
  * heartbeat event. Returns at most one match — multi-match resolution is
- * intentionally absent in v1 (better quiet than wrong).
+ * intentionally absent (better quiet than wrong).
+ *
+ * Tries paths in confidence order: source_thread_id → source_url →
+ * description-mentions-id → title-similarity. First hit wins.
  */
 async function findCandidateItem(opts: {
   userId: string;
   event: HeartbeatEvent;
-}): Promise<{
-  id: string;
-  status: string;
-  title: string;
-  match_kind: "source_id" | "source_url" | "description_id";
-} | null> {
+}): Promise<CandidateItem | null> {
   const { userId, event } = opts;
   const supabase = createSupabaseServiceClient();
 
@@ -122,6 +302,15 @@ async function findCandidateItem(opts: {
     if (data) {
       return { ...data, match_kind: "description_id" };
     }
+  }
+
+  // 4. Fuzzy title-similarity match — only when we have a title to compare.
+  if (event.title && event.title.trim().length > 0) {
+    const candidate = await findTitleSimilarItem({
+      userId,
+      eventTitle: event.title,
+    });
+    if (candidate) return candidate;
   }
 
   return null;
@@ -251,8 +440,10 @@ function shouldIgnore(
  *     ('backlog' | 'todo' | 'in_queue') and the signal is a working signal.
  *   - `done` proposal makes sense when the item is currently 'in_progress'
  *     and the signal is a completion signal (close/merge/archive from
- *     cloud) — OR for Phase 1, also when the user has stopped touching it
- *     after recent activity (deferred to matcher v2).
+ *     cloud).
+ *
+ * title_embed callers also gate this through `proposedState === "done"`
+ * being disallowed at a higher level — see runMatcher.
  */
 function decideProposedState(opts: {
   currentStatus: string;
@@ -261,7 +452,7 @@ function decideProposedState(opts: {
 }): ProposedState | null {
   const { currentStatus, signalKind, source } = opts;
 
-  // Done path — only fires on cloud-lifecycle signals in v1.
+  // Done path — only fires on cloud-lifecycle signals.
   if (
     source === "cloud" &&
     DONE_SIGNAL_KINDS.has(signalKind) &&
@@ -284,33 +475,49 @@ function decideProposedState(opts: {
 }
 
 function confidenceFor(opts: {
-  matchKind: "source_id" | "source_url" | "description_id";
+  matchKind: MatchKind;
   proposedState: ProposedState;
   source: ActivitySource;
+  similarity?: number;
 }): number {
-  const { matchKind, proposedState, source } = opts;
+  const { matchKind, proposedState, source, similarity } = opts;
 
   if (proposedState === "done") {
     // Cloud lifecycle is the strongest done signal.
     if (matchKind === "source_id") return 0.99;
     if (matchKind === "source_url") return 0.95;
-    return 0.85;
+    if (matchKind === "description_id") return 0.85;
+    // title_embed never produces a `done` proposal — runMatcher gates.
+    return 0;
   }
 
   // in_progress path
   if (matchKind === "source_id") return 0.95;
   if (matchKind === "source_url") return source === "cloud" ? 0.8 : 0.9;
   if (matchKind === "description_id") return 0.85;
+  if (matchKind === "title_embed") {
+    // Scale 0.5 → 0.7 across the threshold-to-perfect range. Use the
+    // active threshold so Voyage's denser scoring doesn't get
+    // artificially capped at the Jaccard ceiling.
+    const sim = similarity ?? 0;
+    const threshold = process.env.VOYAGE_API_KEY
+      ? VOYAGE_THRESHOLD
+      : JACCARD_THRESHOLD;
+    if (sim < threshold) return 0;
+    const scaled = 0.5 + (0.2 * (sim - threshold)) / (1 - threshold);
+    return Math.min(0.7, scaled);
+  }
   return 0;
 }
 
 function reasonHumanFor(opts: {
   event: HeartbeatEvent;
   itemTitle: string;
-  matchKind: "source_id" | "source_url" | "description_id";
+  matchKind: MatchKind;
   proposedState: ProposedState;
+  similarity?: number;
 }): string {
-  const { event, itemTitle, matchKind, proposedState } = opts;
+  const { event, itemTitle, matchKind, proposedState, similarity } = opts;
   const surfaceLabel = event.app ?? event.surface ?? "activity";
 
   if (proposedState === "done") {
@@ -326,6 +533,10 @@ function reasonHumanFor(opts: {
   }
   if (matchKind === "source_url") {
     return `Active on ${event.url}, the source URL for "${itemTitle}".`;
+  }
+  if (matchKind === "title_embed") {
+    const pct = similarity ? Math.round(similarity * 100) : 0;
+    return `Active on "${event.title}" in ${surfaceLabel} — ${pct}% title match with "${itemTitle}".`;
   }
   return `Active in ${surfaceLabel} on ${event.identifier}, referenced by "${itemTitle}".`;
 }
@@ -351,6 +562,34 @@ async function isDeduped(opts: {
     .eq("s2d_item_id", opts.itemId)
     .eq("proposed_state", opts.proposedState)
     .gte("created_at", sinceIso)
+    .limit(1)
+    .maybeSingle();
+  return !!data;
+}
+
+/**
+ * Has the user rejected a title_embed suggestion for this item in the
+ * past 24 hours? Title-similarity is the noisiest tier and an explicit
+ * rejection is a strong signal we got it wrong on this pair. The
+ * 30-minute dedup gate covers same-state within the window; this is the
+ * broader back-off for fuzzy matches specifically.
+ */
+async function isRecentlyRejectedTitleEmbed(opts: {
+  userId: string;
+  itemId: string;
+}): Promise<boolean> {
+  const supabase = createSupabaseServiceClient();
+  const sinceIso = new Date(
+    Date.now() - TITLE_EMBED_REJECT_BACKOFF_MS
+  ).toISOString();
+  const { data } = await supabase
+    .from("activity_suggestions")
+    .select("id")
+    .eq("user_id", opts.userId)
+    .eq("s2d_item_id", opts.itemId)
+    .eq("signal_kind", "title_embed")
+    .eq("status", "rejected")
+    .gte("decided_at", sinceIso)
     .limit(1)
     .maybeSingle();
   return !!data;
@@ -398,28 +637,62 @@ export async function runMatcher(opts: {
     });
     if (!proposedState) continue;
 
+    // title_embed is never allowed to propose `done` — too noisy for a
+    // destructive-looking state change per PRD §8 + spec for v2.
+    if (candidate.match_kind === "title_embed" && proposedState === "done") {
+      continue;
+    }
+
     const confidence = confidenceFor({
       matchKind: candidate.match_kind,
       proposedState,
       source,
+      similarity: candidate.similarity,
     });
-    if (confidence < MIN_CONFIDENCE) continue;
+
+    // Per-signal-kind floor. title_embed sits in the soft suggestion
+    // range (0.5–0.7); everything else stays at 0.85.
+    const signal_kind: MatcherSignalKind =
+      candidate.match_kind === "title_embed"
+        ? "title_embed"
+        : proposedState === "done"
+          ? "cloud_lifecycle"
+          : candidate.match_kind === "source_url"
+            ? "url_match"
+            : "exact_id";
+
+    if (confidence < MIN_CONFIDENCE[signal_kind]) continue;
 
     if (await isDeduped({ userId, itemId: candidate.id, proposedState })) continue;
+
+    // Extra safety on the fuzzy path: a recent rejection means the user
+    // already told us this match is wrong. Stay quiet for 24h.
+    if (signal_kind === "title_embed") {
+      if (
+        await isRecentlyRejectedTitleEmbed({
+          userId,
+          itemId: candidate.id,
+        })
+      ) {
+        continue;
+      }
+      log.info("activity_matcher.title_embed_match", {
+        user_id: userId,
+        event_id: eventId,
+        item_id: candidate.id,
+        similarity: candidate.similarity,
+        mode: candidate.embed_mode,
+        confidence,
+      });
+    }
 
     const reason_human = reasonHumanFor({
       event,
       itemTitle: candidate.title,
       matchKind: candidate.match_kind,
       proposedState,
+      similarity: candidate.similarity,
     });
-
-    const signal_kind: MatcherSignalKind =
-      proposedState === "done"
-        ? "cloud_lifecycle"
-        : candidate.match_kind === "source_url"
-          ? "url_match"
-          : "exact_id";
 
     const context: SuggestionContext = {
       reason_human,
