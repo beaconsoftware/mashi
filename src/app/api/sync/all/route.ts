@@ -42,10 +42,14 @@ function runProviderSync(
 }
 
 /**
- * POST /api/sync/all — fan out per-connection sync across every eligible
+ * GET /api/sync/all — fan out per-connection sync across every eligible
  * connected account. Called by the Vercel cron (see vercel.json) on a
  * 15-minute cadence; can also be hit manually with a valid CRON_SECRET for
  * debugging.
+ *
+ * Method: Vercel cron only sends GET requests (no way to configure POST
+ * in vercel.json's `crons`). We previously had this as POST and every
+ * cron invocation came back 405 — silent failure modulo the function log.
  *
  * Authentication: Vercel cron sends `Authorization: Bearer <CRON_SECRET>`.
  * If CRON_SECRET is unset we refuse to run rather than exposing a
@@ -53,7 +57,7 @@ function runProviderSync(
  * fallback — manual user-triggered "Sync all" still goes through the
  * per-connection routes via runSyncAll in sync-store.ts.
  */
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET || "";
   if (!cronSecret) {
     return NextResponse.json(
