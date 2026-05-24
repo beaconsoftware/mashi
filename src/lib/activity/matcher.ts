@@ -68,14 +68,20 @@ async function findCandidateItem(opts: {
   const { userId, event } = opts;
   const supabase = createSupabaseServiceClient();
 
-  // 1. Try source_id match if identifier present.
+  // 1. Try source_thread_id match if identifier present.
+  //
+  // Note: the column is `source_thread_id`, NOT `source_id`. The triage
+  // pipeline writes the raw provider ID (Linear UUID, Gmail thread id,
+  // Slack channel id) into `source_thread_id` and packs `source_id` as
+  // `${source_thread_id}:${slug(title)}` — a composite that we'd never
+  // be able to reconstruct from a heartbeat. See orchestrator.ts:327-328.
   if (event.identifier) {
     const { data } = await supabase
       .from("s2d_items")
       .select("id, status, title")
       .eq("user_id", userId)
       .eq("needs_review", false)
-      .eq("source_id", event.identifier)
+      .eq("source_thread_id", event.identifier)
       .limit(1)
       .maybeSingle();
     if (data) {
