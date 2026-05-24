@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Cloud, Copy, KeyRound, Laptop, Pause, Play, Plus, Puzzle } from "lucide-react";
+import { Cloud, Copy, Download, KeyRound, Laptop, Pause, Play, Plus, Puzzle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -243,61 +243,77 @@ function SetupSection() {
             <p>
               Add tab-focus signals from your browser so Mashi knows which
               Linear issue, Gmail thread, or work URL you&apos;re currently
-              looking at. Internal side-load — not on any store.
+              looking at. Works in Chrome, Brave, Arc, Edge, and Firefox 121+.
             </p>
+            <div className="rounded-md border border-primary/40 bg-primary/15 p-3">
+              <div className="mb-2 text-xs font-medium text-foreground">
+                1. Download the extension
+              </div>
+              <Button asChild size="sm" variant="default">
+                <a href="/downloads/mashi-extension.zip" download>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download (.zip, ~15 KB)
+                </a>
+              </Button>
+              <p className="mt-2 text-[11px]">
+                Same file works in every supported browser. Unzip it after
+                downloading — you&apos;ll point your browser at the folder.
+              </p>
+            </div>
             <div>
               <div className="mb-1 text-xs font-medium text-foreground">
-                Setup (Chrome / Brave / Arc / Edge)
+                2. Load it (Chrome / Brave / Arc / Edge)
               </div>
               <ol className="ml-4 list-decimal space-y-1.5">
                 <li>
-                  Generate a token below in <span className="font-medium">Feeder tokens</span>{" "}
-                  with the <code>activity:write</code> scope.
+                  Open <code>chrome://extensions</code> (or
+                  <code> brave://extensions</code>, etc).
                 </li>
                 <li>
-                  From the Mashi repo:
-                  <pre className="mt-1 overflow-x-auto rounded bg-card px-2 py-1.5 text-[11px] text-foreground">
-                    <code>
-                      cd apps/browser-ext{"\n"}
-                      npm install{"\n"}
-                      npm run build
-                    </code>
-                  </pre>
+                  Enable <span className="font-medium">Developer mode</span>
+                  {" "}(top right toggle).
                 </li>
                 <li>
-                  Open <code>chrome://extensions</code>, enable Developer mode,
-                  click <span className="font-medium">Load unpacked</span>, select{" "}
-                  <code>apps/browser-ext/</code>.
-                </li>
-                <li>
-                  Right-click the Mashi icon → <span className="font-medium">Options</span>.
-                  Paste your token. Save → Test connection.
+                  Click <span className="font-medium">Load unpacked</span>,
+                  select the unzipped <code>mashi-extension</code> folder.
                 </li>
               </ol>
             </div>
             <div>
               <div className="mb-1 text-xs font-medium text-foreground">
-                Setup (Firefox 121+)
+                2. Load it (Firefox 121+)
               </div>
               <ol className="ml-4 list-decimal space-y-1.5">
-                <li>Same build steps as above.</li>
                 <li>
                   Open <code>about:debugging</code> →{" "}
                   <span className="font-medium">This Firefox</span> →{" "}
-                  <span className="font-medium">Load Temporary Add-on</span>
+                  <span className="font-medium">Load Temporary Add-on</span>.
                 </li>
                 <li>
-                  Select <code>apps/browser-ext/manifest.json</code>.
-                </li>
-                <li>
-                  Right-click icon → <span className="font-medium">Manage Extension</span> →{" "}
-                  <span className="font-medium">Preferences</span>. Paste token. Save.
+                  Select <code>manifest.json</code> inside the unzipped folder.
                 </li>
               </ol>
               <p className="mt-1.5 italic">
-                Firefox drops temporary add-ons on restart. Re-load on each
-                launch until we ship a signed XPI.
+                Firefox drops temporary add-ons on restart. Re-load each launch
+                until we ship a signed XPI.
               </p>
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-foreground">
+                3. Add your token
+              </div>
+              <ol className="ml-4 list-decimal space-y-1.5">
+                <li>
+                  Generate a token below in{" "}
+                  <span className="font-medium">Feeder tokens</span> with the{" "}
+                  <code>activity:write</code> scope.
+                </li>
+                <li>
+                  Right-click the Mashi icon →{" "}
+                  <span className="font-medium">Options</span> (Firefox: Manage
+                  Extension → Preferences). Paste token. Save → Test connection.
+                </li>
+              </ol>
             </div>
             <div>
               <div className="mb-1 text-xs font-medium text-foreground">
@@ -312,7 +328,8 @@ function SetupSection() {
             <p>
               Default ignore list covers banking, password managers, therapy
               domains. Add your own in Options. Page content, form fields,
-              cookies — never captured.
+              cookies — never captured. Build from source:{" "}
+              <code>apps/browser-ext/</code>.
             </p>
           </AccordionContent>
         </AccordionItem>
@@ -328,70 +345,62 @@ function SetupSection() {
           <AccordionContent className="space-y-4 text-xs text-muted-foreground">
             <p>
               Adds signals from Cursor, Claude Desktop, Slack desktop, Finder,
-              terminal, and active-browser URLs. Mac-only. Tauri-based menubar
-              app — internal distribution.
+              terminal, and active-browser URLs. Mac-only.
             </p>
-            <div>
-              <div className="mb-1 text-xs font-medium text-foreground">
-                Requires
+            <div className="rounded-md border border-primary/40 bg-primary/15 p-3">
+              <div className="mb-2 text-xs font-medium text-foreground">
+                1. Download the helper
               </div>
-              <ul className="ml-4 list-disc space-y-1">
-                <li>macOS 12+</li>
-                <li>
-                  Xcode CLT (<code>xcode-select --install</code>)
-                </li>
-                <li>
-                  Rust toolchain (
-                  <code>
-                    curl --proto &apos;=https&apos; --tlsv1.2 -sSf
-                    https://sh.rustup.rs | sh
-                  </code>
-                  )
-                </li>
-                <li>Node 20+</li>
-              </ul>
+              <Button asChild size="sm" variant="default">
+                <a href="/api/downloads/mac-helper" download>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download for Mac (.dmg)
+                </a>
+              </Button>
+              <p className="mt-2 text-[11px]">
+                Built on every push to <code>main</code> via GitHub Actions
+                (macOS runner). If you get a 404, the first build hasn&apos;t
+                finished yet — wait ~5 minutes and retry.
+              </p>
             </div>
             <div>
               <div className="mb-1 text-xs font-medium text-foreground">
-                Build + install
+                2. Install
               </div>
               <ol className="ml-4 list-decimal space-y-1.5">
-                <li>Generate a token below.</li>
+                <li>Double-click the .dmg, drag Mashi to Applications.</li>
                 <li>
-                  Drop a 1024×1024 PNG at{" "}
-                  <code>apps/mac-helper/src-tauri/icons/icon-1024.png</code>{" "}
-                  (any reasonable square image is fine for now).
+                  Double-click Mashi in Applications. macOS will say{" "}
+                  <em>&quot;Mashi cannot be opened because Apple cannot check
+                  it for malicious software.&quot;</em> Click OK.
                 </li>
                 <li>
-                  From the Mashi repo:
-                  <pre className="mt-1 overflow-x-auto rounded bg-card px-2 py-1.5 text-[11px] text-foreground">
-                    <code>
-                      cd apps/mac-helper{"\n"}
-                      pnpm install{"\n"}
-                      pnpm tauri icon src-tauri/icons/icon-1024.png   # one-time
-                      {"\n"}
-                      pnpm tauri build
-                    </code>
-                  </pre>
+                  Open{" "}
+                  <span className="font-medium">
+                    System Settings → Privacy &amp; Security
+                  </span>
+                  . Scroll to the bottom — there&apos;s a &quot;Mashi was
+                  blocked&quot; line with an{" "}
+                  <span className="font-medium">Open Anyway</span> button.
+                  Click it, confirm.
                 </li>
-                <li>
-                  Drag{" "}
-                  <code>
-                    apps/mac-helper/src-tauri/target/release/bundle/macos/Mashi.app
-                  </code>{" "}
-                  to <code>/Applications</code>.
-                </li>
-                <li>
-                  Right-click → <span className="font-medium">Open</span> (the
-                  app is unsigned for now — Gatekeeper otherwise blocks
-                  double-click; one-time prompt).
-                </li>
+                <li>App opens. Future launches: clean double-click.</li>
                 <li>
                   Grant Accessibility permission when prompted (System Settings
                   → Privacy &amp; Security → Accessibility → toggle Mashi on).
+                  Required for reading window titles.
                 </li>
-                <li>Settings window auto-opens. Paste token, save.</li>
+                <li>
+                  Settings window auto-opens. Generate a token below, paste,
+                  save.
+                </li>
               </ol>
+              <p className="mt-1.5 italic">
+                The Gatekeeper prompt is because the build is unsigned — we
+                haven&apos;t set up an Apple Developer account yet. The
+                Open-Anyway step is a one-time per-install ritual; future app
+                updates won&apos;t re-prompt.
+              </p>
             </div>
             <div>
               <div className="mb-1 text-xs font-medium text-foreground">
