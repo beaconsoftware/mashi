@@ -39,9 +39,16 @@ export async function middleware(req: NextRequest) {
     // via Supabase session. Skip the session gate so the DXT can call
     // them without an OAuth cookie.
     pathname.startsWith("/api/mcp") ||
-    // Cron entrypoint authenticates via CRON_SECRET Bearer header — Vercel
+    // Cron entrypoints authenticate via CRON_SECRET Bearer header — Vercel
     // cron has no Supabase session. Same carve-out shape as /api/mcp.
-    pathname === "/api/sync/all";
+    pathname === "/api/sync/all" ||
+    pathname === "/api/activity/maintenance" ||
+    // Activity Watcher heartbeat — Bearer mashi_pat_* from feeders (Mac
+    // helper, browser extension). Suggestions/decide/settings/pause/resume
+    // still go through the session gate because they can also be hit from
+    // the web app, and Bearer auth is handled inside the route via
+    // authenticateActivity().
+    pathname === "/api/activity/heartbeat";
 
   if (!user && !isPublic) {
     const url = req.nextUrl.clone();

@@ -4,6 +4,7 @@
 **Status:** Draft v2, pre-engineering
 **Date:** 2026-05-24
 **Changelog:**
+- v2.1 (2026-05-24): Schema notes — stage gate is `needs_review = false`, not `reviewed_at IS NOT NULL`. Real s2d_items.status values are `'backlog' | 'todo' | 'in_progress' | 'in_queue' | 'done'`. TTL uses Vercel cron (`/api/activity/maintenance`) because pg_cron isn't enabled on this Supabase project. GitHub Done detection is poll-based (piggybacks on existing /api/sync/all cron).
 - v2 (2026-05-24): No auto-promotion ever. Adds Done detection. Adds 24h dismiss queue. Adds cockpit redesign. Opt-in only. Scope narrowed to internal users.
 - v1: Initial draft.
 

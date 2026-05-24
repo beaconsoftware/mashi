@@ -10,9 +10,11 @@
     "src/app/api/bundle-meetings/route.ts": { "maxDuration": 120 },
     "src/app/api/onboard/cleanup/route.ts": { "maxDuration": 300 },
     "src/app/api/sync/[provider]/[connectionId]/route.ts": { "maxDuration": 300 },
-    "src/app/api/sync/all/route.ts": { "maxDuration": 300 }
+    "src/app/api/sync/all/route.ts": { "maxDuration": 300 },
+    "src/app/api/activity/maintenance/route.ts": { "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/sync/all", "schedule": "*/15 * * * *" }
+    { "path": "/api/sync/all", "schedule": "*/15 * * * *" },
+    { "path": "/api/activity/maintenance", "schedule": "0 * * * *" }
   ]
 }
