@@ -242,7 +242,7 @@ export async function syncSlackConnection(connectionId: string): Promise<{
         channel: convLabel(p.conv),
         sender_name: userLabel(p.message.user),
         sender_email: userMap.get(p.message.user ?? "")?.profile?.email ?? null,
-        preview: (p.message.text ?? "").slice(0, 240),
+        preview: humanizeMentions(p.message.text ?? "", userLabel).slice(0, 240),
         received_at: new Date(parseFloat(p.message.ts) * 1000).toISOString(),
       });
     }
@@ -391,7 +391,7 @@ function groupIntoDailySlices(
       messages: sortedMsgs.map((m) => ({
         from: userLabel(m.user),
         received: new Date(parseFloat(m.ts) * 1000).toISOString(),
-        text: (m.text ?? "").slice(0, 800),
+        text: humanizeMentions(m.text ?? "", userLabel).slice(0, 800),
         is_from_me: m.user === myUserId,
       })),
     });
@@ -401,6 +401,26 @@ function groupIntoDailySlices(
 
 function isoDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * Slack message text comes with inline ID tokens — `<@U12345>` for user
+ * mentions, `<#C12345|channel>` for channel refs, `<!here>` / `<!channel>`
+ * / `<!everyone>` for broadcasts. The LLM that generates s2d_item titles
+ * happily copies those tokens verbatim, so a card ends up reading
+ * "U12345 is blocked..." instead of "Sidd is blocked...".
+ *
+ * Substitute every recognized token with its human label before the slice
+ * goes to triage. New cards land clean; pre-existing items keep their raw
+ * IDs (backfill is a separate ask).
+ */
+function humanizeMentions(text: string, userLabel: (uid?: string) => string): string {
+  return text
+    .replace(/<@(U[A-Z0-9]+)(?:\|[^>]+)?>/g, (_m, uid) => `@${userLabel(uid)}`)
+    .replace(/<#C[A-Z0-9]+\|([^>]+)>/g, (_m, name) => `#${name}`)
+    .replace(/<#(C[A-Z0-9]+)>/g, (_m, cid) => `#${cid}`)
+    .replace(/<!subteam\^[A-Z0-9]+\|([^>]+)>/g, (_m, name) => name)
+    .replace(/<!(here|channel|everyone)>/g, (_m, w) => `@${w}`);
 }
 
 // ============================================================================
