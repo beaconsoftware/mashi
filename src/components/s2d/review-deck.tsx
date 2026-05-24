@@ -97,8 +97,13 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // Snapshot the deck order when opened so swipes don't reshuffle mid-session.
   // Snapshotting happens synchronously during render the moment `open` flips
   // true — NOT inside a useEffect — because a post-commit effect leaves the
-  // first paint with deckRef.current === [], which makes validIndices === []
-  // and renders the DoneScreen flash before any card appears.
+  // first paint with an empty snapshot, which makes validIndices === [] and
+  // renders the DoneScreen flash before any card appears.
+  //
+  // The snapshot lives in useState (not useRef) so downstream useMemo deps
+  // see the change — refs don't trigger memo re-runs, and validIndices was
+  // returning a cached empty array against a populated ref, locking the
+  // deck on "All caught up" forever.
   //
   // The "open transition" is gated on items.length > 0. If the deck opens
   // while TanStack is still fetching, we DEFER the snapshot to whichever
@@ -113,7 +118,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // array, and resets the cursor to 0 mid-deck — counter stuck at "1 / N"
   // forever. The snapshot is pinned once on open; per-item live updates flow
   // through liveItemsById below.
-  const deckRef = useRef<S2DItem[]>([]);
+  const [snapshot, setSnapshot] = useState<S2DItem[]>([]);
   const lastOpenRef = useRef(false);
   // Tracks whether the user has actually swiped a card in THIS session.
   // Used by DoneScreen to decide between the "Reviewed N items" celebration
@@ -122,7 +127,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // (or 0, which reads as a bug).
   const hasSwipedRef = useRef(false);
   if (open && !lastOpenRef.current && items.length > 0) {
-    deckRef.current = items.slice();
+    setSnapshot(items.slice());
     lastOpenRef.current = true;
     // Reset session state synchronously alongside the snapshot. A post-
     // commit useEffect would let the first paint render against
@@ -136,7 +141,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   }
 
   // Live lookup over the most recent items prop. The deck *order* is
-  // pinned by the snapshot in deckRef, but per-item fields like
+  // pinned by the snapshot, but per-item fields like
   // review_justification (filled in by /api/s2d/justify and pulled in
   // via TanStack Query refetch) need to show through. Without this,
   // the "Generating justification…" placeholder stayed forever even
@@ -149,7 +154,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // Lazy-backfill justifications for items missing them
   useEffect(() => {
     if (!open) return;
-    const missing = deckRef.current
+    const missing = snapshot
       .filter((i) => !i.review_justification)
       .map((i) => i.id);
     if (missing.length === 0) return;
@@ -161,7 +166,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
     })
       .catch(() => undefined)
       .finally(() => setJustifying(false));
-  }, [open]);
+  }, [open, snapshot]);
 
   // The deck's snapshot is pinned on open so swipes don't reshuffle mid-
   // session, but if a background sync closes an item or flips its
@@ -173,7 +178,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // background-closed item is silently skipped instead of stalling the
   // deck on a stale card.
   const validIndices = useMemo(() => {
-    return deckRef.current
+    return snapshot
       .map((it, i) => {
         const live = liveItemsById.get(it.id);
         // Keep snapshot fallback if the live row is missing (could be a
@@ -185,11 +190,11 @@ export function ReviewDeck({ items, open, onClose }: Props) {
         return i;
       })
       .filter((i): i is number => i != null);
-  }, [liveItemsById]);
+  }, [liveItemsById, snapshot]);
   const remaining = Math.max(0, validIndices.length - cursor);
   const currentSnapshotIndex = validIndices[cursor];
   const currentSnapshot =
-    currentSnapshotIndex != null ? deckRef.current[currentSnapshotIndex] : undefined;
+    currentSnapshotIndex != null ? snapshot[currentSnapshotIndex] : undefined;
   const current = currentSnapshot
     ? liveItemsById.get(currentSnapshot.id) ?? currentSnapshot
     : undefined;
@@ -479,7 +484,7 @@ export function ReviewDeck({ items, open, onClose }: Props) {
       <Overlay onClose={onClose}>
         <DoneScreen
           onClose={onClose}
-          count={deckRef.current.length}
+          count={snapshot.length}
           swipedAny={hasSwipedRef.current}
         />
       </Overlay>
