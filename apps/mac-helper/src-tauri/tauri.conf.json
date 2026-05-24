@@ -45,7 +45,7 @@
       "icons/icon.icns"
     ],
     "category": "Productivity",
-    "shortDescription": "Mashi Activity Watcher helper",
+    "shortDescription": "Mashi Activity Monitor helper",
     "longDescription": "Menubar app that emits frontmost-app and browser-URL heartbeats to your Mashi instance.",
     "macOS": {
       "minimumSystemVersion": "12.0",

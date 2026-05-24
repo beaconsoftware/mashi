@@ -1,4 +1,4 @@
-# Mashi Activity Watcher — Browser Extension
+# Mashi Activity Monitor — Browser Extension
 
 An MV3 web extension that sends tab-focus heartbeats to your Mashi
 instance so it can suggest task state changes. Internal side-load only —

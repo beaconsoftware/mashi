@@ -13,11 +13,7 @@ import {
   GitBranch,
   Building2,
   Search,
-  Mic,
-  Plug,
-  Activity,
-  Eye,
-  KeyRound,
+  Settings,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -106,63 +102,16 @@ export function Sidebar() {
           <Tooltip>
             <TooltipTrigger asChild>
               <Link
-                href="/settings/connections"
-                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                href="/settings"
+                className={cn(
+                  "mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                  pathname.startsWith("/settings") && "bg-accent text-foreground"
+                )}
               >
-                <Plug className="h-4 w-4" />
+                <Settings className="h-4 w-4" />
               </Link>
             </TooltipTrigger>
-            <TooltipContent side="right">Connections</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                href="/settings/style"
-                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <Mic className="h-4 w-4" />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="flex items-center gap-2">
-              <span>Communication style</span>
-              <span className="font-mono text-[10px] text-muted-foreground">tone</span>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                href="/settings/usage"
-                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <Activity className="h-4 w-4" />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right" className="flex items-center gap-2">
-              <span>Usage</span>
-              <span className="font-mono text-[10px] text-muted-foreground">$</span>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                href="/settings/activity"
-                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <Eye className="h-4 w-4" />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">Activity Watcher</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                href="/settings/api-tokens"
-                className="mashi-icon-hover mashi-icon-glow flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <KeyRound className="h-4 w-4" />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">API Tokens</TooltipContent>
+            <TooltipContent side="right">Settings</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>

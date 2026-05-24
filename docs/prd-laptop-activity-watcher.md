@@ -1,4 +1,4 @@
-# PRD — Laptop Activity Watcher
+# PRD — Laptop Activity Monitor
 
 **Owner:** Sidd
 **Status:** Draft v2, pre-engineering
@@ -397,7 +397,7 @@ Cockpit redesign moves into P1 because the cockpit is where suggestions land —
 The product is internal-only behind Vercel auth and Supabase RLS, so the "anyone on the internet might install this" concerns from v1 go away. What's left:
 
 ### Opt-in flow
-1. New Settings → Activity Watcher page. Default state: **Off**.
+1. New Settings → Activity Monitor page. Default state: **Off**.
 2. Toggle to enable shows a one-screen explainer:
    - "We'll track which apps and URLs you have focused so we can suggest task state changes. We never auto-change anything."
    - "Raw signals stay in your Beacon Supabase. 7-day retention. You can pause or disable any time."

@@ -1,5 +1,3 @@
-import { TopBar } from "@/components/layout/top-bar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConnectionsManager } from "@/components/settings/connections-manager";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -20,16 +18,11 @@ export default async function ConnectionsSettingsPage() {
     .order("name");
 
   return (
-    <>
-      <TopBar title="Connections" subtitle="Multi-org access for every integration." />
-      <ScrollArea className="flex-1">
-        <div className="mx-auto max-w-4xl px-6 py-8">
-          <ConnectionsManager
-            initialConnections={connections ?? []}
-            companies={companies ?? []}
-          />
-        </div>
-      </ScrollArea>
-    </>
+    <div className="mx-auto max-w-4xl">
+      <ConnectionsManager
+        initialConnections={connections ?? []}
+        companies={companies ?? []}
+      />
+    </div>
   );
 }

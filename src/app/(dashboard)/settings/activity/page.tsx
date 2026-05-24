@@ -1,17 +1,14 @@
-import { TopBar } from "@/components/layout/top-bar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ActivitySettings } from "@/components/settings/activity-settings";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Settings → Activity Watcher.
+ * Settings → Activity Monitor.
  *
  * Lets the user opt into the watcher, pause it, edit ignore lists, and
- * generate an `activity:write`-scoped API token for the (future) Mac
- * helper / browser extension. Without this page, enabling requires SQL
- * access.
+ * generate an `activity:write`-scoped API token for the Mac helper /
+ * browser extension. Without this page, enabling requires SQL access.
  */
 export default async function ActivitySettingsPage() {
   const supabase = await createSupabaseServerClient();
@@ -28,26 +25,18 @@ export default async function ActivitySettingsPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <>
-      <TopBar
-        title="Activity Watcher"
-        subtitle="Passive presence — Mashi suggests state changes, you approve them."
+    <div className="mx-auto max-w-3xl">
+      <ActivitySettings
+        initial={
+          settings ?? {
+            enabled: false,
+            paused_until: null,
+            ignore_apps: [],
+            ignore_domains: [],
+          }
+        }
+        tokens={tokens ?? []}
       />
-      <ScrollArea className="flex-1">
-        <div className="mx-auto max-w-3xl px-6 py-8">
-          <ActivitySettings
-            initial={
-              settings ?? {
-                enabled: false,
-                paused_until: null,
-                ignore_apps: [],
-                ignore_domains: [],
-              }
-            }
-            tokens={tokens ?? []}
-          />
-        </div>
-      </ScrollArea>
-    </>
+    </div>
   );
 }
