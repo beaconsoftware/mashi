@@ -96,30 +96,24 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   }, [banner]);
 
   // Snapshot the deck order when opened so swipes don't reshuffle mid-session.
-  // Snapshotting happens synchronously during render the moment `open` flips
-  // true — NOT inside a useEffect — because a post-commit effect leaves the
-  // first paint with an empty snapshot, which makes validIndices === [] and
-  // renders the DoneScreen flash before any card appears.
+  // Capture happens in a useEffect AND we gate render on `snapshotReady` so
+  // the brief window between open-transition and effect-firing shows a
+  // spinner, not the DoneScreen ("All caught up" against a populated
+  // Review column was the symptom). Earlier versions tried setSnapshot()
+  // during render relying on React's "eager re-render on setState during
+  // render" semantics, but that pattern proved unreliable in practice
+  // (possibly React Compiler interfering with the hot path) and shipped
+  // the bug to the user twice. The useEffect path is the bulletproof
+  // version — worst case, one frame of spinner.
   //
-  // The snapshot lives in useState (not useRef) so downstream useMemo deps
-  // see the change — refs don't trigger memo re-runs, and validIndices was
-  // returning a cached empty array against a populated ref, locking the
-  // deck on "All caught up" forever.
-  //
-  // The "open transition" is gated on items.length > 0. If the deck opens
-  // while TanStack is still fetching, we DEFER the snapshot to whichever
-  // render has items — otherwise we'd snapshot an empty array and lock the
-  // deck on "Deck cleared" until close/reopen. lastOpenRef tracks whether
-  // the snapshot has actually landed; we only flip it true once we've
-  // captured a non-empty snapshot.
-  //
-  // `items` is intentionally NOT in the cursor-reset effect's deps. Without
-  // that, every optimistic cache mutation from useUpdateS2DItem (which flips
-  // needs_review=false on swipe) re-renders the parent, passes a new items
-  // array, and resets the cursor to 0 mid-deck — counter stuck at "1 / N"
-  // forever. The snapshot is pinned once on open; per-item live updates flow
-  // through liveItemsById below.
+  // `items` is intentionally NOT used by the snapshot post-capture.
+  // Optimistic cache mutations from useUpdateS2DItem (which flip
+  // needs_review=false on swipe) re-render the parent and pass a new
+  // items array — if the snapshot reshuffled on those, the counter would
+  // get stuck at "1 / N" forever. Per-item live updates flow through
+  // liveItemsById below instead.
   const [snapshot, setSnapshot] = useState<S2DItem[]>([]);
+  const [snapshotReady, setSnapshotReady] = useState(false);
   const lastOpenRef = useRef(false);
   // Tracks whether the user has actually swiped a card in THIS session.
   // Used by DoneScreen to decide between the "Reviewed N items" celebration
@@ -127,19 +121,19 @@ export function ReviewDeck({ items, open, onClose }: Props) {
   // a deck that's already empty boasts about a count from a prior session
   // (or 0, which reads as a bug).
   const hasSwipedRef = useRef(false);
-  if (open && !lastOpenRef.current && items.length > 0) {
-    setSnapshot(items.slice());
-    lastOpenRef.current = true;
-    // Reset session state synchronously alongside the snapshot. A post-
-    // commit useEffect would let the first paint render against
-    // cursor/overrides from the previous session — producing a flash of
-    // the DoneScreen when the prior cursor sat past validIndices.length.
-    setCursor(0);
-    setOverrides({});
-    hasSwipedRef.current = false;
-  } else if (!open && lastOpenRef.current) {
-    lastOpenRef.current = false;
-  }
+  useEffect(() => {
+    if (open && !lastOpenRef.current && items.length > 0) {
+      setSnapshot(items.slice());
+      setSnapshotReady(true);
+      setCursor(0);
+      setOverrides({});
+      lastOpenRef.current = true;
+      hasSwipedRef.current = false;
+    } else if (!open && lastOpenRef.current) {
+      lastOpenRef.current = false;
+      setSnapshotReady(false);
+    }
+  }, [open, items]);
 
   // Live lookup over the most recent items prop. The deck *order* is
   // pinned by the snapshot, but per-item fields like
@@ -479,7 +473,20 @@ export function ReviewDeck({ items, open, onClose }: Props) {
 
   if (!open) return null;
 
-  // Sprint complete on deck
+  // Snapshot hasn't been captured yet — render a spinner. This window is
+  // typically one frame (effect fires after first commit). Without this
+  // gate, the DoneScreen below would render against snapshot=[] and the
+  // user would see "All caught up" against a populated Review column.
+  if (!snapshotReady) {
+    return (
+      <Overlay onClose={onClose}>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </Overlay>
+    );
+  }
+
+  // Snapshot captured but no card resolves — genuinely empty (either no
+  // items at open time, or the user swiped through everything).
   if (!current) {
     return (
       <Overlay onClose={onClose}>
