@@ -67,7 +67,7 @@ function applyStatus(settings: ExtSettings): void {
       dot.classList.add("paused");
       label.textContent = "Server off";
       info.textContent =
-        "Connected, but the Activity Watcher is disabled on your Mashi account. Enable it in Settings.";
+        "Connected, but the Activity Monitor is disabled on your Mashi account. Enable it in Settings.";
       pausePanel.hidden = true;
       livePanel.hidden = false;
       break;

@@ -2,7 +2,7 @@
   "name": "mashi-browser-ext",
   "version": "0.1.0",
   "private": true,
-  "description": "Mashi Activity Watcher — MV3 web extension (Chromium + Firefox 121+). Emits tab focus heartbeats to your Mashi instance.",
+  "description": "Mashi Activity Monitor — MV3 web extension (Chromium + Firefox 121+). Emits tab focus heartbeats to your Mashi instance.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "watch": "tsc -p tsconfig.json --watch",

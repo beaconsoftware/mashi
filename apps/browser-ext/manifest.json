@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Mashi Activity Watcher",
+  "name": "Mashi Activity Monitor",
   "version": "0.1.0",
   "description": "Sends tab focus signals to Mashi so it can suggest task state changes. Captures only URL + title + timestamp; never page content.",
   "permissions": ["tabs", "storage", "notifications", "alarms"],
@@ -12,7 +12,7 @@
   "options_page": "src/options.html",
   "action": {
     "default_popup": "src/popup.html",
-    "default_title": "Mashi Activity Watcher"
+    "default_title": "Mashi Activity Monitor"
   },
   "icons": {
     "16": "icons/icon-16.png",

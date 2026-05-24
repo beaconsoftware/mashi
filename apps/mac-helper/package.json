@@ -2,7 +2,7 @@
   "name": "mashi-mac-helper",
   "version": "0.1.0",
   "private": true,
-  "description": "Mashi Activity Watcher — macOS menubar helper. Polls frontmost app + browser URL every 30s and emits heartbeats to your Mashi instance.",
+  "description": "Mashi Activity Monitor — macOS menubar helper. Polls frontmost app + browser URL every 30s and emits heartbeats to your Mashi instance.",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

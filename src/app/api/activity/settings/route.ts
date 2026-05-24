@@ -2,7 +2,7 @@
  * GET /api/activity/settings — fetch the user's activity_settings row
  * POST /api/activity/settings — upsert it
  *
- * Web-session auth only. Used by the Settings → Activity Watcher page to
+ * Web-session auth only. Used by the Settings → Activity Monitor page to
  * toggle enabled, manage pause, and edit ignore lists.
  *
  * Note: pause and resume are convenience aliases handled here too via the

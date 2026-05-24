@@ -1,5 +1,5 @@
 /**
- * Mashi Activity Watcher — MV3 service worker.
+ * Mashi Activity Monitor — MV3 service worker.
  *
  * Responsibilities:
  *  - Listen for tab activation + URL change events.
@@ -304,7 +304,7 @@ async function flushQueue(): Promise<void> {
         // Reuse the 128px icon if present; falls back to the extension's
         // default icon if missing.
         iconUrl: chrome.runtime.getURL("icons/icon-128.png"),
-        title: "Mashi Activity Watcher",
+        title: "Mashi Activity Monitor",
         message: "Your token was rejected. Open Options to re-authenticate.",
       });
     } catch {

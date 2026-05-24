@@ -4,7 +4,7 @@
  *
  * Both endpoints accept Bearer (so the menubar helper can pause/resume
  * directly without a web session) AND Supabase session (so the web app's
- * Settings → Activity Watcher page can use them).
+ * Settings → Activity Monitor page can use them).
  *
  * Sister route: see /api/activity/settings for the full upsert shape.
  */
