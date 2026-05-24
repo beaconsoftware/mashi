@@ -4,6 +4,8 @@ import { runTriageOnUnit, loadExistingForUnit } from "@/lib/triage/orchestrator"
 import { parallelMap } from "@/lib/utils/parallel";
 import { reconcileMessageReplies } from "@/lib/triage/reconcile";
 import { recordSyncFailure, formatSyncError } from "@/lib/oauth/reauth";
+import { emitCloudHeartbeats } from "@/lib/activity/cloud-feeder";
+import type { HeartbeatEvent } from "@/lib/activity/types";
 
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
 
@@ -203,6 +205,22 @@ export async function syncGmailConnection(connectionId: string): Promise<{
     const created = triageResults.reduce((s, r) => s + (r?.created ?? 0), 0);
     const updated = triageResults.reduce((s, r) => s + (r?.updated ?? 0), 0);
     const closed = triageResults.reduce((s, r) => s + (r?.closed ?? 0), 0);
+
+    // Cloud feeder — emit `archive` heartbeats for open S2D gmail items
+    // whose thread has dropped out of the inbox. Done BEFORE reconcile
+    // so the matcher sees items in their pre-auto-close state. The
+    // cloud-feeder is opt-in-gated; no-op if the user hasn't enabled
+    // the watcher.
+    try {
+      await emitGmailActivityHeartbeats({
+        userId: conn.user_id,
+        connectionToken: token,
+        connectionId: conn.id,
+        listedThreadIds: new Set(listed.map((m) => m.threadId)),
+      });
+    } catch (err) {
+      console.warn("[gmail-sync] activity heartbeat emit failed:", err);
+    }
 
     // Auto-close items where the user has replied in the thread
     let autoClosed = 0;
@@ -532,4 +550,140 @@ async function markSyncSuccess(
       last_synced_at: new Date().toISOString(),
     })
     .eq("id", connectionId);
+}
+
+// ============================================================================
+// Activity watcher — cloud feeder
+// ============================================================================
+
+/**
+ * Maximum open Gmail-sourced S2D items we'll probe per sync run for
+ * archive state. Bounds API cost — users with hundreds of open items
+ * shouldn't blow up the sync. Archives we miss this run will be picked
+ * up on subsequent runs since the watcher's matcher only acts on
+ * archive events that come in.
+ */
+const ARCHIVE_PROBE_CAP = 100;
+
+/**
+ * Emit `archive` heartbeats for open S2D gmail items whose thread no
+ * longer carries the INBOX label.
+ *
+ * Fast-path: any S2D-tracked thread whose threadId appeared in the
+ * current inbox listing is definitionally still in inbox — skip.
+ * Slow-path: for items NOT in the listing, query Gmail for the
+ * thread's current labels and confirm INBOX is gone.
+ *
+ * Matcher then turns these into `done` proposals for items currently
+ * in `in_progress`.
+ */
+async function emitGmailActivityHeartbeats(opts: {
+  userId: string;
+  connectionToken: string;
+  connectionId: string;
+  listedThreadIds: Set<string>;
+}): Promise<void> {
+  const { userId, connectionToken, connectionId, listedThreadIds } = opts;
+  const supabase = createSupabaseServiceClient();
+
+  // Open S2D items from this user, sourced from gmail and tied to this
+  // specific connection (multi-account users: don't probe threads we
+  // don't have tokens for in this run).
+  const { data: openItems } = await supabase
+    .from("s2d_items")
+    .select("source_thread_id, title")
+    .eq("user_id", userId)
+    .eq("source_type", "gmail")
+    .neq("status", "done");
+
+  if (!openItems || openItems.length === 0) return;
+
+  // Items whose thread WAS NOT seen in this inbox listing are
+  // candidates for "archived". Some will have just been quiet for
+  // longer than the listing window — we confirm via thread.get.
+  const candidates = openItems
+    .filter(
+      (r): r is { source_thread_id: string; title: string } =>
+        !!r.source_thread_id && !listedThreadIds.has(r.source_thread_id)
+    )
+    .slice(0, ARCHIVE_PROBE_CAP);
+
+  if (candidates.length === 0) return;
+
+  // Restrict to threads that have at least one message in this
+  // connection's messages — otherwise the thread belongs to a different
+  // gmail account and we'd burn a token call we'll get a 4xx on.
+  const candidateThreadIds = candidates.map((c) => c.source_thread_id);
+  const { data: threadRefs } = await supabase
+    .from("messages")
+    .select("thread_id")
+    .eq("user_id", userId)
+    .eq("source", "gmail")
+    .eq("connected_account_id", connectionId)
+    .in("thread_id", candidateThreadIds);
+  const probeThreadIds = new Set(
+    (threadRefs ?? [])
+      .map((r) => r.thread_id)
+      .filter((s): s is string => !!s)
+  );
+
+  const titleByThreadId = new Map<string, string>();
+  for (const c of candidates) titleByThreadId.set(c.source_thread_id, c.title);
+
+  const probeList = candidates.filter((c) =>
+    probeThreadIds.has(c.source_thread_id)
+  );
+  if (probeList.length === 0) return;
+
+  const results = await parallelMap(probeList, 8, async (c) => {
+    try {
+      const archived = await isThreadArchived(connectionToken, c.source_thread_id);
+      return archived ? c.source_thread_id : null;
+    } catch (err) {
+      console.warn(`[gmail-sync] archive probe failed for ${c.source_thread_id}:`, err);
+      return null;
+    }
+  });
+
+  const archivedIds = results.filter((s): s is string => !!s);
+  if (archivedIds.length === 0) return;
+
+  const nowIso = new Date().toISOString();
+  const events: HeartbeatEvent[] = archivedIds.map((threadId) => ({
+    surface: "gmail",
+    identifier: threadId,
+    title: titleByThreadId.get(threadId),
+    url: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(threadId)}`,
+    signal_kind: "archive",
+    // Provider-side archive timestamp isn't exposed by Gmail; use sync
+    // time. Still narrower than the matcher's 30min dedup window.
+    started_at: nowIso,
+  }));
+
+  await emitCloudHeartbeats({ userId, events });
+}
+
+/**
+ * Check whether a Gmail thread still has the INBOX label. Threads whose
+ * messages have ALL been moved out of inbox are "archived" in Gmail
+ * parlance. Returns false on any error so we never falsely report an
+ * archive.
+ */
+async function isThreadArchived(
+  token: string,
+  threadId: string
+): Promise<boolean> {
+  const url = new URL(`${GMAIL_API}/users/me/threads/${threadId}`);
+  url.searchParams.set("format", "minimal");
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return false;
+  const j = (await res.json()) as {
+    messages?: Array<{ labelIds?: string[] }>;
+  };
+  const messages = j.messages ?? [];
+  if (messages.length === 0) return false;
+  // Thread is archived iff NO message still carries INBOX.
+  return messages.every((m) => !(m.labelIds ?? []).includes("INBOX"));
 }

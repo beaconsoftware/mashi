@@ -4,6 +4,8 @@ import { runTriageOnUnit, loadExistingForUnit } from "@/lib/triage/orchestrator"
 import { parallelMap } from "@/lib/utils/parallel";
 import { reconcileLinearStatuses } from "@/lib/triage/reconcile";
 import { recordSyncFailure, formatSyncError } from "@/lib/oauth/reauth";
+import { emitCloudHeartbeats } from "@/lib/activity/cloud-feeder";
+import type { HeartbeatEvent } from "@/lib/activity/types";
 
 const GRAPHQL_URL = "https://api.linear.app/graphql";
 
@@ -179,6 +181,22 @@ export async function syncLinearConnection(connectionId: string): Promise<{
     const updated = triageResults.reduce((s, r) => s + (r?.updated ?? 0), 0);
     const closed = triageResults.reduce((s, r) => s + (r?.closed ?? 0), 0);
 
+    // Cloud feeder — emit activity heartbeats BEFORE reconcile runs so
+    // the matcher gets to see open S2D items in their current state
+    // (reconcile auto-closes after this point). The cloud-feeder
+    // checks `activity_settings.enabled` itself; if the user hasn't
+    // opted in, this is a no-op.
+    try {
+      await emitLinearActivityHeartbeats({
+        userId: conn.user_id,
+        connectionToken: token,
+        fetchedIssues: issues,
+        viewerEmail: viewer.email.toLowerCase(),
+      });
+    } catch (err) {
+      console.warn("[linear-sync] activity heartbeat emit failed:", err);
+    }
+
     // Auto-close S2D items whose Linear issue is now completed/cancelled
     let autoClosed = 0;
     try {
@@ -305,4 +323,154 @@ function linearPriorityName(p: number): IssueForTriage["priority_name"] {
     case 4: return "low";
     default: return "none";
   }
+}
+
+/**
+ * Build + dispatch heartbeat events for the activity watcher.
+ *
+ * Two signals:
+ *   - `focus` for each fetched issue that's assigned to the user and in
+ *     a started state. Matcher turns these into `in_progress` proposals
+ *     for S2D items still in todo/backlog/in_queue.
+ *   - `close` for any open S2D linear-sourced item whose issue did NOT
+ *     come back in the active-issues fetch — those may have moved to
+ *     completed/cancelled (the fetch filters them out). We query Linear
+ *     for the current state of just that subset, and emit `close` for
+ *     ones that are now completed/cancelled. Matcher turns these into
+ *     `done` proposals for S2D items currently in_progress.
+ *
+ * The cloud-feeder is opt-in-gated, so this is a no-op for users who
+ * haven't enabled the watcher.
+ */
+async function emitLinearActivityHeartbeats(opts: {
+  userId: string;
+  connectionToken: string;
+  fetchedIssues: LinearIssueRaw[];
+  viewerEmail: string;
+}): Promise<void> {
+  const { userId, connectionToken, fetchedIssues, viewerEmail } = opts;
+  const events: HeartbeatEvent[] = [];
+
+  // 1. Focus events: started + assigned-to-me. The Linear identifier
+  // we use throughout the codebase is the UUID (`it.id`) — that's
+  // what gets stored in s2d_items.source_thread_id by the triage
+  // pipeline. We also pass the URL so the matcher can fall back to a
+  // canonical URL match if source_id doesn't hit.
+  const fetchedIds = new Set<string>();
+  for (const it of fetchedIssues) {
+    fetchedIds.add(it.id);
+    if (it.state.type !== "started") continue;
+    if (it.assignee?.email?.toLowerCase() !== viewerEmail) continue;
+    events.push({
+      surface: "linear",
+      identifier: it.id,
+      title: it.title,
+      url: it.url,
+      signal_kind: "focus",
+      started_at: it.updatedAt ?? new Date().toISOString(),
+    });
+  }
+
+  // 2. Close events: find open S2D linear items whose external_id
+  // wasn't in the active fetch. The Linear GraphQL filter excludes
+  // completed/cancelled states, so missing-from-fetch is the cheap
+  // pre-filter. We then ask Linear directly for the current state
+  // of just that subset.
+  const supabase = createSupabaseServiceClient();
+  const { data: openItems } = await supabase
+    .from("s2d_items")
+    .select("source_thread_id, title")
+    .eq("user_id", userId)
+    .eq("source_type", "linear")
+    .neq("status", "done");
+
+  const candidateExternalIds = (openItems ?? [])
+    .map((r) => r.source_thread_id)
+    .filter((s): s is string => !!s && !fetchedIds.has(s));
+
+  if (candidateExternalIds.length > 0) {
+    const titleByExternalId = new Map<string, string>();
+    for (const r of openItems ?? []) {
+      if (r.source_thread_id) {
+        titleByExternalId.set(r.source_thread_id, r.title);
+      }
+    }
+    const states = await fetchLinearIssueStatesForFeeder(
+      connectionToken,
+      candidateExternalIds
+    );
+    for (const [externalId, state] of states.entries()) {
+      if (state.type !== "completed" && state.type !== "cancelled") continue;
+      events.push({
+        surface: "linear",
+        identifier: externalId,
+        title: titleByExternalId.get(externalId),
+        url: state.url ?? undefined,
+        signal_kind: "close",
+        started_at: state.updatedAt ?? new Date().toISOString(),
+      });
+    }
+  }
+
+  if (events.length === 0) return;
+  await emitCloudHeartbeats({ userId, events });
+}
+
+/**
+ * Minimal helper to fetch issue state by id. Mirrors the query in
+ * `src/lib/triage/reconcile.ts` but kept local to avoid leaking
+ * reconcile internals into the activity feeder path. Linear caps at
+ * ~250 nodes per page; we chunk.
+ */
+async function fetchLinearIssueStatesForFeeder(
+  token: string,
+  ids: string[]
+): Promise<
+  Map<string, { name: string; type: string; updatedAt?: string; url?: string }>
+> {
+  const result = new Map<
+    string,
+    { name: string; type: string; updatedAt?: string; url?: string }
+  >();
+  const CHUNK = 200;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    const query = `
+      query IssuesByIdForFeeder($ids: [ID!]!) {
+        issues(filter: { id: { in: $ids } }, first: ${slice.length}) {
+          nodes { id updatedAt url state { name type } }
+        }
+      }
+    `;
+    const res = await fetch(GRAPHQL_URL, {
+      method: "POST",
+      headers: {
+        Authorization: token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables: { ids: slice } }),
+    });
+    if (!res.ok) continue;
+    const j = (await res.json()) as {
+      data?: {
+        issues?: {
+          nodes?: Array<{
+            id: string;
+            updatedAt?: string;
+            url?: string;
+            state: { name: string; type: string };
+          }>;
+        };
+      };
+    };
+    for (const n of j.data?.issues?.nodes ?? []) {
+      result.set(n.id, {
+        name: n.state.name,
+        type: n.state.type,
+        updatedAt: n.updatedAt,
+        url: n.url,
+      });
+    }
+  }
+  return result;
 }
