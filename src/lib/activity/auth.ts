@@ -18,7 +18,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const ACTIVITY_WRITE_SCOPE = "activity:write";
 
 export type ActivityAuthResult =
-  | { ok: true; userId: string; via: "bearer" | "session" }
+  | {
+      ok: true;
+      userId: string;
+      via: "bearer" | "session";
+      /** Present only when via === "bearer". Used by per-token rate limiting. */
+      tokenId?: string;
+    }
   | { ok: false; response: NextResponse };
 
 export async function authenticateActivity(
@@ -52,7 +58,12 @@ export async function authenticateActivity(
         ),
       };
     }
-    return { ok: true, userId: verified.userId, via: "bearer" };
+    return {
+      ok: true,
+      userId: verified.userId,
+      via: "bearer",
+      tokenId: verified.tokenId,
+    };
   }
 
   // Path 2: Supabase session (web app)

@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { log } from "@/lib/log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,7 +51,9 @@ export async function GET(req: NextRequest) {
     .delete({ count: "exact" })
     .lt("started_at", ttlCutoff);
   if (ttlErr) {
-    console.error("[activity/maintenance] TTL delete failed:", ttlErr);
+    log.error("activity_maintenance.ttl_delete_failed", {
+      message: ttlErr.message,
+    });
   }
 
   // 2. Expire dismissed-past-24h
@@ -60,7 +63,9 @@ export async function GET(req: NextRequest) {
     .eq("status", "dismissed")
     .lt("dismiss_until", now.toISOString());
   if (dismErr) {
-    console.error("[activity/maintenance] dismiss-expire failed:", dismErr);
+    log.error("activity_maintenance.dismiss_expire_failed", {
+      message: dismErr.message,
+    });
   }
 
   // 3. Expire stale pending
@@ -73,7 +78,9 @@ export async function GET(req: NextRequest) {
     .eq("status", "pending")
     .lt("created_at", staleCutoff);
   if (pendErr) {
-    console.error("[activity/maintenance] pending-expire failed:", pendErr);
+    log.error("activity_maintenance.pending_expire_failed", {
+      message: pendErr.message,
+    });
   }
 
   return NextResponse.json({

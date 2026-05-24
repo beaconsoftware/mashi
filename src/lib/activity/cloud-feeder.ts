@@ -23,6 +23,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { log } from "@/lib/log";
 import { runMatcher } from "./matcher";
 import type { HeartbeatEvent } from "./types";
 
@@ -106,7 +107,11 @@ export async function emitCloudHeartbeats(
     .insert(rows)
     .select("id");
   if (error) {
-    console.error("[activity/cloud-feeder] insert failed:", error);
+    log.error("activity_cloud_feeder.insert_failed", {
+      user_id: userId,
+      row_count: rows.length,
+      message: error.message,
+    });
     return { skipped: false, inserted: 0, newSuggestions: 0 };
   }
 
@@ -127,7 +132,10 @@ export async function emitCloudHeartbeats(
       eventIdsByInput,
     });
   } catch (err) {
-    console.error("[activity/cloud-feeder] matcher failed:", err);
+    log.error("activity_cloud_feeder.matcher_failed", {
+      user_id: userId,
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return { skipped: false, inserted: rows.length, newSuggestions };
