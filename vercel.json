@@ -9,6 +9,10 @@
     "src/app/api/consolidate/route.ts": { "maxDuration": 120 },
     "src/app/api/bundle-meetings/route.ts": { "maxDuration": 120 },
     "src/app/api/onboard/cleanup/route.ts": { "maxDuration": 300 },
-    "src/app/api/sync/[provider]/[connectionId]/route.ts": { "maxDuration": 300 }
-  }
+    "src/app/api/sync/[provider]/[connectionId]/route.ts": { "maxDuration": 300 },
+    "src/app/api/sync/all/route.ts": { "maxDuration": 300 }
+  },
+  "crons": [
+    { "path": "/api/sync/all", "schedule": "*/15 * * * *" }
+  ]
 }
