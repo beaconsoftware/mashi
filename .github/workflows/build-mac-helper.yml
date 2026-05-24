@@ -1,0 +1,123 @@
+name: Build Mac Helper
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/mac-helper/**"
+      - ".github/workflows/build-mac-helper.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dmg:
+    name: Build unsigned .dmg
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/mac-helper/pnpm-lock.yaml
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/mac-helper/src-tauri/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('apps/mac-helper/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Drop a placeholder icon if none exists
+        # tauri build refuses to ship without an icon. Until the team
+        # supplies a real one, fall back to a transparent 1024x1024 PNG
+        # generated on the fly. The icon is not user-facing in the menubar
+        # — macOS uses a separate template image — so a placeholder is OK
+        # for builds until product ships a real mark.
+        run: |
+          set -e
+          mkdir -p apps/mac-helper/src-tauri/icons
+          if [ ! -f apps/mac-helper/src-tauri/icons/icon-1024.png ]; then
+            python3 -c "
+          import struct, zlib
+          # 1024x1024 transparent PNG
+          w = h = 1024
+          raw = b''.join(b'\x00' + b'\x00' * (w*4) for _ in range(h))
+          comp = zlib.compress(raw)
+          def chunk(t, d):
+              import struct, zlib
+              return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+          png = b'\x89PNG\r\n\x1a\n'
+          png += chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0))
+          png += chunk(b'IDAT', comp)
+          png += chunk(b'IEND', b'')
+          open('apps/mac-helper/src-tauri/icons/icon-1024.png', 'wb').write(png)
+          "
+          fi
+
+      - name: Install deps
+        working-directory: apps/mac-helper
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate iconset
+        working-directory: apps/mac-helper
+        run: pnpm tauri icon src-tauri/icons/icon-1024.png
+
+      - name: Build .dmg (unsigned)
+        working-directory: apps/mac-helper
+        env:
+          # Tauri respects these to skip codesigning when no identity is set.
+          APPLE_SIGNING_IDENTITY: ""
+          CI: "true"
+        run: pnpm tauri build --bundles dmg
+
+      - name: Locate built .dmg
+        id: locate
+        run: |
+          set -e
+          DMG=$(find apps/mac-helper/src-tauri/target/release/bundle/dmg -name "*.dmg" | head -n 1)
+          if [ -z "$DMG" ]; then
+            echo "No .dmg found"; exit 1
+          fi
+          echo "Found $DMG"
+          mkdir -p artifacts
+          cp "$DMG" artifacts/Mashi-Helper.dmg
+          echo "dmg=$(pwd)/artifacts/Mashi-Helper.dmg" >> "$GITHUB_OUTPUT"
+          ls -lh artifacts/
+
+      - name: Publish as 'mac-helper-latest' release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          # Delete prior 'mac-helper-latest' release (if any) so we always
+          # have one stable URL pointing at the newest build.
+          gh release delete mac-helper-latest --yes --cleanup-tag || true
+          gh release create mac-helper-latest \
+            --title "Mac Helper (latest)" \
+            --notes "Unsigned .dmg built from ${{ github.sha }}.
+
+            First-launch: macOS will block the unsigned app. To open: System Settings → Privacy & Security → 'Open Anyway' next to the Mashi Helper line." \
+            --target "${{ github.sha }}" \
+            ${{ steps.locate.outputs.dmg }}
