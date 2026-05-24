@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mashi Helper",
+  "version": "0.1.0",
+  "identifier": "app.mashi.helper",
+  "build": {
+    "frontendDist": "../src",
+    "devUrl": null,
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "settings",
+        "title": "Mashi Helper",
+        "url": "settings.html",
+        "width": 520,
+        "height": 640,
+        "minWidth": 480,
+        "minHeight": 540,
+        "resizable": true,
+        "visible": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:;"
+    },
+    "trayIcon": {
+      "iconPath": "icons/menubar-template.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": true,
+      "title": "M"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Mashi Activity Watcher helper",
+    "longDescription": "Menubar app that emits frontmost-app and browser-URL heartbeats to your Mashi instance.",
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "exceptionDomain": "",
+      "entitlements": null,
+      "signingIdentity": null
+    }
+  },
+  "plugins": {}
+}
