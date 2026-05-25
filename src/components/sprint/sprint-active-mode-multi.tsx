@@ -65,9 +65,8 @@ import { useS2DItems, useUpdateS2DItem } from "@/hooks/use-s2d";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
-import { SprintContextPackage } from "@/components/sprint/sprint-context-package";
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
-import { SprintToolkit } from "@/components/sprint/sprint-toolkit";
+import { SprintCardSections } from "@/components/sprint/sprint-card-sections";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 // Spotify ambient bg is mounted globally in AppShell. Sprint also mounts
 // the player IN its header (z-100 overlay would cover the global TopBar
@@ -954,15 +953,13 @@ function SlotCard({
           />
         </div>
 
-        {/* Action toolkit + pathway-specific context. The toolkit (chips
-            + drawer) surfaces the highest-value moves for the pathway and
-            its brief fetch is gated on the slot being active so background
-            slots don't burn a model call. The pathway context package and
-            source-aware context sit below for full visibility. */}
-        <div className="mt-3 flex-1 space-y-3">
-          <SprintToolkit item={item} active />
-          <SprintContextPackage item={item} />
-          <SprintItemContext item={item} enabled />
+        {/* Sprint Card v2 body — four-section flow:
+              1. CONTEXT (existing pkg + source list)
+              2. ENRICH + PLAN (placeholder, wires to /enrich in PR 3)
+              3. ACT (tabbed Claude / Draft / Decide, panels in PRs 5-7)
+            Section 4 (MOVE) is the footer below. */}
+        <div className="mt-3 flex-1">
+          <SprintCardSections item={item} active />
         </div>
 
         {/* Footer actions */}
