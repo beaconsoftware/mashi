@@ -439,7 +439,8 @@ function slug(s: string): string {
  */
 export async function loadExistingForUnit(
   sourceType: string,
-  sourceThreadId: string
+  sourceThreadId: string,
+  userId: string
 ): Promise<TriageUnit["existing_items"]> {
   const supabase = createSupabaseServiceClient();
   const thirtyDaysAgoIso = new Date(
@@ -447,11 +448,22 @@ export async function loadExistingForUnit(
   ).toISOString();
   // Combined query: open items always, plus done items closed in the last
   // 30 days. Postgrest `.or` lets us express the dual condition cleanly.
+  //
+  // user_id filter is load-bearing — service-role bypasses RLS, so without
+  // this explicit eq() the query returns matches from ANY user's s2d_items
+  // that share the (source_type, source_thread_id) tuple. That's a
+  // multi-tenancy violation AND a real triage bug: when User A and User B
+  // both subscribe to the same Linear issue / Gmail thread, whichever
+  // user's sync ran first creates an s2d_item, and the other user's triage
+  // then sees it as "already tracked" and no-ops — so the second user
+  // never gets their own item for the same thread. See AGENTS.md
+  // "Multi-tenancy invariants" #2.
   const { data } = await supabase
     .from("s2d_items")
     .select(
       "id, title, status, pathway, priority, created_at, done_at, outcome, linked_sources"
     )
+    .eq("user_id", userId)
     .eq("source_type", sourceType)
     .eq("source_thread_id", sourceThreadId)
     .or(`status.neq.done,and(status.eq.done,done_at.gte.${thirtyDaysAgoIso})`);

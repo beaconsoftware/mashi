@@ -463,7 +463,7 @@ export async function syncGmailConnection(connectionId: string): Promise<{
         if (!thread || thread.messages.length === 0) return null;
         if (thread.messages.every((m) => m.is_from_me)) return null;
 
-        const existing_items = await loadExistingForUnit("gmail", threadId);
+        const existing_items = await loadExistingForUnit("gmail", threadId, conn.user_id);
 
         return await runTriageOnUnit({
           userId: conn.user_id,

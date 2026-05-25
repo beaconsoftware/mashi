@@ -169,7 +169,7 @@ export async function syncGCalConnection(connectionId: string): Promise<{
           meeting_url: pickMeetingUrl(e),
         };
 
-        const existing_items = await loadExistingForUnit("calendar", e.id);
+        const existing_items = await loadExistingForUnit("calendar", e.id, conn.user_id);
 
         return await runTriageOnUnit({
           userId: conn.user_id,
