@@ -18,7 +18,6 @@ import {
   Pin,
   PinOff,
   Send,
-  Sparkles,
   Lightbulb,
 } from "lucide-react";
 import { useGSAP } from "@gsap/react";
@@ -30,12 +29,15 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { SprintItemContext } from "./sprint-item-context";
+import { SectionHeader } from "@/components/layout/primitives";
+import { PathwayBadge } from "@/components/shared/pathway-badge";
+import { PriorityDot } from "@/components/shared/priority-dot";
+import { useCachedContextSignals } from "./sprint-item-context";
+import { mergeSources, type MergedSource } from "@/lib/sprint/merge-sources";
 import {
   useEnrichedContext,
   useRunEnrich,
   usePinSource,
-  type EnrichPulledSource,
   type EnrichSourceKind,
   type EnrichedContext,
   type EnrichThreadTurn,
@@ -75,14 +77,92 @@ interface Props {
    * fetches inside subcomponents.
    */
   active?: boolean;
+  /**
+   * Optional timer info surfaced in the identity strip's top-right
+   * corner. Omitted in queued/preview contexts.
+   */
+  timer?: {
+    label: string;
+    overrun: boolean;
+    paused: boolean;
+  };
 }
 
-export function SprintCardWorkspace({ item, active = true }: Props) {
+export function SprintCardWorkspace({ item, active = true, timer }: Props) {
   return (
-    <div className="flex h-full min-h-0 gap-3 overflow-hidden">
-      <SourcesRail item={item} active={active} />
-      <Workspace item={item} />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <IdentityStrip item={item} active={active} timer={timer} />
+      <div className="flex flex-1 min-h-0 gap-3 overflow-hidden p-3">
+        <SourcesRail item={item} active={active} />
+        <Workspace item={item} />
+      </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Identity strip — single header above the workspace combining title,
+// 1-line cached context, and a compact timer in the corner. Collapses
+// the two prior "About" blocks (rail header + bottom "About this item")
+// into one source-of-identity for the slot.
+// ─────────────────────────────────────────────────────────────────────
+
+function IdentityStrip({
+  item,
+  active,
+  timer,
+}: {
+  item: S2DItem;
+  active: boolean;
+  timer?: Props["timer"];
+}) {
+  const { sources } = useCachedContextSignals(item, active);
+  // Pick a single best 1-line cached signal for the "Quick context:"
+  // line. Prefer the first source's snippet, fall back to the item
+  // description so the strip always has copy to show.
+  const quickContext =
+    sources.find((s) => s.snippet && s.snippet.trim().length > 0)?.snippet ??
+    item.description ??
+    null;
+
+  return (
+    <SectionHeader as="header" className="flex-col items-stretch !py-2.5">
+      <div className="flex w-full items-center gap-2">
+        <PathwayBadge pathway={item.pathway} compact />
+        <PriorityDot priority={item.priority} />
+        {item.company && (
+          <span className="truncate text-[11px] normal-case tracking-normal text-foreground/80">
+            {item.company.name}
+          </span>
+        )}
+        <span className="font-mono text-[10px] normal-case tracking-normal text-muted-foreground">
+          MASH-{item.ticket_number}
+        </span>
+        {timer && (
+          <span
+            className={cn(
+              "ml-auto font-mono text-xs font-bold normal-case tabular-nums tracking-tight",
+              timer.overrun
+                ? "text-destructive"
+                : timer.paused
+                  ? "text-muted-foreground"
+                  : "text-foreground"
+            )}
+          >
+            {timer.label}
+          </span>
+        )}
+      </div>
+      <h3 className="mt-1 w-full text-balance text-sm font-semibold normal-case leading-snug tracking-normal text-foreground">
+        {item.title}
+      </h3>
+      {quickContext && (
+        <p className="mt-0.5 line-clamp-1 w-full text-[11px] normal-case tracking-normal text-muted-foreground">
+          <span className="text-muted-foreground/80">Quick context:</span>{" "}
+          {quickContext.trim()}
+        </p>
+      )}
+    </SectionHeader>
   );
 }
 
@@ -95,23 +175,12 @@ function SourcesRail({ item, active }: { item: S2DItem; active: boolean }) {
   const { data, isLoading: reading } = useEnrichedContext(item.id);
   const run = useRunEnrich(item.id);
   const ctx = data?.enriched_context ?? null;
-  const hasEnrich = !!ctx && ctx.pulled_sources.length > 0;
   const busy = run.isPending;
   const error = run.error;
+  const hasEnrich = !!ctx && ctx.pulled_sources.length > 0;
 
   return (
     <aside className="relative flex w-[200px] shrink-0 flex-col rounded-md border border-border/40 bg-card/55">
-      {/* Item summary at the top — what this card is about, in 3 lines. */}
-      <header className="shrink-0 border-b border-border/30 px-3 py-2.5">
-        <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <Sparkles className="h-3 w-3 text-primary" />
-          About
-        </div>
-        <p className="line-clamp-3 text-[11px] leading-snug text-foreground/90">
-          {item.description?.trim() || "No description yet — open Detail to add one."}
-        </p>
-      </header>
-
       {/* Enrich control — always visible so discovery is one click. */}
       <div className="shrink-0 border-b border-border/30 px-2 py-2">
         <Button
@@ -148,26 +217,10 @@ function SourcesRail({ item, active }: { item: S2DItem; active: boolean }) {
         )}
       </div>
 
-      {/* Source list — scrolls. Pulled sources first (pinned ones float),
-          then cached sources below. */}
+      {/* Merged source list — pulled (agent-surfaced) + cached
+          (triage-linked) combined into one ordered list. */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2">
-        {hasEnrich && ctx ? (
-          <PulledSources sources={ctx.pulled_sources} itemId={item.id} />
-        ) : (
-          <div className="rounded border border-dashed border-border/40 px-2 py-3 text-[10px] leading-snug text-muted-foreground/80">
-            Run Enrich to surface related items, recent messages, meetings,
-            and Linear issues — they&apos;ll appear here.
-          </div>
-        )}
-
-        {active && (
-          <div className="mt-3">
-            <RailSectionHeader>About this item</RailSectionHeader>
-            <div className="mt-1.5">
-              <SprintItemContext item={item} enabled />
-            </div>
-          </div>
-        )}
+        <MergedSourceList item={item} active={active} variant="rail" />
       </div>
     </aside>
   );
@@ -181,63 +234,84 @@ function RailSectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Pulled-source list with in-place pin / unpin. Pinned sources sort to
- * the top so they're co-visible with whichever tab the user is on.
- * Each row animates in on mount (slot promotes / enrich completes) for
- * a calmer "items arriving" feel.
- */
-function PulledSources({
-  sources,
-  itemId,
-}: {
-  sources: EnrichPulledSource[];
-  itemId: string;
-}) {
-  const pin = usePinSource(itemId);
-  // Pinned first, then by original order (recency from the agent).
-  const sorted = useMemo(
-    () => [...sources].sort((a, b) => Number(b.pinned) - Number(a.pinned)),
-    [sources]
-  );
+// ─────────────────────────────────────────────────────────────────────
+// Merged source list — single ordered surface for pulled + cached
+// sources. Pinned float to the top regardless of origin; ties break
+// pulled-before-cached. Each row exposes the same pin / unpin
+// affordance as the prior PulledSources block.
+// ─────────────────────────────────────────────────────────────────────
 
-  if (sorted.length === 0) {
+interface MergedSourceListProps {
+  item: S2DItem;
+  /** When false, the underlying cached-context fetch is suppressed. */
+  enabled?: boolean;
+  /** Reserved for layout variants used by future phases. */
+  variant?: "rail" | "below-canvas" | "side-strip";
+  /**
+   * Internal alias used by the rail call-site. Treated as `enabled` so
+   * the rail's existing `active` prop maps straight through.
+   */
+  active?: boolean;
+}
+
+export function MergedSourceList({
+  item,
+  enabled,
+  active,
+  variant = "rail",
+}: MergedSourceListProps) {
+  const on = enabled ?? active ?? true;
+  const { data } = useEnrichedContext(item.id);
+  const pulled = data?.enriched_context?.pulled_sources ?? [];
+  const { sources: cached } = useCachedContextSignals(item, on);
+  const pin = usePinSource(item.id);
+  const merged = useMemo(() => mergeSources(pulled, cached), [pulled, cached]);
+  const pinnedCount = merged.filter((s) => s.pinned).length;
+
+  if (merged.length === 0) {
     return (
-      <div className="rounded border border-dashed border-border/40 px-2 py-2 text-[10px] text-muted-foreground/80">
-        Enrich found no related sources for this item.
+      <div className="rounded border border-dashed border-border/40 px-2 py-3 text-[10px] leading-snug text-muted-foreground/80">
+        Run Enrich to surface related items, recent messages, meetings, and
+        Linear issues — they&apos;ll appear here.
       </div>
     );
   }
 
   return (
-    <>
+    <div data-variant={variant}>
       <RailSectionHeader>
-        Pulled context{" "}
+        Sources{" "}
         <span className="font-normal normal-case tracking-normal text-muted-foreground/60">
-          · {sorted.filter((s) => s.pinned).length} pinned
+          · {merged.length} total · {pinnedCount} pinned
         </span>
       </RailSectionHeader>
       <ul className="mt-1.5 space-y-1.5">
-        {sorted.map((s) => (
-          <PulledSourceRow
+        {merged.map((s) => (
+          <MergedSourceRow
             key={`${s.kind}:${s.ref}`}
             source={s}
-            onTogglePin={() =>
-              pin.mutate({ source: { kind: s.kind, ref: s.ref }, pinned: !s.pinned })
+            onTogglePin={
+              s.origin === "pulled"
+                ? () =>
+                    pin.mutate({
+                      source: { kind: s.kind, ref: s.ref },
+                      pinned: !s.pinned,
+                    })
+                : undefined
             }
           />
         ))}
       </ul>
-    </>
+    </div>
   );
 }
 
-function PulledSourceRow({
+function MergedSourceRow({
   source,
   onTogglePin,
 }: {
-  source: EnrichPulledSource;
-  onTogglePin: () => void;
+  source: MergedSource;
+  onTogglePin?: () => void;
 }) {
   // Mount-in animation: each row fades + slides up a touch. Wrapped in
   // withMotion so prefers-reduced-motion users skip it. The animation
@@ -278,33 +352,41 @@ function PulledSourceRow({
         <div className="truncate text-[11px] font-medium leading-tight text-foreground/90">
           {source.label}
         </div>
-        {source.when && (
-          <div className="mt-0.5 font-mono text-[9px] text-muted-foreground/70">
-            {source.when.slice(0, 10)}
-          </div>
-        )}
+        <div className="mt-0.5 flex items-center gap-1 font-mono text-[9px] text-muted-foreground/70">
+          {source.when && <span>{source.when.slice(0, 10)}</span>}
+          {source.origin === "cached" && (
+            <span
+              className="rounded bg-secondary/60 px-1 py-px text-[8px] uppercase tracking-wider text-muted-foreground/80"
+              title="Linked at triage, cached on the item — pin via Enrich to keep across refine."
+            >
+              cached
+            </span>
+          )}
+        </div>
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={onTogglePin}
-        aria-pressed={source.pinned}
-        aria-label={source.pinned ? "Unpin source" : "Pin source"}
-        title={
-          source.pinned
-            ? "Unpin — drops from future refine + downstream actions"
-            : "Pin — keeps this source across refine + feeds Claude / Draft"
-        }
-        className={cn(
-          "mashi-press h-6 w-6 shrink-0",
-          source.pinned
-            ? "text-primary hover:bg-primary/15"
-            : "text-muted-foreground/40 opacity-0 group-hover/source:opacity-100 hover:bg-accent hover:text-foreground"
-        )}
-      >
-        {source.pinned ? <Pin className="h-3 w-3" /> : <PinOff className="h-3 w-3" />}
-      </Button>
+      {onTogglePin && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onTogglePin}
+          aria-pressed={source.pinned}
+          aria-label={source.pinned ? "Unpin source" : "Pin source"}
+          title={
+            source.pinned
+              ? "Unpin — drops from future refine + downstream actions"
+              : "Pin — keeps this source across refine + feeds Claude / Draft"
+          }
+          className={cn(
+            "mashi-press h-6 w-6 shrink-0",
+            source.pinned
+              ? "text-primary hover:bg-primary/15"
+              : "text-muted-foreground/40 opacity-0 group-hover/source:opacity-100 hover:bg-accent hover:text-foreground"
+          )}
+        >
+          {source.pinned ? <Pin className="h-3 w-3" /> : <PinOff className="h-3 w-3" />}
+        </Button>
+      )}
     </li>
   );
 }

@@ -67,6 +67,7 @@ import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
 import { SprintCardWorkspace } from "@/components/sprint/sprint-card-workspace";
+import { TimerRing } from "@/components/sprint/timer-ring";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 // Spotify ambient bg is mounted globally in AppShell. Sprint also mounts
 // the player IN its header (z-100 overlay would cover the global TopBar
@@ -1025,7 +1026,6 @@ function RailCard({
   const totalMs = block.durationMin * 60_000;
   const remainingMs = Math.max(0, totalMs - elapsedMs);
   const overrunMs = elapsedMs > totalMs ? elapsedMs - totalMs : 0;
-  const pct = Math.min(100, (elapsedMs / totalMs) * 100);
   const slotKey = `${slotIdx + 1}`;
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({
@@ -1061,125 +1061,120 @@ function RailCard({
   );
 
   return (
-    <div
-      ref={(el) => {
-        composedRef(el);
-        rootRef.current = el;
-      }}
-      onClick={onFocus}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onFocus();
-        }
-      }}
-      className={cn(
-        "flex w-full shrink-0 cursor-pointer flex-col overflow-hidden rounded-xl border bg-card shadow-md transition-colors",
-        overrunMs > 0
-          ? "border-destructive/60"
-          : paused
-            ? "border-border/40"
-            : "border-primary/40",
-        isOver && "ring-2 ring-primary/60",
-        isDragging && "opacity-50"
-      )}
+    <TimerRing
+      elapsedMs={elapsedMs}
+      totalMs={totalMs}
+      overrunMs={overrunMs}
+      pathway={item.pathway}
+      paused={paused}
+      className="block w-full shrink-0"
     >
-      {/* Header strip — drag handle + slot number + priority dot */}
       <div
-        className="flex items-center gap-1 border-b border-border/30 bg-secondary/30 px-1.5 py-1"
-        onClick={(e) => e.stopPropagation()}
+        ref={(el) => {
+          composedRef(el);
+          rootRef.current = el;
+        }}
+        onClick={onFocus}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onFocus();
+          }
+        }}
+        className={cn(
+          "flex w-full cursor-pointer flex-col overflow-hidden rounded-xl bg-card shadow-md transition-shadow",
+          isOver && "ring-2 ring-primary/60",
+          isDragging && "opacity-50"
+        )}
       >
-        <button
-          type="button"
-          {...listeners}
-          {...attributes}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
-          title="Drag to reorder or swap with queue"
-          aria-label="Drag rail card"
+        {/* Header strip — drag handle + slot number + priority dot */}
+        <div
+          className="flex items-center gap-1 border-b border-border/30 bg-secondary/30 px-1.5 py-1"
+          onClick={(e) => e.stopPropagation()}
         >
-          <GripVertical className="h-3 w-3" />
-        </button>
-        <span className="rounded bg-primary/15 px-1 py-0.5 font-mono text-[9px] font-bold text-primary">
-          {slotKey}
-        </span>
-        <span className="ml-auto">
-          <PriorityDot priority={item.priority} />
-        </span>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-1 px-2 py-1.5">
-        <div className="flex items-center gap-1">
-          <PathwayBadge pathway={item.pathway} compact />
-        </div>
-        <h4 className="line-clamp-2 text-[11px] font-medium leading-snug text-foreground">
-          {item.title}
-        </h4>
-        <div className="mt-auto pt-1">
-          <div
-            className={cn(
-              "font-mono text-base font-bold tabular-nums tracking-tight",
-              overrunMs > 0
-                ? "text-destructive"
-                : paused
-                  ? "text-muted-foreground"
-                  : "text-foreground"
-            )}
+          <button
+            type="button"
+            {...listeners}
+            {...attributes}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
+            title="Drag to reorder or swap with queue"
+            aria-label="Drag rail card"
           >
-            {overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs)}
+            <GripVertical className="h-3 w-3" />
+          </button>
+          <span className="rounded bg-primary/15 px-1 py-0.5 font-mono text-[9px] font-bold text-primary">
+            {slotKey}
+          </span>
+          <span className="ml-auto">
+            <PriorityDot priority={item.priority} />
+          </span>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-1 px-2 py-1.5">
+          <div className="flex items-center gap-1">
+            <PathwayBadge pathway={item.pathway} compact />
           </div>
-          <div className="mt-0.5 h-0.5 w-full overflow-hidden rounded-full bg-border/30">
+          <h4 className="line-clamp-2 text-[11px] font-medium leading-snug text-foreground">
+            {item.title}
+          </h4>
+          <div className="mt-auto pt-1">
             <div
               className={cn(
-                "h-full transition-all",
-                overrunMs > 0 ? "bg-destructive" : "bg-primary"
+                "font-mono text-base font-bold tabular-nums tracking-tight",
+                overrunMs > 0
+                  ? "text-destructive"
+                  : paused
+                    ? "text-muted-foreground"
+                    : "text-foreground"
               )}
-              style={{ width: `${pct}%` }}
-            />
+            >
+              {overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs)}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Footer: Focus + icon Done + icon Skip */}
-      <div
-        className="flex items-center gap-1 border-t border-border/30 bg-secondary/30 px-1.5 py-1"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Button
-          type="button"
-          size="sm"
-          onClick={onFocus}
-          className="h-6 flex-1 gap-0.5 px-1 text-[10px]"
-          title="Bring this slot to focus"
+        {/* Footer: Focus + icon Done + icon Skip */}
+        <div
+          className="flex items-center gap-1 border-t border-border/30 bg-secondary/30 px-1.5 py-1"
+          onClick={(e) => e.stopPropagation()}
         >
-          Focus
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={onDone}
-          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-          title={`Done · ${slotKey}`}
-          aria-label="Mark done"
-        >
-          <Check className="h-3 w-3" />
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={onSkip}
-          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-          title="Skip"
-          aria-label="Skip"
-        >
-          <SkipForward className="h-3 w-3" />
-        </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={onFocus}
+            className="h-6 flex-1 gap-0.5 px-1 text-[10px]"
+            title="Bring this slot to focus"
+          >
+            Focus
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onDone}
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+            title={`Done · ${slotKey}`}
+            aria-label="Mark done"
+          >
+            <Check className="h-3 w-3" />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onSkip}
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+            title="Skip"
+            aria-label="Skip"
+          >
+            <SkipForward className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
-    </div>
+    </TimerRing>
   );
 }
 
@@ -1212,7 +1207,6 @@ function SlotCard({
   const totalMs = block.durationMin * 60_000;
   const remainingMs = Math.max(0, totalMs - elapsedMs);
   const overrunMs = elapsedMs > totalMs ? elapsedMs - totalMs : 0;
-  const pct = Math.min(100, (elapsedMs / totalMs) * 100);
 
   // For dialog labels: "1/2/3" matches the keyboard shortcut user sees.
   const slotKey = `${slotIdx + 1}`;
@@ -1252,9 +1246,15 @@ function SlotCard({
     rootRef.current = el;
   };
 
+  const timerLabel = overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs);
+
   return (
-    <div
-      ref={composedRef}
+    <TimerRing
+      elapsedMs={elapsedMs}
+      totalMs={totalMs}
+      overrunMs={overrunMs}
+      pathway={item.pathway}
+      paused={paused}
       className={cn(
         // h-full is load-bearing: the parent CockpitCrewLayout wrapper
         // (<div className="flex-1 min-w-0 min-h-0">) is a flex ITEM, not
@@ -1264,135 +1264,94 @@ function SlotCard({
         // so the workspace grows to its rail's natural height and the
         // shrink-0 footer (Done/Skip/Bench/Snooze/Detail) gets clipped
         // by overflow-hidden. The Done button disappears.
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-md transition-colors",
-        overrunMs > 0
-          ? "border-destructive/60"
-          : paused
-            ? "border-border/40"
-            : "border-primary/40",
-        isOver && "ring-2 ring-primary/60",
-        isDragging && "opacity-50"
+        "block h-full min-h-0"
       )}
     >
-      {/* Slot header strip — also the drag handle so card body remains
-          clickable for Done/Skip/Detail buttons. */}
-      <div className="flex items-center gap-2 border-b border-border/30 bg-secondary/30 px-3 py-1.5">
-        <button
-          type="button"
-          {...listeners}
-          {...attributes}
-          className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
-          title="Drag to reorder or swap with queue"
-          aria-label="Drag slot"
-        >
-          <GripVertical className="h-3.5 w-3.5" />
-        </button>
-        <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-primary">
-          {slotKey}
-        </span>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          MASH-{item.ticket_number}
-        </span>
-        <PathwayBadge pathway={item.pathway} compact />
-        <PriorityDot priority={item.priority} />
-        {item.company && (
-          <div className="ml-auto">
-            <CompanyBadge company={item.company} />
-          </div>
+      <div
+        ref={composedRef}
+        className={cn(
+          "flex h-full min-h-0 flex-col overflow-hidden rounded-xl bg-card shadow-md transition-shadow",
+          isOver && "ring-2 ring-primary/60",
+          isDragging && "opacity-50"
         )}
-      </div>
+      >
+        {/* Slot header strip — drag handle + slot number. Identity
+            (pathway / priority / company / ticket / title / quick
+            context / timer) lives in the workspace's identity strip. */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-border/30 bg-secondary/30 px-3 py-1.5">
+          <button
+            type="button"
+            {...listeners}
+            {...attributes}
+            className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
+            title="Drag to reorder or swap with queue"
+            aria-label="Drag slot"
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+          <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-primary">
+            {slotKey}
+          </span>
+          {item.company && (
+            <div className="ml-auto">
+              <CompanyBadge company={item.company} />
+            </div>
+          )}
+        </div>
 
-      {/* Body — split into shrink-0 header (title + timer + progress),
-          flex-1 workspace region (Sources rail + tabbed Workspace), and
-          shrink-0 footer. Scroll lives INSIDE the rail and the active
-          tab panel, never on the whole card — that was the bug that
-          made the focused card un-scrollable. */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="shrink-0 px-3 pt-3">
-          <h3 className="text-balance text-base font-semibold leading-snug">
-            {item.title}
-          </h3>
+        {/* Body — identity strip + workspace + footer. Scroll lives
+            INSIDE the rail and the active tab panel, never on the whole
+            card. */}
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+          <SprintCardWorkspace
+            item={item}
+            active
+            timer={{ label: timerLabel, overrun: overrunMs > 0, paused }}
+          />
 
-          {/* Timer */}
-          <div className="mt-3 flex items-baseline gap-2">
-            <span
-              className={cn(
-                "font-mono text-3xl font-bold tabular-nums tracking-tight",
-                overrunMs > 0
-                  ? "text-destructive"
-                  : paused
-                    ? "text-muted-foreground"
-                    : "text-foreground"
-              )}
+          {/* Footer actions */}
+          <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-t border-border/30 px-3 py-2">
+            <Button size="sm" onClick={onDone} className="gap-1.5">
+              <Check className="h-3.5 w-3.5" />
+              Done <span className="ml-1 font-mono text-[10px] opacity-60">{slotKey}</span>
+            </Button>
+            <Button size="sm" variant="outline" onClick={onSkip} className="gap-1.5">
+              <SkipForward className="h-3.5 w-3.5" />
+              Skip <span className="ml-1 font-mono text-[10px] opacity-60">{skipKey}</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onBench}
+              className="gap-1.5 text-muted-foreground"
+              title="Park on the Bench and pull the next item in"
             >
-              {overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs)}
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              {overrunMs > 0
-                ? "over plan"
-                : `of ${block.durationMin}m`}
-            </span>
+              <ArrowDownToLine className="h-3.5 w-3.5" />
+              Bench
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onSnooze}
+              className="gap-1.5 text-muted-foreground"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              Snooze 24h
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onOpen}
+              className="ml-auto gap-1.5 text-muted-foreground"
+              title="Open in side panel for full context"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              Detail
+            </Button>
           </div>
-          {/* Progress sliver */}
-          <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-border/30">
-            <div
-              className={cn(
-                "h-full transition-all",
-                overrunMs > 0 ? "bg-destructive" : "bg-primary"
-              )}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Workspace region — Sources Rail (left, 200px) + tabbed
-            Workspace (right). Each column owns its own scroll. */}
-        <div className="mt-3 flex flex-1 min-h-0 overflow-hidden border-t border-border/30">
-          <SprintCardWorkspace item={item} active />
-        </div>
-
-        {/* Footer actions */}
-        <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-t border-border/30 px-3 py-2">
-          <Button size="sm" onClick={onDone} className="gap-1.5">
-            <Check className="h-3.5 w-3.5" />
-            Done <span className="ml-1 font-mono text-[10px] opacity-60">{slotKey}</span>
-          </Button>
-          <Button size="sm" variant="outline" onClick={onSkip} className="gap-1.5">
-            <SkipForward className="h-3.5 w-3.5" />
-            Skip <span className="ml-1 font-mono text-[10px] opacity-60">{skipKey}</span>
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onBench}
-            className="gap-1.5 text-muted-foreground"
-            title="Park on the Bench and pull the next item in"
-          >
-            <ArrowDownToLine className="h-3.5 w-3.5" />
-            Bench
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onSnooze}
-            className="gap-1.5 text-muted-foreground"
-          >
-            <Clock className="h-3.5 w-3.5" />
-            Snooze 24h
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onOpen}
-            className="ml-auto gap-1.5 text-muted-foreground"
-            title="Open in side panel for full context"
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            Detail
-          </Button>
         </div>
       </div>
-    </div>
+    </TimerRing>
   );
 }
 

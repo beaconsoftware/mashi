@@ -44,6 +44,25 @@ import type {
   SourceDetails,
 } from "@/lib/s2d/claude-prompt";
 import type { Pathway, S2DItem } from "@/types";
+
+/**
+ * Read-only hook exposing the cached signals for an item — same query
+ * the legacy `<SprintItemContext>` component reads, but returned as
+ * data rather than JSX. The merged source list in the slot rail
+ * consumes this through `mergeSources()` so cached + pulled live in
+ * one ordered list.
+ *
+ * `enabled` gates the underlying network call; pass `false` from
+ * benched / queued slots that aren't on-screen.
+ */
+export function useCachedContextSignals(item: S2DItem, enabled: boolean) {
+  const ctx = useS2DItemContext(item.id, enabled);
+  return {
+    isLoading: ctx.isLoading,
+    isError: ctx.isError,
+    sources: (ctx.data?.sources ?? []) as SourceContext[],
+  };
+}
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
