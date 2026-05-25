@@ -17,6 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { MashiMark } from "@/components/shared/mashi-mark";
 
 const NAV = [
@@ -113,10 +114,11 @@ export function Sidebar() {
             active={pathname.startsWith("/settings")}
           />
           <form action="/auth/sign-out" method="POST" className="w-full">
-            <button
+            <Button
               type="submit"
               aria-label="Sign out"
-              className="group/item flex h-9 w-full items-center"
+              variant="ghost"
+              className="group/item flex h-9 w-full items-center justify-start rounded-none px-0 hover:bg-transparent"
             >
               <div className="flex h-9 w-14 shrink-0 items-center justify-center">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-[11px] font-medium text-foreground transition-transform duration-200 group-hover/item:scale-110 group-active/item:scale-95">
@@ -126,7 +128,7 @@ export function Sidebar() {
               <span className="whitespace-nowrap text-left text-sm text-muted-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-hover:delay-75">
                 Sign out
               </span>
-            </button>
+            </Button>
           </form>
         </div>
       </div>
