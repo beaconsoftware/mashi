@@ -64,16 +64,22 @@ function CommandInput({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
+  // Input height matches the wrapper, no rounded corners. The globals.css
+  // :focus-visible rule paints a 2px primary ring on every focusable
+  // element; on a rounded h-10 input inside an h-9 wrapper, that ring
+  // bled visibly above and below the search bar. Suppress the ring on
+  // this input — focus is communicated by the cursor + the wrapper's
+  // border-b that already anchors the search row.
   return (
     <div
       data-slot="command-input-wrapper"
-      className="flex h-9 items-center gap-2 border-b px-3"
+      className="flex h-11 items-center gap-2 border-b px-3"
     >
       <SearchIcon className="size-4 shrink-0 opacity-50" />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
-          "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-full w-full bg-transparent text-sm outline-hidden placeholder:text-muted-foreground focus-visible:shadow-none disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
         {...props}
