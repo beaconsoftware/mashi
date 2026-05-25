@@ -2,7 +2,7 @@
 
 // translucency-audit-ok: file — sprint card chrome composed of sanctioned /15 + /55 surfaces, see AGENTS.md.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -17,18 +17,24 @@ import {
   GitBranch,
   KanbanSquare,
   MessageSquare,
+  Pin,
+  PinOff,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { S2DItem } from "@/types";
 import { SprintContextPackage } from "./sprint-context-package";
 import { SprintItemContext } from "./sprint-item-context";
 import {
   useEnrichedContext,
   useRunEnrich,
+  usePinSource,
   type EnrichPulledSource,
   type EnrichSourceKind,
   type EnrichedContext,
+  type EnrichThreadTurn,
 } from "@/hooks/use-enriched-context";
 
 /**
@@ -156,13 +162,12 @@ function Section2EnrichPlan({ item }: { item: S2DItem }) {
           Enrich failed: {error instanceof Error ? error.message : String(error)}
         </div>
       )}
-      {hasRun && ctx && <EnrichResult ctx={ctx} />}
+      {hasRun && ctx && <EnrichResult ctx={ctx} itemId={item.id} />}
     </SectionShell>
   );
 }
 
-function EnrichResult({ ctx }: { ctx: EnrichedContext }) {
-  const latestAssistant = [...ctx.thread].reverse().find((t) => t.role === "assistant");
+function EnrichResult({ ctx, itemId }: { ctx: EnrichedContext; itemId: string }) {
   return (
     <div className="space-y-3">
       {ctx.plan.length > 0 && (
@@ -180,18 +185,135 @@ function EnrichResult({ ctx }: { ctx: EnrichedContext }) {
           </ol>
         </div>
       )}
-      {latestAssistant && (
-        <div className="rounded-md border border-border/40 bg-secondary/20 p-2 text-[11px] leading-snug text-muted-foreground">
-          {latestAssistant.content}
-        </div>
-      )}
-      <PulledSourcesList sources={ctx.pulled_sources} />
+      <PulledSourcesList sources={ctx.pulled_sources} itemId={itemId} />
+      <RefineThread thread={ctx.thread} itemId={itemId} />
     </div>
   );
 }
 
-function PulledSourcesList({ sources }: { sources: EnrichPulledSource[] }) {
+/**
+ * Show the refine conversation + a composer. Default: collapsed to the
+ * last assistant turn so the card stays compact. "Show full history"
+ * expands.
+ *
+ * The first thread pair is the canonical "Enrich this item: <title>" →
+ * <assistant reply>. Refine turns get appended. Each assistant turn
+ * inherits a thin border so it reads as a reply, not a separate block.
+ */
+function RefineThread({
+  thread,
+  itemId,
+}: {
+  thread: EnrichThreadTurn[];
+  itemId: string;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [draft, setDraft] = useState("");
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const run = useRunEnrich(itemId);
+  const busy = run.isPending;
+
+  // Decide what to render. The first user/assistant pair is the
+  // initial enrich result; we surface the LATEST assistant message
+  // (already shown above as "Plan + assistant note") + any subsequent
+  // refine turns. If there are no refine turns, just the composer.
+  const initialPairLen = 2; // user[0] + assistant[1]
+  const refineTurns = thread.slice(initialPairLen);
+  const visible = showAll ? refineTurns : refineTurns.slice(-2 * 1); // show last 1 q/a pair when collapsed
+  const hiddenCount = refineTurns.length - visible.length;
+
+  async function handleSend() {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setDraft("");
+    try {
+      await run.mutateAsync(text);
+    } catch {
+      // Restore the draft so the user can edit + retry; the mutation
+      // hook surfaces the error on the run object too.
+      setDraft(text);
+    }
+    composerRef.current?.focus();
+  }
+
+  return (
+    <div className="space-y-2">
+      {refineTurns.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Refine
+            {hiddenCount > 0 && !showAll && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowAll(true)}
+                className="h-auto px-1 py-0 text-[10px] font-normal tracking-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
+              >
+                · show {hiddenCount} earlier {hiddenCount === 1 ? "turn" : "turns"}
+              </Button>
+            )}
+          </div>
+          <ul className="space-y-1.5">
+            {visible.map((turn, i) => (
+              <li
+                key={`${turn.at}:${i}`}
+                className={cn(
+                  "rounded-md border px-2 py-1.5 text-[11px] leading-snug",
+                  turn.role === "user"
+                    ? "border-border/30 bg-secondary/30 text-foreground/90"
+                    : "border-primary/30 bg-primary/5 text-muted-foreground"
+                )}
+              >
+                <div className="mb-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                  {turn.role === "user" ? "you" : "mashi"}
+                </div>
+                {turn.content}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {/* Composer */}
+      <div className="flex items-start gap-1.5">
+        <Textarea
+          ref={composerRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" && (e.metaKey || e.ctrlKey)) || (e.key === "Enter" && !e.shiftKey)) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          placeholder="Refine — find me examples from May, focus on Linear only, …"
+          rows={2}
+          className="min-h-0 resize-none rounded-md border-border/40 bg-card/55 px-2 py-1.5 text-[11px] leading-snug placeholder:text-muted-foreground/70"
+          disabled={busy}
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleSend}
+          disabled={busy || draft.trim().length === 0}
+          className="h-8 gap-1 px-2 text-[11px]"
+          title="Send refine (Enter; Shift+Enter for newline)"
+        >
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PulledSourcesList({
+  sources,
+  itemId,
+}: {
+  sources: EnrichPulledSource[];
+  itemId: string;
+}) {
   const [open, setOpen] = useState(false);
+  const pin = usePinSource(itemId);
   if (sources.length === 0) {
     return (
       <div className="text-[11px] text-muted-foreground">
@@ -230,7 +352,10 @@ function PulledSourcesList({ sources }: { sources: EnrichPulledSource[] }) {
           {sources.map((s, i) => (
             <li
               key={`${s.kind}:${s.ref}:${i}`}
-              className="flex items-start gap-2 rounded border border-border/30 bg-card/55 px-2 py-1.5"
+              className={cn(
+                "flex items-start gap-2 rounded border px-2 py-1.5",
+                s.pinned ? "border-primary/40 bg-primary/5" : "border-border/30 bg-card/55"
+              )}
             >
               <SourceKindIcon kind={s.kind} />
               <div className="min-w-0 flex-1">
@@ -248,6 +373,29 @@ function PulledSourcesList({ sources }: { sources: EnrichPulledSource[] }) {
                   {s.when.slice(0, 10)}
                 </span>
               )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  pin.mutate({ source: { kind: s.kind, ref: s.ref }, pinned: !s.pinned })
+                }
+                className={cn(
+                  "h-6 w-6 shrink-0 p-0",
+                  s.pinned
+                    ? "text-primary hover:bg-primary/15 hover:text-primary"
+                    : "text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                )}
+                title={
+                  s.pinned
+                    ? "Unpin — drops from future refine turns"
+                    : "Pin — keeps this source across refine turns + downstream actions"
+                }
+                aria-pressed={s.pinned}
+                aria-label={s.pinned ? "Unpin source" : "Pin source"}
+              >
+                {s.pinned ? <Pin className="h-3 w-3" /> : <PinOff className="h-3 w-3" />}
+              </Button>
             </li>
           ))}
         </ul>

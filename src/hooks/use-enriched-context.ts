@@ -88,3 +88,58 @@ export function useRunEnrich(itemId: string) {
     },
   });
 }
+
+/**
+ * Toggle the pinned flag on a single pulled source. Pinned sources
+ * survive subsequent refine turns; unpinned ones get replaced when the
+ * agent surfaces a new hit set.
+ *
+ * Optimistic: the local cache flips immediately so the pin star
+ * doesn't lag the click. On error we roll back to the prior snapshot.
+ */
+export function usePinSource(itemId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      source: { kind: EnrichSourceKind; ref: string };
+      pinned: boolean;
+    }): Promise<EnrichedContext> => {
+      const res = await fetch(`/api/s2d/${itemId}/enrich`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? `pin ${res.status}`);
+      }
+      const data = (await res.json()) as RunResponse;
+      return data.enriched_context;
+    },
+    onMutate: async (args) => {
+      await qc.cancelQueries({ queryKey: enrichKey(itemId) });
+      const prev = qc.getQueryData<ReadResponse>(enrichKey(itemId));
+      if (prev?.enriched_context) {
+        const nextSources = prev.enriched_context.pulled_sources.map((s) =>
+          s.kind === args.source.kind && s.ref === args.source.ref
+            ? { ...s, pinned: args.pinned }
+            : s
+        );
+        qc.setQueryData<ReadResponse>(enrichKey(itemId), {
+          ...prev,
+          enriched_context: { ...prev.enriched_context, pulled_sources: nextSources },
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _args, ctx) => {
+      if (ctx?.prev) qc.setQueryData(enrichKey(itemId), ctx.prev);
+    },
+    onSuccess: (next) => {
+      qc.setQueryData<ReadResponse>(enrichKey(itemId), {
+        enriched_context: next,
+        enriched_at: next.last_enriched_at,
+      });
+    },
+  });
+}

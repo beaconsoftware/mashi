@@ -219,6 +219,82 @@ export async function POST(
 }
 
 /**
+ * PATCH /api/s2d/{id}/enrich
+ *
+ * Mutate a single source's `pinned` flag without re-running the agent.
+ * Body: { source: { kind, ref }, pinned: boolean }
+ *
+ * Pinned sources survive refine turns; unpinned ones get replaced when
+ * a follow-up search yields different hits. This is the UI's pin/unpin
+ * affordance.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const body = (await req.json().catch(() => ({}))) as {
+    source?: { kind?: string; ref?: string };
+    pinned?: boolean;
+  };
+  const kind = body.source?.kind;
+  const ref = body.source?.ref;
+  const pinned = !!body.pinned;
+  if (!kind || !ref) {
+    return NextResponse.json(
+      { error: "source { kind, ref } required" },
+      { status: 400 }
+    );
+  }
+
+  const userSb = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await userSb.auth.getUser();
+  if (!user) return new Response("unauthorized", { status: 401 });
+
+  const sb = createSupabaseServiceClient();
+  const { data: item, error: itemErr } = await sb
+    .from("s2d_items")
+    .select("id, enriched_context")
+    .eq("user_id", user.id)
+    .eq("id", id)
+    .single();
+  if (itemErr || !item) {
+    return NextResponse.json({ error: "item not found" }, { status: 404 });
+  }
+
+  const ctx = (item.enriched_context ?? {}) as Partial<EnrichedContext>;
+  const sources: PulledSource[] = Array.isArray(ctx.pulled_sources) ? ctx.pulled_sources : [];
+  let touched = false;
+  const next = sources.map((s) => {
+    if (s.kind === kind && s.ref === ref && s.pinned !== pinned) {
+      touched = true;
+      return { ...s, pinned };
+    }
+    return s;
+  });
+  if (!touched) {
+    return NextResponse.json({ enriched_context: ctx });
+  }
+
+  const updated: EnrichedContext = {
+    plan: Array.isArray(ctx.plan) ? ctx.plan : [],
+    pulled_sources: next,
+    thread: Array.isArray(ctx.thread) ? ctx.thread : [],
+    last_enriched_at: typeof ctx.last_enriched_at === "string" ? ctx.last_enriched_at : "",
+  };
+  const { error } = await sb
+    .from("s2d_items")
+    .update({ enriched_context: updated })
+    .eq("user_id", user.id)
+    .eq("id", item.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ enriched_context: updated });
+}
+
+/**
  * GET /api/s2d/{id}/enrich
  *
  * Cheap reader so the card can display the current enriched_context
