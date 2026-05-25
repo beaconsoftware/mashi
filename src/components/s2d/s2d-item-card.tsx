@@ -132,7 +132,9 @@ export function S2DItemCard({ item, isOverlay, density = "compact" }: Props) {
         </span>
       )}
 
-      <div className="mb-1.5 flex items-center gap-1.5">
+      {/* Chip row: wraps when contents exceed card width. PriorityDot
+          stays anchored to the right via ml-auto on the LAST line. */}
+      <div className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
         {item.ticket_number != null && (
           <span className="font-mono text-[10px] text-muted-foreground/80">
             MASH-{item.ticket_number}
