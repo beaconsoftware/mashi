@@ -23,6 +23,7 @@ import {
   applyS2DFilters,
   parseFilterParams,
   serializeFilterParams,
+  FILTER_PARAM_KEYS,
   type S2DFilterState,
 } from "@/components/s2d/s2d-filters";
 import { STATUS_ORDER, type S2DItem, type S2DStatus, PATHWAY_META, PRIORITY_META } from "@/types";
@@ -64,9 +65,7 @@ export function S2DBoard() {
     (next: S2DFilterState) => {
       const params = new URLSearchParams(searchParams.toString());
       // Strip the filter keys and re-set from `next`, so unrelated params survive
-      params.delete("company");
-      params.delete("pathway");
-      params.delete("priority");
+      for (const k of FILTER_PARAM_KEYS) params.delete(k);
       for (const [k, v] of serializeFilterParams(next)) params.set(k, v);
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });

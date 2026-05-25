@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { X, Filter } from "lucide-react";
+import { X, Filter, Sun, AlertCircle } from "lucide-react";
 import { useCompanies } from "@/hooks/use-s2d";
 import {
   PATHWAY_META,
@@ -13,21 +13,33 @@ import {
 import { cn } from "@/lib/utils";
 import { ChromeBar } from "@/components/layout/primitives";
 import { Button } from "@/components/ui/button";
+import { getPlannedState } from "@/lib/planned";
+
+export type PlannedFilter = "today" | "overdue";
 
 export interface S2DFilterState {
   companies: Set<string>;
   pathways: Set<Pathway>;
   priorities: Set<Priority>;
+  planned: Set<PlannedFilter>;
 }
 
 export const EMPTY_FILTER: S2DFilterState = {
   companies: new Set(),
   pathways: new Set(),
   priorities: new Set(),
+  planned: new Set(),
 };
+
+/**
+ * URL param keys used by the filter. Exported so consumers (e.g.
+ * S2DBoard's setFilters) can strip them before re-serializing.
+ */
+export const FILTER_PARAM_KEYS = ["company", "pathway", "priority", "planned"] as const;
 
 const VALID_PATHWAYS = new Set(Object.keys(PATHWAY_META) as Pathway[]);
 const VALID_PRIORITIES = new Set(Object.keys(PRIORITY_META) as Priority[]);
+const VALID_PLANNED = new Set<PlannedFilter>(["today", "overdue"]);
 
 /**
  * Read filter state from URL search params. Each dimension serialized as a
@@ -54,6 +66,11 @@ export function parseFilterParams(
         VALID_PRIORITIES.has(p as Priority)
       )
     ),
+    planned: new Set(
+      [...read("planned")].filter((p): p is PlannedFilter =>
+        VALID_PLANNED.has(p as PlannedFilter)
+      )
+    ),
   };
 }
 
@@ -67,6 +84,7 @@ export function serializeFilterParams(s: S2DFilterState): Array<[string, string]
   if (s.companies.size > 0) out.push(["company", [...s.companies].join(",")]);
   if (s.pathways.size > 0) out.push(["pathway", [...s.pathways].join(",")]);
   if (s.priorities.size > 0) out.push(["priority", [...s.priorities].join(",")]);
+  if (s.planned.size > 0) out.push(["planned", [...s.planned].join(",")]);
   return out;
 }
 
@@ -90,6 +108,11 @@ export function applyS2DFilters(
       return false;
     if (f.pathways.size > 0 && !f.pathways.has(it.pathway)) return false;
     if (f.priorities.size > 0 && !f.priorities.has(it.priority)) return false;
+    if (f.planned.size > 0) {
+      const state = getPlannedState(it);
+      // null state (not planned, or done, or older than yesterday) never matches.
+      if (!state || !f.planned.has(state)) return false;
+    }
     return true;
   });
 }
@@ -118,7 +141,8 @@ export function S2DFilters({
   const anyActive =
     state.companies.size > 0 ||
     state.pathways.size > 0 ||
-    state.priorities.size > 0;
+    state.priorities.size > 0 ||
+    state.planned.size > 0;
 
   function toggleCompany(id: string) {
     const next = new Set(state.companies);
@@ -138,6 +162,12 @@ export function S2DFilters({
     else next.add(p);
     setState({ ...state, priorities: next });
   }
+  function togglePlanned(p: PlannedFilter) {
+    const next = new Set(state.planned);
+    if (next.has(p)) next.delete(p);
+    else next.add(p);
+    setState({ ...state, planned: next });
+  }
   function clearAll() {
     setState(EMPTY_FILTER);
   }
@@ -151,6 +181,28 @@ export function S2DFilters({
   return (
     <ChromeBar className="flex flex-wrap items-center gap-1.5 border-border/30 px-4 py-2 text-[11px]">
       <Filter className="h-3 w-3 text-muted-foreground" />
+
+      {/* Planned — daily-focus filter; pairs with the TODAY / OVERDUE
+          badges on cards so the user can see "just what I committed to
+          today" in one click. */}
+      <ChipGroup label="Planned">
+        <Chip
+          active={state.planned.has("today")}
+          onClick={() => togglePlanned("today")}
+        >
+          <Sun aria-hidden className="h-2.5 w-2.5" />
+          Today
+        </Chip>
+        <Chip
+          active={state.planned.has("overdue")}
+          onClick={() => togglePlanned("overdue")}
+        >
+          <AlertCircle aria-hidden className="h-2.5 w-2.5" />
+          Overdue
+        </Chip>
+      </ChipGroup>
+
+      <Divider />
 
       {/* Companies */}
       <ChipGroup label="Company">
