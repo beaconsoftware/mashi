@@ -122,7 +122,14 @@ export function FocusOverlay({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-y-0 right-0 left-14 z-focus flex flex-col bg-background/15 text-foreground backdrop-blur-sm",
+        // bg-background/95 (sanctioned step) — opaque enough to obscure
+        // any underlying route's dense text. The prior /15 let dense
+        // pages like /cockpit ("Behind last week by 157", item list, …)
+        // read through clearly, producing the striped/bleed-through
+        // look the user reported on the sprint card. /95 keeps a
+        // hairline of translucency so the Spotify ambient album-art
+        // layer beneath can still tint the surface.
+        "fixed inset-y-0 right-0 left-14 z-focus flex flex-col bg-background/95 text-foreground backdrop-blur-sm",
         className
       )}
     >
