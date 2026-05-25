@@ -32,9 +32,10 @@ interface CalAccount {
  *   1. sprint_start_at / sprint_end_at on each S2D item (always)
  *   2. (optional) GCal events via /api/sprint/create-events
  *
- * Event title is `Working on: {title}` so the user's own calendar reads
- * like a real day plan. Description carries pathway + priority + a
- * deep link back to the Mashi item.
+ * Calendar push creates ONE consolidated event covering the whole
+ * sprint window. Title is "Working on: <title1>, <title2>, …", body
+ * lists each block's pathway/priority/duration + Mashi deep link.
+ * All s2d_items rows in the sprint get the same calendar_event_id.
  */
 export function PlannerReview() {
   const { data: items } = useS2DItems();
@@ -131,12 +132,13 @@ export function PlannerReview() {
                 className="mt-0.5"
               />
               <span>
-                Push these blocks to my calendar.{" "}
+                Push this sprint to my calendar.{" "}
                 <span className="text-muted-foreground">
-                  Each event is titled{" "}
-                  <span className="font-mono">Working on: {"<title>"}</span>; the
-                  description carries pathway, priority, and a deep link back to
-                  the Mashi item.
+                  Creates one consolidated event spanning the whole sprint,
+                  titled{" "}
+                  <span className="font-mono">Working on: {"<titles>"}</span>;
+                  the description lists each block's pathway, priority, and a
+                  deep link back to the Mashi item.
                 </span>
               </span>
             </label>
