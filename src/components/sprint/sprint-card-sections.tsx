@@ -24,6 +24,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { S2DItem } from "@/types";
 import { SprintContextPackage } from "./sprint-context-package";
 import { SprintItemContext } from "./sprint-item-context";
@@ -462,11 +464,7 @@ function Section3Act({ item }: { item: S2DItem }) {
       <div className="mt-2">
         {tab === "claude" && <ActPanelClaude item={item} />}
         {tab === "draft" && <ActPanelDraft item={item} />}
-        {tab === "decide" && (
-          <div className="rounded-md border border-dashed border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
-            Record the decision + optionally spin up a follow-up item. PR 7.
-          </div>
-        )}
+        {tab === "decide" && <ActPanelDecide item={item} />}
       </div>
     </SectionShell>
   );
@@ -782,6 +780,164 @@ function draftActionKeyForPathway(pathway: S2DItem["pathway"]): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * Decide tab — record a decision on the current item + optionally spin
+ * up a follow-up item snoozed to a chosen date. For decision_gate
+ * pathway items this is the natural close; other pathways can still
+ * use it to capture "what I decided" before moving on.
+ *
+ * POSTs to /api/s2d/{id}/decide. Server writes decision_note +
+ * decision_at + has_unseen_updates on the current item, and inserts a
+ * follow-up s2d_item with status=in_queue + snoozed_until when the
+ * follow-up section is enabled.
+ */
+function ActPanelDecide({ item }: { item: S2DItem }) {
+  const [note, setNote] = useState("");
+  const [trackFollowUp, setTrackFollowUp] = useState(false);
+  const [followUpText, setFollowUpText] = useState("");
+  const [followUpDate, setFollowUpDate] = useState(defaultFollowUpDate());
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset on item change so promoting a new queued block into this slot
+  // doesn't surface the prior decision as draft input.
+  useEffect(() => {
+    setNote("");
+    setTrackFollowUp(false);
+    setFollowUpText("");
+    setFollowUpDate(defaultFollowUpDate());
+    setSavedAt(null);
+    setError(null);
+  }, [item.id]);
+
+  async function save() {
+    if (!note.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const followUp =
+        trackFollowUp && followUpText.trim() && followUpDate
+          ? { text: followUpText.trim(), snooze_until: followUpDate }
+          : undefined;
+      const res = await fetch(`/api/s2d/${item.id}/decide`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note: note.trim(),
+          ...(followUp ? { follow_up: followUp } : {}),
+        }),
+      });
+      const j = (await res.json()) as { ok?: boolean; error?: string; follow_up_id?: string; follow_up_error?: string };
+      if (!res.ok || !j.ok) {
+        setError(j.error ?? `decide failed (${res.status})`);
+        return;
+      }
+      setSavedAt(Date.now());
+      if (j.follow_up_error) {
+        setError(`Decision saved, but follow-up failed: ${j.follow_up_error}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "decide failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const justSaved = !!savedAt && Date.now() - savedAt < 4000;
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/40 bg-card/55 p-2.5">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        Decision
+      </div>
+      <Textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="What did you decide and why? (e.g. 'Going with option B — vendor lock-in risk on A outweighs the 2-week ship gain.')"
+        rows={3}
+        className="resize-none rounded-md border-border/40 bg-card/80 px-2 py-1.5 text-[12px] leading-snug placeholder:text-muted-foreground/70"
+        disabled={saving}
+      />
+
+      <label className="flex items-start gap-2 text-[11px]">
+        <Checkbox
+          checked={trackFollowUp}
+          onCheckedChange={(v) => setTrackFollowUp(v === true)}
+          disabled={saving}
+          className="mt-0.5"
+        />
+        <span>
+          Track a follow-up{" "}
+          <span className="text-muted-foreground">
+            (creates a new item snoozed until the chosen date)
+          </span>
+        </span>
+      </label>
+
+      {trackFollowUp && (
+        <div className="space-y-1.5 rounded-md border border-border/30 bg-secondary/20 p-2">
+          <Textarea
+            value={followUpText}
+            onChange={(e) => setFollowUpText(e.target.value)}
+            placeholder="What's the next concrete step? (e.g. 'Send vendor B contract to Legal for redline')"
+            rows={2}
+            className="resize-none rounded-md border-border/40 bg-card/80 px-2 py-1.5 text-[12px] leading-snug placeholder:text-muted-foreground/70"
+            disabled={saving}
+          />
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <span className="text-muted-foreground">Resurface on</span>
+            <Input
+              type="date"
+              value={followUpDate}
+              onChange={(e) => setFollowUpDate(e.target.value)}
+              disabled={saving}
+              className="h-7 w-auto rounded border border-border/40 bg-card/80 px-1.5 py-0.5 text-[11px]"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          onClick={save}
+          disabled={
+            saving ||
+            !note.trim() ||
+            (trackFollowUp && (!followUpText.trim() || !followUpDate))
+          }
+          className="h-7 gap-1.5 px-2 text-[11px]"
+        >
+          {saving ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <CheckSquare className="h-3 w-3" />
+          )}
+          {saving ? "Saving" : "Save decision"}
+        </Button>
+        {justSaved && !error && (
+          <span className="text-[10px] text-muted-foreground">
+            Decision saved. Click Done in Section 4 when you&apos;re ready to move on.
+          </span>
+        )}
+        {error && (
+          <span className="text-[10px] text-destructive">{error}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function defaultFollowUpDate(): string {
+  // Default to one week out — common cadence for "park this and come
+  // back when I've got data / when X happens."
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
 }
 
 // ─────────────────────────────────────────────────────────────────────
