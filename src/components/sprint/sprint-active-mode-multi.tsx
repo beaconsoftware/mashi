@@ -74,6 +74,8 @@ import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 import { SpotifyPlayer } from "@/components/sprint/spotify-player";
 import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
 import { FocusOverlay } from "@/components/layout/primitives";
+import { useGSAP } from "@gsap/react";
+import { gsap, DUR, EASE, withMotion } from "@/lib/animation";
 import { useDeckCardHover } from "@/lib/animation/interactions";
 import { PATHWAY_META } from "@/types";
 import { cn } from "@/lib/utils";
@@ -82,6 +84,8 @@ import type { S2DItem } from "@/types";
 export function SprintActiveModeMulti() {
   const blocks = useSprintStore((s) => s.blocks);
   const activeSlotIds = useSprintStore((s) => s.activeSlotIds);
+  const focusedSlotId = useSprintStore((s) => s.focusedSlotId);
+  const focusSlot = useSprintStore((s) => s.focusSlot);
   const paused = useSprintStore((s) => s.paused);
   const sprintStartedAt = useSprintStore((s) => s.sprintStartedAt);
   const completeBlock = useSprintStore((s) => s.completeBlock);
@@ -282,6 +286,12 @@ export function SprintActiveModeMulti() {
         const [moved] = next.splice(fromIdx, 1);
         next.splice(clamped, 0, moved);
         reorderActiveSlots(next);
+        // Cockpit + Crew: if the drop landed on the focused slot's
+        // position, the user clearly wants the dragged-in item front
+        // and center. Move focus to follow the intent.
+        if (focusedSlotId && clamped === activeSlotIds.indexOf(focusedSlotId)) {
+          focusSlot(fromItemId);
+        }
         return;
       }
       if (overId === "queue" || overId.startsWith("queue:")) {
@@ -574,12 +584,29 @@ export function SprintActiveModeMulti() {
           e.preventDefault();
           skip(id);
         }
+      } else if (e.key === "Tab" || e.key === "f" || e.key === "F") {
+        // Cockpit + Crew: cycle focus across active slots. Tab forward,
+        // Shift+Tab backward, `f` forward (mnemonic alias). No-op when
+        // there's 0 or 1 active slot, or when the detail panel owns the
+        // foreground.
+        if (detailItemId) return;
+        if (activeSlotIds.length <= 1) return;
+        e.preventDefault();
+        const direction = e.shiftKey ? -1 : 1;
+        const currentIdx = focusedSlotId
+          ? activeSlotIds.indexOf(focusedSlotId)
+          : 0;
+        const next =
+          activeSlotIds[
+            (currentIdx + direction + activeSlotIds.length) % activeSlotIds.length
+          ];
+        if (next) focusSlot(next);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSlotIds, paused, detailItemId]);
+  }, [activeSlotIds, paused, detailItemId, focusedSlotId]);
 
   const total = blocks.length;
   const done = completedBlocks.filter((b) => b.status === "done").length;
@@ -659,47 +686,26 @@ export function SprintActiveModeMulti() {
       )}
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        {/* Active slots — 3 columns side by side on wide, stacked on narrow */}
-        <div className="relative z-10 grid flex-1 min-h-0 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-3">
-          {Array.from({ length: MAX_PARALLEL_SLOTS }).map((_, slotIdx) => {
-            const block = activeBlocks[slotIdx];
-            if (!block) {
-              return (
-                <EmptySlot
-                  key={`empty-${slotIdx}`}
-                  slotIdx={slotIdx}
-                  hasMoreInQueue={queuedBlocks.length > 0}
-                />
-              );
-            }
-            const item = itemMap.get(block.s2dItemId);
-            if (!item) {
-              return (
-                <div
-                  key={block.s2dItemId}
-                  className="rounded-xl border border-border/30 bg-card/60 p-4 text-[12px] text-muted-foreground"
-                >
-                  MASH item missing from cache (id {block.s2dItemId.slice(0, 8)})
-                </div>
-              );
-            }
-            return (
-              <SlotCard
-                key={block.s2dItemId}
-                slotIdx={slotIdx}
-                block={block}
-                item={item}
-                paused={paused}
-                isDragging={draggingId === `slot:${block.s2dItemId}`}
-                onDone={() => markDone(block.s2dItemId)}
-                onSkip={() => skip(block.s2dItemId)}
-                onSnooze={() => snooze(block.s2dItemId)}
-                onBench={() => sendToBench(block.s2dItemId)}
-                onOpen={() => setDetailItemId(block.s2dItemId)}
-              />
-            );
-          })}
-        </div>
+        {/* Cockpit + Crew layout: one focused slot fills the center, the
+            other 0-2 active slots collapse to skinny rail cards on left /
+            right. Bench + Done strips render below, unchanged. See the
+            implementation spec in the v2 redesign for the focus-swap
+            rules; the store reconciles focusedSlotId on every mutator
+            that can drop the focused id out of activeSlotIds. */}
+        <CockpitCrewLayout
+          activeBlocks={activeBlocks}
+          focusedSlotId={focusedSlotId}
+          queuedBlocks={queuedBlocks}
+          itemMap={itemMap}
+          paused={paused}
+          draggingId={draggingId}
+          onFocus={(id) => focusSlot(id)}
+          onDone={markDone}
+          onSkip={skip}
+          onSnooze={snooze}
+          onBench={sendToBench}
+          onOpen={(id) => setDetailItemId(id)}
+        />
 
         {/* Bench (formerly "Up next" — items selected for this sprint that
             aren't in an active slot). Always rendered so a slot can be
@@ -825,12 +831,365 @@ function DetailPanel({
   );
 }
 
+/**
+ * Cockpit + Crew layout shell. Splits activeBlocks around focusedSlotId:
+ * lower-index actives go to the left rail, higher-index go right. The
+ * focused block fills the center column at full width and renders the
+ * full SlotCard (header / timer / SprintCardSections / footer).
+ *
+ * Edge cases:
+ *   - 0 active blocks      → center renders <EmptySlot /> for slot 0.
+ *   - 1 active block       → focused fills width, no rails.
+ *   - 2 active blocks      → focused center + 1 rail on the relevant side.
+ *   - 3 active blocks      → focused center + 1 rail each side (or 2
+ *                            stacked on the same side if focus is on
+ *                            slot 0 or 2).
+ *   - Focused id not found → falls back to activeBlocks[0] (defensive;
+ *                            store reconciliation should prevent this).
+ *
+ * Below the focused row sit the Bench and Done strips, rendered by the
+ * parent SprintActiveModeMulti — this component owns only the active
+ * row layout.
+ */
+function CockpitCrewLayout({
+  activeBlocks,
+  focusedSlotId,
+  queuedBlocks,
+  itemMap,
+  paused,
+  draggingId,
+  onFocus,
+  onDone,
+  onSkip,
+  onSnooze,
+  onBench,
+  onOpen,
+}: {
+  activeBlocks: SprintBlock[];
+  focusedSlotId: string | null;
+  queuedBlocks: SprintBlock[];
+  itemMap: Map<string, S2DItem>;
+  paused: boolean;
+  draggingId: string | null;
+  onFocus: (id: string | null) => void;
+  onDone: (id: string) => void;
+  onSkip: (id: string) => void;
+  onSnooze: (id: string) => void;
+  onBench: (id: string) => void;
+  onOpen: (id: string) => void;
+}) {
+  // No active blocks → empty cockpit. Mirrors the previous behavior
+  // where each empty slot rendered <EmptySlot />.
+  if (activeBlocks.length === 0) {
+    return (
+      <div className="relative z-10 flex flex-1 min-h-0 items-stretch p-3">
+        <div className="flex-1 min-w-0 min-h-0">
+          <EmptySlot slotIdx={0} hasMoreInQueue={queuedBlocks.length > 0} />
+        </div>
+      </div>
+    );
+  }
+
+  // Find the focused block's index. Defensive fallback to slot 0 if
+  // focusedSlotId is stale; store reconciliation should prevent this.
+  let focusedIdx = activeBlocks.findIndex(
+    (b) => b.s2dItemId === focusedSlotId
+  );
+  if (focusedIdx < 0) focusedIdx = 0;
+
+  const focused = activeBlocks[focusedIdx];
+  const leftRail = activeBlocks.slice(0, focusedIdx); // 0-2 blocks
+  const rightRail = activeBlocks.slice(focusedIdx + 1);
+
+  const focusedItem = itemMap.get(focused.s2dItemId);
+
+  return (
+    <div className="relative z-10 flex flex-1 min-h-0 gap-3 overflow-hidden p-3">
+      {leftRail.length > 0 && (
+        <div className="flex w-[140px] shrink-0 flex-col gap-3">
+          {leftRail.map((b, idx) => {
+            const it = itemMap.get(b.s2dItemId);
+            if (!it) return null;
+            // The rail's slot index equals its original position in
+            // activeBlocks — needed so the existing slot:N drop ids
+            // keep working for swap-with-queued / reorder semantics.
+            const originalIdx = idx;
+            return (
+              <RailCard
+                key={b.s2dItemId}
+                slotIdx={originalIdx}
+                side="left"
+                block={b}
+                item={it}
+                paused={paused}
+                isDragging={draggingId === `slot:${b.s2dItemId}`}
+                onFocus={() => onFocus(b.s2dItemId)}
+                onDone={() => onDone(b.s2dItemId)}
+                onSkip={() => onSkip(b.s2dItemId)}
+              />
+            );
+          })}
+        </div>
+      )}
+      <div className="flex-1 min-w-0 min-h-0">
+        {focusedItem ? (
+          <SlotCard
+            key={focused.s2dItemId}
+            slotIdx={focusedIdx}
+            block={focused}
+            item={focusedItem}
+            paused={paused}
+            isDragging={draggingId === `slot:${focused.s2dItemId}`}
+            animateOnMount
+            onDone={() => onDone(focused.s2dItemId)}
+            onSkip={() => onSkip(focused.s2dItemId)}
+            onSnooze={() => onSnooze(focused.s2dItemId)}
+            onBench={() => onBench(focused.s2dItemId)}
+            onOpen={() => onOpen(focused.s2dItemId)}
+          />
+        ) : (
+          <div className="rounded-xl border border-border/30 bg-card/60 p-4 text-[12px] text-muted-foreground">
+            MASH item missing from cache (id {focused.s2dItemId.slice(0, 8)})
+          </div>
+        )}
+      </div>
+      {rightRail.length > 0 && (
+        <div className="flex w-[140px] shrink-0 flex-col gap-3">
+          {rightRail.map((b, idx) => {
+            const it = itemMap.get(b.s2dItemId);
+            if (!it) return null;
+            const originalIdx = focusedIdx + 1 + idx;
+            return (
+              <RailCard
+                key={b.s2dItemId}
+                slotIdx={originalIdx}
+                side="right"
+                block={b}
+                item={it}
+                paused={paused}
+                isDragging={draggingId === `slot:${b.s2dItemId}`}
+                onFocus={() => onFocus(b.s2dItemId)}
+                onDone={() => onDone(b.s2dItemId)}
+                onSkip={() => onSkip(b.s2dItemId)}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Compact "rail" representation of a non-focused active slot. Lives at
+ * a fixed 140px width on either side of the focused center column.
+ *
+ * Contains:
+ *   - drag handle + slot number + priority dot
+ *   - pathway badge (compact)
+ *   - 2-line clamped title
+ *   - live timer + 2px progress sliver
+ *   - footer: Focus (primary, takes most of the row) + Done + Skip
+ *
+ * NO Section 1/2/3 body. NO Bench / Snooze / Detail. Those affordances
+ * live on the focused card — rail real estate is for "what's parallel-
+ * cooking; let me jump to it." Clicking anywhere on the rail card (not
+ * the drag handle or the three buttons) triggers onFocus.
+ *
+ * Drag: composes drop-target (`slot:${slotIdx}`) + drag-source
+ * (`slot:${itemId}`) — identical to SlotCard, so all existing DnD
+ * behaviors (swap with queued, reorder slots) just work.
+ */
+function RailCard({
+  slotIdx,
+  side,
+  block,
+  item,
+  paused,
+  isDragging,
+  onFocus,
+  onDone,
+  onSkip,
+}: {
+  slotIdx: number;
+  side: "left" | "right";
+  block: SprintBlock;
+  item: S2DItem;
+  paused: boolean;
+  isDragging: boolean;
+  onFocus: () => void;
+  onDone: () => void;
+  onSkip: () => void;
+}) {
+  const elapsedMs = blockLiveElapsedMs(block, paused);
+  const totalMs = block.durationMin * 60_000;
+  const remainingMs = Math.max(0, totalMs - elapsedMs);
+  const overrunMs = elapsedMs > totalMs ? elapsedMs - totalMs : 0;
+  const pct = Math.min(100, (elapsedMs / totalMs) * 100);
+  const slotKey = `${slotIdx + 1}`;
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `slot:${slotIdx}`,
+  });
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+  } = useDraggable({ id: `slot:${block.s2dItemId}` });
+  const composedRef = (el: HTMLDivElement | null) => {
+    setDropRef(el);
+    setDragRef(el);
+  };
+
+  // Side-aware mount animation: slide in from the edge the rail lives
+  // on, plus a quick fade. Wrap in withMotion to respect prefers-
+  // reduced-motion. Re-fires whenever the rail's item identity changes
+  // (focus swap remounts via React key).
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useGSAP(
+    () => {
+      if (!rootRef.current) return;
+      withMotion(() => {
+        gsap.fromTo(
+          rootRef.current,
+          { opacity: 0, x: side === "left" ? -16 : 16 },
+          { opacity: 1, x: 0, duration: DUR.short, ease: EASE.out, clearProps: "all" }
+        );
+      });
+    },
+    { scope: rootRef }
+  );
+
+  return (
+    <div
+      ref={(el) => {
+        composedRef(el);
+        rootRef.current = el;
+      }}
+      onClick={onFocus}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onFocus();
+        }
+      }}
+      className={cn(
+        "flex w-full shrink-0 cursor-pointer flex-col overflow-hidden rounded-xl border bg-card shadow-md transition-colors",
+        overrunMs > 0
+          ? "border-destructive/60"
+          : paused
+            ? "border-border/40"
+            : "border-primary/40",
+        isOver && "ring-2 ring-primary/60",
+        isDragging && "opacity-50"
+      )}
+    >
+      {/* Header strip — drag handle + slot number + priority dot */}
+      <div
+        className="flex items-center gap-1 border-b border-border/30 bg-secondary/30 px-1.5 py-1"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          {...listeners}
+          {...attributes}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-secondary active:cursor-grabbing"
+          title="Drag to reorder or swap with queue"
+          aria-label="Drag rail card"
+        >
+          <GripVertical className="h-3 w-3" />
+        </button>
+        <span className="rounded bg-primary/15 px-1 py-0.5 font-mono text-[9px] font-bold text-primary">
+          {slotKey}
+        </span>
+        <span className="ml-auto">
+          <PriorityDot priority={item.priority} />
+        </span>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-1 px-2 py-1.5">
+        <div className="flex items-center gap-1">
+          <PathwayBadge pathway={item.pathway} compact />
+        </div>
+        <h4 className="line-clamp-2 text-[11px] font-medium leading-snug text-foreground">
+          {item.title}
+        </h4>
+        <div className="mt-auto pt-1">
+          <div
+            className={cn(
+              "font-mono text-base font-bold tabular-nums tracking-tight",
+              overrunMs > 0
+                ? "text-destructive"
+                : paused
+                  ? "text-muted-foreground"
+                  : "text-foreground"
+            )}
+          >
+            {overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs)}
+          </div>
+          <div className="mt-0.5 h-0.5 w-full overflow-hidden rounded-full bg-border/30">
+            <div
+              className={cn(
+                "h-full transition-all",
+                overrunMs > 0 ? "bg-destructive" : "bg-primary"
+              )}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer: Focus + icon Done + icon Skip */}
+      <div
+        className="flex items-center gap-1 border-t border-border/30 bg-secondary/30 px-1.5 py-1"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Button
+          type="button"
+          size="sm"
+          onClick={onFocus}
+          className="h-6 flex-1 gap-0.5 px-1 text-[10px]"
+          title="Bring this slot to focus"
+        >
+          Focus
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onDone}
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+          title={`Done · ${slotKey}`}
+          aria-label="Mark done"
+        >
+          <Check className="h-3 w-3" />
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onSkip}
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+          title="Skip"
+          aria-label="Skip"
+        >
+          <SkipForward className="h-3 w-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SlotCard({
   slotIdx,
   block,
   item,
   paused,
   isDragging,
+  animateOnMount,
   onDone,
   onSkip,
   onSnooze,
@@ -842,6 +1201,7 @@ function SlotCard({
   item: S2DItem;
   paused: boolean;
   isDragging: boolean;
+  animateOnMount?: boolean;
   onDone: () => void;
   onSkip: () => void;
   onSnooze: () => void;
@@ -869,9 +1229,27 @@ function SlotCard({
     attributes,
     listeners,
   } = useDraggable({ id: `slot:${block.s2dItemId}` });
+  // Cockpit + Crew mount animation: when this card lands as the focused
+  // slot (e.g. after focus swap), fade + slide up so the swap feels
+  // intentional. Re-fires via React key, which we mount on item.id.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useGSAP(
+    () => {
+      if (!animateOnMount || !rootRef.current) return;
+      withMotion(() => {
+        gsap.fromTo(
+          rootRef.current,
+          { opacity: 0, y: 8 },
+          { opacity: 1, y: 0, duration: DUR.base, ease: EASE.out, clearProps: "all" }
+        );
+      });
+    },
+    { scope: rootRef }
+  );
   const composedRef = (el: HTMLDivElement | null) => {
     setDropRef(el);
     setDragRef(el);
+    rootRef.current = el;
   };
 
   return (
