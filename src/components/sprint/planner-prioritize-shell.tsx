@@ -15,7 +15,7 @@
  * where useS2DItems is fetching but useCompanies hasn't returned yet.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid, List, Columns3, Sun, AlertCircle } from "lucide-react";
 import { useS2DItems } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
@@ -26,7 +26,7 @@ import { PlannerPrioritizeList } from "./planner-prioritize-list";
 import { PlannerPrioritizeBoard } from "./planner-prioritize-board";
 import type { S2DItem } from "@/types";
 import { cn } from "@/lib/utils";
-import { getPlannedState } from "@/lib/planned";
+import { getPlannedState, todayIso } from "@/lib/planned";
 
 type PlannedFilterValue = "today" | "overdue";
 
@@ -89,6 +89,42 @@ export function eligibleForSprint(items: S2DItem[]): S2DItem[] {
 export function PlannerPrioritizeShell() {
   const { data: items = [], isPending, isError, error } = useS2DItems();
   const exit = useSprintStore((s) => s.exitSprint);
+  const selectedItemIds = useSprintStore((s) => s.selectedItemIds);
+  const reorderSelected = useSprintStore((s) => s.reorderSelected);
+
+  // Pre-seed the planner's selection from items the user already
+  // committed to today on the board. Two signals count:
+  //   - sprint_date === today  (set by the board's "Add to sprint"
+  //                              bulk action)
+  //   - planned_for === today  (set by the board's "Plan for today"
+  //                              bulk action)
+  //
+  // Seed runs ONCE per planner entry, gated by a ref. After the first
+  // seed the user owns the selection — clearing it mid-flow shouldn't
+  // be undone by this effect. `enterPlanner` wipes selectedItemIds to
+  // [] on every fresh entry, which remounts this component, so
+  // didSeedRef naturally resets too.
+  const didSeedRef = useRef(false);
+  useEffect(() => {
+    if (didSeedRef.current) return;
+    if (isPending || items.length === 0) return;
+    // User entered the planner with a non-empty selection (e.g. came
+    // back from a later phase). Respect it; don't re-seed over it.
+    if (selectedItemIds.length > 0) {
+      didSeedRef.current = true;
+      return;
+    }
+    const today = todayIso();
+    const seed = items
+      .filter(
+        (it) =>
+          it.status !== "done" &&
+          (it.sprint_date === today || it.planned_for === today)
+      )
+      .map((it) => it.id);
+    if (seed.length > 0) reorderSelected(seed);
+    didSeedRef.current = true;
+  }, [isPending, items, selectedItemIds.length, reorderSelected]);
 
   const [view, setView] = useState<ViewMode>("card");
   useEffect(() => {
