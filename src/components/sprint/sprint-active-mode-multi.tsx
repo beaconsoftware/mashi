@@ -1256,7 +1256,15 @@ function SlotCard({
     <div
       ref={composedRef}
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-md transition-colors",
+        // h-full is load-bearing: the parent CockpitCrewLayout wrapper
+        // (<div className="flex-1 min-w-0 min-h-0">) is a flex ITEM, not
+        // a flex container — its child doesn't auto-stretch in height.
+        // Without h-full, the SlotCard sizes to natural content height;
+        // the body's flex-1 workspace then has no parent height to fill,
+        // so the workspace grows to its rail's natural height and the
+        // shrink-0 footer (Done/Skip/Bench/Snooze/Detail) gets clipped
+        // by overflow-hidden. The Done button disappears.
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-md transition-colors",
         overrunMs > 0
           ? "border-destructive/60"
           : paused
