@@ -18,6 +18,10 @@ import {
   Hash,
 } from "lucide-react";
 import { SlackChannelPicker } from "@/components/settings/slack-channel-picker";
+import {
+  GmailAllowlistPicker,
+  GmailAllowlistToggle,
+} from "@/components/settings/gmail-allowlist-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -391,6 +395,25 @@ function ProviderRow({
   // Per-connection Slack channel picker state. Keyed by connection id so
   // each workspace's picker opens independently.
   const [channelPickerFor, setChannelPickerFor] = useState<string | null>(null);
+  // Gmail allowlist expansion — open/closed per connection id. Inline,
+  // not a Sheet, because the picker is small enough to live underneath
+  // the row without needing the whole-screen takeover that Slack's
+  // channel chooser uses.
+  const [gmailAllowlistOpen, setGmailAllowlistOpen] = useState<Set<string>>(
+    new Set()
+  );
+  const [gmailAllowlistCounts, setGmailAllowlistCounts] = useState<
+    Map<string, { manual: number; auto: number }>
+  >(new Map());
+
+  function toggleGmailAllowlist(id: string) {
+    setGmailAllowlistOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
   return (
     <Card>
       <CardContent className="p-4">
@@ -434,7 +457,8 @@ function ProviderRow({
         {connections.length > 0 && (
           <ul className="mt-3 divide-y divide-border/40 rounded-md border border-border/40">
             {connections.map((c) => (
-              <li key={c.id} className="flex items-center gap-3 px-3 py-2">
+              <li key={c.id} className="flex flex-col">
+              <div className="flex items-center gap-3 px-3 py-2">
                 {c.account_avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -465,6 +489,20 @@ function ProviderRow({
                     Channels
                   </Button>
                 )}
+                {meta.key === "gmail" && (() => {
+                  const counts = gmailAllowlistCounts.get(c.id) ?? {
+                    manual: 0,
+                    auto: 0,
+                  };
+                  return (
+                    <GmailAllowlistToggle
+                      open={gmailAllowlistOpen.has(c.id)}
+                      manualCount={counts.manual}
+                      autoCount={counts.auto}
+                      onClick={() => toggleGmailAllowlist(c.id)}
+                    />
+                  );
+                })()}
                 <select
                   value={c.company_id ?? ""}
                   onChange={(e) =>
@@ -581,6 +619,19 @@ function ProviderRow({
                 >
                   <Unplug className="h-3.5 w-3.5" />
                 </Button>
+              </div>
+              {meta.key === "gmail" && gmailAllowlistOpen.has(c.id) && (
+                <GmailAllowlistPicker
+                  connectionId={c.id}
+                  onCountsChange={(counts) => {
+                    setGmailAllowlistCounts((prev) => {
+                      const next = new Map(prev);
+                      next.set(c.id, counts);
+                      return next;
+                    });
+                  }}
+                />
+              )}
               </li>
             ))}
           </ul>

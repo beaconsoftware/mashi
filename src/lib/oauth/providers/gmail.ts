@@ -18,7 +18,8 @@ export const GmailOAuthProvider: OAuthProvider = {
   meta: {
     key: "gmail",
     label: "Gmail",
-    description: "Connect each portco inbox you have access to.",
+    description:
+      "Connect each portco inbox you have access to. Mashi syncs the Primary tab and lets you opt specific senders out of the Updates-tab exclusion so transactional mail (Ramp, Stripe, etc.) doesn't get missed.",
     supportsMultiple: true,
     brandColor: "#EA4335",
   },

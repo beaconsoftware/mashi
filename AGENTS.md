@@ -580,7 +580,7 @@ To allow a new email domain: `INSERT INTO public.signup_allowlist (domain, note)
 
 | Provider | Auth method | Notes |
 |---|---|---|
-| Google (Gmail, GCal, sign-in) | OAuth via Supabase Auth | App is in "Testing" — add each user as Test User in OAuth consent screen |
+| Google (Gmail, GCal, sign-in) | OAuth via Supabase Auth | App is in "Testing" — add each user as Test User in OAuth consent screen. Gmail sync excludes `category:updates` by default; `connected_accounts.gmail_sender_allowlist` (per-row TEXT[]) plus an auto-list cached under `raw_provider_data.gmail_auto_allowlist` (refreshed every 24h from recent sent mail) drive an additional `in:inbox category:updates from:…` query so opted-in senders' transactional mail still syncs. |
 | Slack | Direct OAuth (via `/api/connect/slack/callback`) | Uses **User tokens** (`xoxp-`), not Bot tokens. Public Distribution active so other workspaces can install |
 | Linear | Per-user **Personal API Key**, no OAuth | Linear OAuth tokens are limited. UI in `connections-manager.tsx` surfaces the workspace admin override path |
 | Fireflies | API key only | Paste-and-go |

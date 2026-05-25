@@ -14,6 +14,24 @@ const INITIAL_SYNC_CAP = 1500;
 const BASE_QUERY =
   "in:inbox -category:promotions -category:social -category:updates -category:forums";
 
+// Sender-allowlist tuning.
+// AUTO_ALLOWLIST_TTL_MS — how long the cached auto list is considered
+// fresh. After this, the next sync refreshes from `in:sent newer_than:
+// AUTO_ALLOWLIST_LOOKBACK`. The 24h cadence is a deliberate trade-off
+// between freshness and burning quota on the sent-mail scan every run.
+const AUTO_ALLOWLIST_TTL_MS = 24 * 60 * 60 * 1000;
+const AUTO_ALLOWLIST_LOOKBACK = "90d";
+const AUTO_ALLOWLIST_SAMPLE_CAP = 200; // messages scanned per refresh
+const AUTO_ALLOWLIST_MAX = 500;        // entries persisted
+// Gmail's query length is bounded (~roughly 1500 chars in practice).
+// Chunk the OR list at 50 senders per query — keeps each `q` well under
+// the limit and avoids a single chatty allowlist starving the page loop.
+const ALLOWLIST_CHUNK_SIZE = 50;
+// Budget split for the merged list-phase cap. 60% Primary, 40% Updates-
+// allowlisted. A user who allowlists 200 senders shouldn't starve their
+// regular inbox of the per-sync slot.
+const PRIMARY_BUDGET_PCT = 0.6;
+
 /**
  * Build the Gmail search query for this sync. First sync gets 90 days;
  * subsequent syncs only look at messages since the last successful sync
@@ -35,6 +53,199 @@ function buildGmailQuery(lastSyncedAt: string | null): string {
   const d = String(cutoff.getUTCDate()).padStart(2, "0");
   return `${BASE_QUERY} after:${y}/${m}/${d}`;
 }
+
+/**
+ * Build queries scoped to `category:updates` for the allowlisted senders.
+ * Returns one or more queries, each chunked at ALLOWLIST_CHUNK_SIZE
+ * senders so we stay inside Gmail's query-length cap.
+ *
+ * Crucially this is `in:inbox category:updates` — NOT BASE_QUERY — so
+ * allowlisting `news@foo.com` doesn't accidentally pull in their
+ * marketing-tab broadcasts. Only Updates is the carve-out; promotions /
+ * social / forums stay excluded for everybody.
+ */
+function buildAllowlistedUpdatesQueries(
+  lastSyncedAt: string | null,
+  senders: string[]
+): string[] {
+  if (senders.length === 0) return [];
+
+  // Same time-window logic as buildGmailQuery
+  let windowClause: string;
+  if (!lastSyncedAt) {
+    windowClause = "newer_than:90d";
+  } else {
+    const ageMs = Date.now() - new Date(lastSyncedAt).getTime();
+    if (ageMs > 30 * 86_400_000) {
+      windowClause = "newer_than:90d";
+    } else {
+      const cutoff = new Date(new Date(lastSyncedAt).getTime() - 86_400_000);
+      const y = cutoff.getUTCFullYear();
+      const m = String(cutoff.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(cutoff.getUTCDate()).padStart(2, "0");
+      windowClause = `after:${y}/${m}/${d}`;
+    }
+  }
+
+  const out: string[] = [];
+  for (let i = 0; i < senders.length; i += ALLOWLIST_CHUNK_SIZE) {
+    const chunk = senders.slice(i, i + ALLOWLIST_CHUNK_SIZE);
+    const orClause = chunk.map((s) => `from:${s}`).join(" OR ");
+    out.push(
+      `in:inbox category:updates ${windowClause} (${orClause})`
+    );
+  }
+  return out;
+}
+
+interface AutoAllowlistCache {
+  addresses: string[];
+  cached_at: string;
+}
+
+/**
+ * Sanity check that a string looks like an email address. Cheap regex —
+ * we don't need RFC-strict, just enough to drop garbage before persisting.
+ */
+function looksLikeEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+/**
+ * Compute the effective sender allowlist for this sync, lazily refreshing
+ * the auto-list portion when the cache has gone stale (or never existed).
+ * Returns a deduped, lowercased, validated, sanitized list — the caller
+ * can feed it straight into buildAllowlistedUpdatesQueries.
+ */
+async function getEffectiveAllowlist(opts: {
+  supabase: ReturnType<typeof createSupabaseServiceClient>;
+  connectionId: string;
+  userId: string;
+  token: string;
+  manual: string[];
+  rawProvider: Record<string, unknown>;
+}): Promise<string[]> {
+  const { supabase, connectionId, userId, token, manual, rawProvider } = opts;
+
+  let auto: AutoAllowlistCache | null = null;
+  const cached = rawProvider.gmail_auto_allowlist;
+  if (cached && typeof cached === "object") {
+    const c = cached as Partial<AutoAllowlistCache>;
+    if (Array.isArray(c.addresses) && typeof c.cached_at === "string") {
+      auto = {
+        addresses: c.addresses.filter((s): s is string => typeof s === "string"),
+        cached_at: c.cached_at,
+      };
+    }
+  }
+
+  const cacheAgeMs = auto
+    ? Date.now() - new Date(auto.cached_at).getTime()
+    : Number.POSITIVE_INFINITY;
+
+  if (cacheAgeMs > AUTO_ALLOWLIST_TTL_MS) {
+    try {
+      const fresh = await refreshAutoAllowlist(token);
+      auto = { addresses: fresh, cached_at: new Date().toISOString() };
+      // Persist with user_id scope. Service-role bypasses RLS so the
+      // .eq filters are the only thing keeping us inside the row.
+      await supabase
+        .from("connected_accounts")
+        .update({
+          raw_provider_data: {
+            ...rawProvider,
+            gmail_auto_allowlist: auto,
+          },
+        })
+        .eq("id", connectionId)
+        .eq("user_id", userId);
+    } catch (err) {
+      console.warn(
+        "[gmail-sync] auto-allowlist refresh failed, using cached or empty list:",
+        err
+      );
+      // fall through with whatever `auto` already held (possibly null)
+    }
+  }
+
+  const merged = new Set<string>();
+  for (const raw of manual) {
+    const v = raw.trim().toLowerCase();
+    if (looksLikeEmail(v)) merged.add(v);
+  }
+  for (const raw of auto?.addresses ?? []) {
+    const v = raw.trim().toLowerCase();
+    if (looksLikeEmail(v)) merged.add(v);
+  }
+  return [...merged];
+}
+
+/**
+ * Scan recently-sent mail for outbound recipients. These are addresses
+ * the user has actively replied to or initiated correspondence with,
+ * which makes them strong candidates for "I want to see emails from
+ * this person even if Gmail buckets them into Updates".
+ *
+ * Filters out the same automated-prefix blacklist that `notAutomated`
+ * applies — we don't want to accidentally whitelist `noreply@stripe.com`
+ * just because the user once replied to a Stripe alert.
+ */
+async function refreshAutoAllowlist(token: string): Promise<string[]> {
+  const listed = await listMessageIds(
+    token,
+    `in:sent newer_than:${AUTO_ALLOWLIST_LOOKBACK}`,
+    AUTO_ALLOWLIST_SAMPLE_CAP
+  );
+  if (listed.length === 0) return [];
+
+  const detailed = await hydrateMetadata(
+    token,
+    listed.map((m) => m.id)
+  );
+
+  const seen = new Set<string>();
+  for (const m of detailed) {
+    for (const recipient of m.to_emails) {
+      const e = recipient.trim().toLowerCase();
+      if (!looksLikeEmail(e)) continue;
+      if (!isAutomatedAddress(e)) seen.add(e);
+      if (seen.size >= AUTO_ALLOWLIST_MAX) break;
+    }
+    if (seen.size >= AUTO_ALLOWLIST_MAX) break;
+  }
+  return [...seen];
+}
+
+/**
+ * True if `email`'s local-part matches a known automated prefix. Shared
+ * helper so refreshAutoAllowlist and notAutomated apply identical rules.
+ */
+function isAutomatedAddress(email: string): boolean {
+  const local = email.split("@")[0] ?? "";
+  return AUTOMATED_PREFIXES.some(
+    (p) => local === p || local.startsWith(`${p}-`) || local.startsWith(`${p}.`)
+  );
+}
+
+const AUTOMATED_PREFIXES = [
+  "no-reply",
+  "noreply",
+  "donotreply",
+  "do-not-reply",
+  "mailer-daemon",
+  "notifications",
+  "automated",
+  "alerts",
+  "support",
+  "billing",
+  "receipts",
+  "info",
+  "newsletter",
+  "news",
+  "marketing",
+  "updates",
+  "digest",
+];
 
 interface GmailListItem {
   id: string;
@@ -104,7 +315,7 @@ export async function syncGmailConnection(connectionId: string): Promise<{
   const { data: conn, error } = await supabase
     .from("connected_accounts")
     .select(
-      "id, user_id, company_id, account_email, account_label, last_synced_at"
+      "id, user_id, company_id, account_email, account_label, last_synced_at, gmail_sender_allowlist, raw_provider_data"
     )
     .eq("id", connectionId)
     .single();
@@ -119,9 +330,84 @@ export async function syncGmailConnection(connectionId: string): Promise<{
     const token = await getActiveAccessToken(connectionId);
     const myEmail = (conn.account_email ?? "").toLowerCase();
 
+    // Resolve effective sender allowlist (manual + auto). Refreshes the
+    // auto list inline if its cached_at is stale or missing. Failures
+    // here are non-fatal — we degrade to the cached / empty list and
+    // continue with the Primary query.
+    const manualList: string[] = Array.isArray(conn.gmail_sender_allowlist)
+      ? (conn.gmail_sender_allowlist as unknown[]).filter(
+          (v): v is string => typeof v === "string"
+        )
+      : [];
+    const rawProvider =
+      (conn.raw_provider_data as Record<string, unknown> | null) ?? {};
+    const effectiveAllowlist = await getEffectiveAllowlist({
+      supabase,
+      connectionId: conn.id,
+      userId: conn.user_id,
+      token,
+      manual: manualList,
+      rawProvider,
+    });
+
     // 1) List — incremental window since last sync (full 90d on first run)
-    const query = buildGmailQuery(conn.last_synced_at);
-    const listed = await listMessageIds(token, query, INITIAL_SYNC_CAP);
+    //    Two parallel queries:
+    //      A) Primary (BASE_QUERY excluding all category tabs)
+    //      B) Allowlisted senders inside category:updates (if non-empty)
+    //    Budget split 60/40 so a chatty allowlist doesn't starve A.
+    const primaryQuery = buildGmailQuery(conn.last_synced_at);
+    const primaryCap =
+      effectiveAllowlist.length > 0
+        ? Math.floor(INITIAL_SYNC_CAP * PRIMARY_BUDGET_PCT)
+        : INITIAL_SYNC_CAP;
+    const updatesCap = INITIAL_SYNC_CAP - primaryCap;
+
+    const updatesQueries = buildAllowlistedUpdatesQueries(
+      conn.last_synced_at,
+      effectiveAllowlist
+    );
+
+    const primaryListed = await listMessageIds(
+      token,
+      primaryQuery,
+      primaryCap
+    );
+
+    // Run each chunked allowlist query, sharing the updates budget across
+    // chunks. Collected first, deduped on merge.
+    const updatesListed: GmailListItem[] = [];
+    if (updatesQueries.length > 0) {
+      const perChunkCap = Math.max(
+        50,
+        Math.floor(updatesCap / updatesQueries.length)
+      );
+      for (const q of updatesQueries) {
+        if (updatesListed.length >= updatesCap) break;
+        const remaining = updatesCap - updatesListed.length;
+        try {
+          const items = await listMessageIds(
+            token,
+            q,
+            Math.min(perChunkCap, remaining)
+          );
+          updatesListed.push(...items);
+        } catch (err) {
+          // One chunk failing shouldn't kill the whole sync. Log and
+          // continue with whatever else worked.
+          console.warn("[gmail-sync] allowlist chunk failed:", err);
+        }
+      }
+    }
+
+    // Merge & dedupe by message id. Primary takes priority in the
+    // collision case (its threadId is the one the rest of the pipeline
+    // is best aligned with).
+    const mergedById = new Map<string, GmailListItem>();
+    for (const m of primaryListed) mergedById.set(m.id, m);
+    for (const m of updatesListed) {
+      if (!mergedById.has(m.id)) mergedById.set(m.id, m);
+    }
+    const listed = [...mergedById.values()];
 
     // 2) Skip already-stored
     const known = await loadKnownExternalIds(
@@ -513,29 +799,7 @@ function parseAddresses(raw: string): Array<{ name: string; email: string }> {
 function notAutomated(m: MessageMeta): boolean {
   const e = m.from_email.toLowerCase();
   if (!e.includes("@")) return false;
-  const local = e.split("@")[0];
-  const automatedPrefixes = [
-    "no-reply",
-    "noreply",
-    "donotreply",
-    "do-not-reply",
-    "mailer-daemon",
-    "notifications",
-    "automated",
-    "alerts",
-    "support",
-    "billing",
-    "receipts",
-    "info",
-    "newsletter",
-    "news",
-    "marketing",
-    "updates",
-    "digest",
-  ];
-  return !automatedPrefixes.some(
-    (p) => local === p || local.startsWith(`${p}-`) || local.startsWith(`${p}.`)
-  );
+  return !isAutomatedAddress(e);
 }
 
 async function markSyncSuccess(
