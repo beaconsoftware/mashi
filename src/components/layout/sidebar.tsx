@@ -188,7 +188,18 @@ function NavRow({
   renderIcon: (className: string) => React.ReactNode;
 }) {
   return (
-    <div className="relative flex w-full items-center">
+    <div className="group/row relative flex w-full items-center">
+      {/* Hover rail — faint primary sliver at the left edge, mirroring
+          the bright active rail. Fades in on row hover so the eye reads
+          "this row is alive" before bg-accent fills. Suppressed when
+          active (the active rail dominates and a second sliver looks
+          muddled). */}
+      {!active && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -left-3 top-1/2 z-10 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary/40 opacity-0 shadow-[0_0_8px_hsl(var(--primary)/0.4)] transition-opacity duration-200 group-hover/row:opacity-100"
+        />
+      )}
       {active && (
         <span
           aria-hidden
