@@ -113,7 +113,7 @@ export function Sidebar() {
                 {/* Icon shell — relative so the glow halo can sit inside
                     and stay scoped to the icon, not stretch across the
                     full expanded pill. Active state pre-tints the halo. */}
-                <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+                <span className="relative isolate flex h-7 w-7 shrink-0 items-center justify-center">
                   <span
                     aria-hidden
                     className={cn(
@@ -144,7 +144,7 @@ export function Sidebar() {
               pathname.startsWith("/settings") && "bg-accent text-foreground"
             )}
           >
-            <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+            <span className="relative isolate flex h-7 w-7 shrink-0 items-center justify-center">
               <span
                 aria-hidden
                 className={cn(
