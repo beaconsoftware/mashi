@@ -66,7 +66,7 @@ import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
-import { SprintCardSections } from "@/components/sprint/sprint-card-sections";
+import { SprintCardWorkspace } from "@/components/sprint/sprint-card-workspace";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 // Spotify ambient bg is mounted globally in AppShell. Sprint also mounts
 // the player IN its header (z-100 overlay would cover the global TopBar
@@ -835,7 +835,7 @@ function DetailPanel({
  * Cockpit + Crew layout shell. Splits activeBlocks around focusedSlotId:
  * lower-index actives go to the left rail, higher-index go right. The
  * focused block fills the center column at full width and renders the
- * full SlotCard (header / timer / SprintCardSections / footer).
+ * full SlotCard (header / timer / SprintCardWorkspace / footer).
  *
  * Edge cases:
  *   - 0 active blocks      → center renders <EmptySlot /> for slot 0.
@@ -1294,54 +1294,57 @@ function SlotCard({
         )}
       </div>
 
-      {/* Body */}
-      <div className="flex flex-1 flex-col overflow-y-auto p-3">
-        <h3 className="text-balance text-base font-semibold leading-snug">
-          {item.title}
-        </h3>
+      {/* Body — split into shrink-0 header (title + timer + progress),
+          flex-1 workspace region (Sources rail + tabbed Workspace), and
+          shrink-0 footer. Scroll lives INSIDE the rail and the active
+          tab panel, never on the whole card — that was the bug that
+          made the focused card un-scrollable. */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 px-3 pt-3">
+          <h3 className="text-balance text-base font-semibold leading-snug">
+            {item.title}
+          </h3>
 
-        {/* Timer */}
-        <div className="mt-3 flex items-baseline gap-2">
-          <span
-            className={cn(
-              "font-mono text-3xl font-bold tabular-nums tracking-tight",
-              overrunMs > 0
-                ? "text-destructive"
-                : paused
-                  ? "text-muted-foreground"
-                  : "text-foreground"
-            )}
-          >
-            {overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs)}
-          </span>
-          <span className="text-[10px] text-muted-foreground">
-            {overrunMs > 0
-              ? "over plan"
-              : `of ${block.durationMin}m`}
-          </span>
-        </div>
-        {/* Progress sliver */}
-        <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-border/30">
-          <div
-            className={cn(
-              "h-full transition-all",
-              overrunMs > 0 ? "bg-destructive" : "bg-primary"
-            )}
-            style={{ width: `${pct}%` }}
-          />
+          {/* Timer */}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span
+              className={cn(
+                "font-mono text-3xl font-bold tabular-nums tracking-tight",
+                overrunMs > 0
+                  ? "text-destructive"
+                  : paused
+                    ? "text-muted-foreground"
+                    : "text-foreground"
+              )}
+            >
+              {overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs)}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {overrunMs > 0
+                ? "over plan"
+                : `of ${block.durationMin}m`}
+            </span>
+          </div>
+          {/* Progress sliver */}
+          <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-border/30">
+            <div
+              className={cn(
+                "h-full transition-all",
+                overrunMs > 0 ? "bg-destructive" : "bg-primary"
+              )}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
         </div>
 
-        {/* Sprint Card v2 body — four-section flow:
-              1. CONTEXT (existing pkg + source list)
-              2. ENRICH + PLAN (placeholder, wires to /enrich in PR 3)
-              3. ACT (tabbed Claude / Draft / Decide, panels in PRs 5-7)
-            Section 4 (MOVE) is the footer below. */}
-        <div className="mt-3 flex-1">
-          <SprintCardSections item={item} active />
+        {/* Workspace region — Sources Rail (left, 200px) + tabbed
+            Workspace (right). Each column owns its own scroll. */}
+        <div className="mt-3 flex flex-1 min-h-0 overflow-hidden border-t border-border/30">
+          <SprintCardWorkspace item={item} active />
         </div>
 
         {/* Footer actions */}
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-t border-border/30 px-3 py-2">
           <Button size="sm" onClick={onDone} className="gap-1.5">
             <Check className="h-3.5 w-3.5" />
             Done <span className="ml-1 font-mono text-[10px] opacity-60">{slotKey}</span>
