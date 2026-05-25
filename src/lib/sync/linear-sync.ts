@@ -139,7 +139,7 @@ export async function syncLinearConnection(connectionId: string): Promise<{
 
     const triageResults = await parallelMap(candidates, 8, async (it) => {
       try {
-        const existing_items = await loadExistingForUnit("linear", it.id);
+        const existing_items = await loadExistingForUnit("linear", it.id, conn.user_id);
         const triageInput: IssueForTriage = {
           identifier: it.identifier,
           title: it.title,

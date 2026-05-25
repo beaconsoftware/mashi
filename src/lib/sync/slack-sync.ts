@@ -258,7 +258,7 @@ export async function syncSlackConnection(connectionId: string): Promise<{
       try {
         if (slice.messages.every((m) => m.is_from_me)) return null;
         const source_thread_id = `${slice.conversation_id}:${slice.date}`;
-        const existing_items = await loadExistingForUnit("slack", source_thread_id);
+        const existing_items = await loadExistingForUnit("slack", source_thread_id, conn.user_id);
         return await runTriageOnUnit({
           userId: conn.user_id,
           connectedAccountId: conn.id,
