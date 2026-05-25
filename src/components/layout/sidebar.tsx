@@ -70,13 +70,15 @@ export function Sidebar() {
           "group-hover:w-56"
         )}
       >
-        {/* Logo + wordmark */}
+        {/* Logo + wordmark. bg-primary scopes to the brandmark chip only,
+            so the "Mashi" wordmark sits on the sidebar's own background
+            rather than disappearing into a primary-color slab. */}
         <Link
           href="/"
-          className="mb-3 flex h-9 items-center gap-2 rounded-md bg-primary px-1.5 text-primary-foreground"
+          className="mb-3 flex h-9 items-center gap-2 rounded-md text-foreground"
           aria-label="Mashi home"
         >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <MashiMark size={20} />
           </span>
           <span className="whitespace-nowrap text-sm font-semibold opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-hover:delay-100">
@@ -108,11 +110,19 @@ export function Sidebar() {
                     className="absolute -left-2 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.7)]"
                   />
                 )}
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 -z-10 rounded-md bg-primary/0 blur-md transition-colors duration-300 group-hover/item:bg-primary/25"
-                />
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center">
+                {/* Icon shell — relative so the glow halo can sit inside
+                    and stay scoped to the icon, not stretch across the
+                    full expanded pill. Active state pre-tints the halo. */}
+                <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "pointer-events-none absolute inset-0 -z-10 rounded-md blur-md transition-colors duration-300",
+                      active
+                        ? "bg-primary/15 group-hover/item:bg-primary/30"
+                        : "bg-primary/0 group-hover/item:bg-primary/25"
+                    )}
+                  />
                   <Icon className="h-4 w-4 transition-transform duration-200 group-hover/item:rotate-[8deg] group-hover/item:scale-110" />
                 </span>
                 <span className="flex-1 whitespace-nowrap text-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-hover:delay-75">
@@ -130,11 +140,20 @@ export function Sidebar() {
           <Link
             href="/settings"
             className={cn(
-              "group/item flex h-9 items-center gap-3 rounded-md px-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground",
+              "group/item relative flex h-9 items-center gap-3 rounded-md px-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground",
               pathname.startsWith("/settings") && "bg-accent text-foreground"
             )}
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center">
+            <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
+              <span
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute inset-0 -z-10 rounded-md blur-md transition-colors duration-300",
+                  pathname.startsWith("/settings")
+                    ? "bg-primary/15 group-hover/item:bg-primary/30"
+                    : "bg-primary/0 group-hover/item:bg-primary/25"
+                )}
+              />
               <Settings className="h-4 w-4 transition-transform duration-200 group-hover/item:rotate-[8deg] group-hover/item:scale-110" />
             </span>
             <span className="whitespace-nowrap text-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-hover:delay-75">
