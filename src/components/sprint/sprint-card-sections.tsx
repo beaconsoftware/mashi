@@ -2,21 +2,34 @@
 
 // translucency-audit-ok: file — sprint card chrome composed of sanctioned /15 + /55 surfaces, see AGENTS.md.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Sparkles,
   ChevronDown,
   ChevronRight,
   Wand2,
   Bot,
   Mail,
   CheckSquare,
+  Loader2,
+  RefreshCw,
+  Inbox,
+  Calendar,
+  GitBranch,
+  KanbanSquare,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { S2DItem } from "@/types";
 import { SprintContextPackage } from "./sprint-context-package";
 import { SprintItemContext } from "./sprint-item-context";
+import {
+  useEnrichedContext,
+  useRunEnrich,
+  type EnrichPulledSource,
+  type EnrichSourceKind,
+  type EnrichedContext,
+} from "@/hooks/use-enriched-context";
 
 /**
  * Sprint Card v2 — the four-section flow that sits between the timer
@@ -76,13 +89,32 @@ function Section1Context({ item, active }: { item: S2DItem; active: boolean }) {
 //   pulled_sources. PR 4 adds the refine thread.
 // ─────────────────────────────────────────────────────────────────────
 
-function Section2EnrichPlan({ item: _item }: { item: S2DItem }) {
+function Section2EnrichPlan({ item }: { item: S2DItem }) {
+  const { data, isLoading: reading } = useEnrichedContext(item.id);
+  const run = useRunEnrich(item.id);
+  const ctx = data?.enriched_context ?? null;
+  const hasRun = !!ctx && ctx.plan.length + ctx.pulled_sources.length > 0;
+  // Auto-open the section once we have an enriched payload to show, so
+  // the user lands on the result without having to expand. Closed by
+  // default when no enrichment exists yet — keeps the card compact.
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (hasRun) setOpen(true);
+  }, [hasRun]);
+  const busy = run.isPending;
+  const error = run.error;
+
+  function handleRun() {
+    if (busy) return;
+    setOpen(true);
+    run.mutate(undefined);
+  }
+
   return (
     <SectionShell
       number={2}
       title="Enrich + Plan"
-      tagline="generate context"
+      tagline={hasRun ? labelFromTimestamp(ctx?.last_enriched_at) : "generate context"}
       collapsible
       open={open}
       onToggle={() => setOpen((v) => !v)}
@@ -90,24 +122,177 @@ function Section2EnrichPlan({ item: _item }: { item: S2DItem }) {
         <Button
           type="button"
           size="sm"
-          disabled
+          onClick={handleRun}
+          disabled={busy || reading}
           className="h-6 gap-1 px-2 text-[11px]"
-          title="Coming in PR 3"
+          title={hasRun ? "Re-run enrich (replaces plan + non-pinned sources)" : "Run the pathway-routed enrich agent"}
         >
-          <Wand2 className="h-3 w-3" />
-          Run Enrich
+          {busy ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : hasRun ? (
+            <RefreshCw className="h-3 w-3" />
+          ) : (
+            <Wand2 className="h-3 w-3" />
+          )}
+          {busy ? "Running" : hasRun ? "Re-run" : "Run Enrich"}
         </Button>
       }
     >
-      {open && (
+      {!hasRun && !busy && !error && (
         <div className="rounded-md border border-dashed border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
-          Run Enrich to pull related context (other Mashi items, recent
-          messages, meetings, Linear, GitHub) and get a 3-step plan
-          grounded in those sources. Wires up in the next PR.
+          Run Enrich to pull related context (Mashi items, recent
+          messages, meetings, Linear) and get a 3-step plan grounded
+          in those sources.
         </div>
       )}
+      {busy && (
+        <div className="flex items-center gap-2 rounded-md border border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Searching your data and writing a plan…
+        </div>
+      )}
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-[11px] text-destructive">
+          Enrich failed: {error instanceof Error ? error.message : String(error)}
+        </div>
+      )}
+      {hasRun && ctx && <EnrichResult ctx={ctx} />}
     </SectionShell>
   );
+}
+
+function EnrichResult({ ctx }: { ctx: EnrichedContext }) {
+  const latestAssistant = [...ctx.thread].reverse().find((t) => t.role === "assistant");
+  return (
+    <div className="space-y-3">
+      {ctx.plan.length > 0 && (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Plan
+          </div>
+          <ol className="space-y-1 text-[12px] leading-snug text-foreground/90">
+            {ctx.plan.map((step, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="font-mono text-[10px] text-muted-foreground">{i + 1}.</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {latestAssistant && (
+        <div className="rounded-md border border-border/40 bg-secondary/20 p-2 text-[11px] leading-snug text-muted-foreground">
+          {latestAssistant.content}
+        </div>
+      )}
+      <PulledSourcesList sources={ctx.pulled_sources} />
+    </div>
+  );
+}
+
+function PulledSourcesList({ sources }: { sources: EnrichPulledSource[] }) {
+  const [open, setOpen] = useState(false);
+  if (sources.length === 0) {
+    return (
+      <div className="text-[11px] text-muted-foreground">
+        No related sources surfaced for this query.
+      </div>
+    );
+  }
+  // Group by kind for a quick visual scan.
+  const groups: Record<EnrichSourceKind, EnrichPulledSource[]> = {
+    s2d: [],
+    gmail: [],
+    slack: [],
+    linear: [],
+    fireflies: [],
+  };
+  for (const s of sources) groups[s.kind].push(s);
+  const groupCounts = (Object.entries(groups) as Array<[EnrichSourceKind, EnrichPulledSource[]]>)
+    .filter(([, list]) => list.length > 0)
+    .map(([kind, list]) => `${list.length} ${labelForKind(kind, list.length)}`);
+  return (
+    <div>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-auto w-full items-center justify-start gap-1 px-0 py-0 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-transparent hover:text-foreground"
+      >
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        Pulled context ({sources.length})
+        <span className="ml-2 font-normal normal-case tracking-normal text-muted-foreground/70">
+          {groupCounts.join(" · ")}
+        </span>
+      </Button>
+      {open && (
+        <ul className="mt-1.5 space-y-1.5">
+          {sources.map((s, i) => (
+            <li
+              key={`${s.kind}:${s.ref}:${i}`}
+              className="flex items-start gap-2 rounded border border-border/30 bg-card/55 px-2 py-1.5"
+            >
+              <SourceKindIcon kind={s.kind} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[11px] font-medium text-foreground/90">
+                  {s.label}
+                </div>
+                {s.snippet && (
+                  <div className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-muted-foreground">
+                    {s.snippet}
+                  </div>
+                )}
+              </div>
+              {s.when && (
+                <span className="shrink-0 font-mono text-[9px] text-muted-foreground/70">
+                  {s.when.slice(0, 10)}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SourceKindIcon({ kind }: { kind: EnrichSourceKind }) {
+  const props = { className: "h-3 w-3 shrink-0 text-muted-foreground" };
+  switch (kind) {
+    case "s2d":
+      return <KanbanSquare {...props} />;
+    case "gmail":
+      return <Inbox {...props} />;
+    case "slack":
+      return <MessageSquare {...props} />;
+    case "linear":
+      return <GitBranch {...props} />;
+    case "fireflies":
+      return <Calendar {...props} />;
+  }
+}
+
+function labelForKind(kind: EnrichSourceKind, n: number): string {
+  const single =
+    kind === "s2d"
+      ? "Mashi item"
+      : kind === "gmail"
+        ? "email"
+        : kind === "slack"
+          ? "Slack"
+          : kind === "linear"
+            ? "Linear"
+            : "meeting";
+  return n === 1 ? single : `${single}${single.endsWith("s") ? "" : "s"}`;
+}
+
+function labelFromTimestamp(iso: string | null | undefined): string {
+  if (!iso) return "generate context";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "enriched just now";
+  if (ms < 60 * 60_000) return `enriched ${Math.round(ms / 60_000)}m ago`;
+  if (ms < 24 * 60 * 60_000) return `enriched ${Math.round(ms / 3_600_000)}h ago`;
+  return `enriched ${new Date(iso).toISOString().slice(0, 10)}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -229,5 +414,3 @@ function TabPill({
   );
 }
 
-// Silence linter when Section 2 isn't using the item yet — wires up in PR 3.
-export { Sparkles as _unused };
