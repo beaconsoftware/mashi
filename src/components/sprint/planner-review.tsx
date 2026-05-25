@@ -32,9 +32,9 @@ interface CalAccount {
  *   1. sprint_start_at / sprint_end_at on each S2D item (always)
  *   2. (optional) GCal events via /api/sprint/create-events
  *
- * Event title is just `MASH-{ticket}` so peers don't see your work titles
- * on their shared-calendar view; the description has the full title +
- * pathway + a deep link back to the Mashi item.
+ * Event title is `Working on: {title}` so the user's own calendar reads
+ * like a real day plan. Description carries pathway + priority + a
+ * deep link back to the Mashi item.
  */
 export function PlannerReview() {
   const { data: items } = useS2DItems();
@@ -133,9 +133,10 @@ export function PlannerReview() {
               <span>
                 Push these blocks to my calendar.{" "}
                 <span className="text-muted-foreground">
-                  Event title is just <span className="font-mono">MASH-N</span> so
-                  peers don't see the work titles on shared views; the full title +
-                  pathway + Mashi link goes in the description.
+                  Each event is titled{" "}
+                  <span className="font-mono">Working on: {"<title>"}</span>; the
+                  description carries pathway, priority, and a deep link back to
+                  the Mashi item.
                 </span>
               </span>
             </label>

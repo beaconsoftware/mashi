@@ -168,8 +168,13 @@ async function createGoogleEvent(opts: {
     descLines.push(opts.description.slice(0, 2000));
   }
 
+  // Title format: "Working on: <task title>". Previously this was just
+  // the ticket id ("MASH-415") to keep peers on shared calendar views
+  // from reading the work — user chose to surface the title instead so
+  // their own calendar reads like a real day plan. The description still
+  // carries pathway + priority + Mashi deep link below.
   const body = {
-    summary: opts.ticket,
+    summary: `Working on: ${opts.title}`,
     description: descLines.join("\n"),
     start: { dateTime: opts.start.toISOString() },
     end: { dateTime: opts.end.toISOString() },
