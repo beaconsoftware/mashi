@@ -13,6 +13,7 @@ import { SourceIcon } from "@/components/shared/source-icon";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
+import { PlannedBadge } from "@/components/shared/planned-badge";
 import { useS2DStore } from "@/store/s2d-store";
 import { gsap, withMotion } from "@/lib/animation";
 import { useMagneticHover, useSelectBurst } from "@/lib/animation/interactions";
@@ -147,6 +148,7 @@ export function S2DItemCard({ item, isOverlay, density = "compact" }: Props) {
           </span>
         )}
         <PathwayBadge pathway={item.pathway} />
+        <PlannedBadge item={item} />
         <PriorityDot priority={item.priority} className="ml-auto" />
       </div>
 

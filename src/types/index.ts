@@ -81,6 +81,14 @@ export interface S2DItem {
   sprint_date?: string | null;
   sprint_order?: number | null;
   sprint_type?: SprintType | null;
+  /**
+   * The calendar day the user planned this item for (set via the board's
+   * Select-mode "Add to Today" action). NULL = not planned. The visible
+   * badge — "Today" / "Overdue" / hidden — is computed at render time
+   * from this + status; see `getPlannedState()` in `@/lib/planned`.
+   * Stored as `YYYY-MM-DD`.
+   */
+  planned_for?: string | null;
   queue_reason?: string | null;
   queue_until?: string | null;
   delegated_to?: string | null;

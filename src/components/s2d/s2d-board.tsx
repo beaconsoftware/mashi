@@ -13,7 +13,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { AlertTriangle, CheckSquare, LayoutGrid, Maximize2, Minimize2, X, Zap } from "lucide-react";
+import { AlertTriangle, CheckSquare, LayoutGrid, Maximize2, Minimize2, Sun, SunDim, X, Zap } from "lucide-react";
 import { S2DColumn } from "@/components/s2d/s2d-column";
 import { S2DItemCard } from "@/components/s2d/s2d-item-card";
 import { S2DItemSheet } from "@/components/s2d/s2d-item-sheet";
@@ -32,6 +32,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { ChromeBar } from "@/components/layout/primitives";
+import { PlannedBadge } from "@/components/shared/planned-badge";
+import { todayIso } from "@/lib/planned";
 
 type BoardView = "cards" | "select";
 type CardDensity = "compact" | "expanded";
@@ -145,6 +147,9 @@ export function S2DBoard() {
   // when view === "select". Set, not array, so toggles are O(1).
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addingToSprint, setAddingToSprint] = useState(false);
+  // Separate inflight flag for the daily-planning action so the Sprint
+  // and Today buttons don't disable each other.
+  const [planningToday, setPlanningToday] = useState(false);
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -153,6 +158,44 @@ export function S2DBoard() {
       return next;
     });
   }
+  // Bulk action: stamp planned_for=today (or clear it) on every selected
+  // item. The card chrome reads this and shows the Today / Overdue badge.
+  // Mirrors the addSelectedToSprint shape: PATCH per item via the existing
+  // updater so optimistic cache + sync-back still flow normally.
+  async function planSelectedFor(action: "today" | "clear") {
+    if (selectedIds.size === 0 || planningToday) return;
+    setPlanningToday(true);
+    setBanner(null);
+    const ids = [...selectedIds];
+    const planned_for = action === "today" ? todayIso() : null;
+    const results = await Promise.allSettled(
+      ids.map((id) => updateItem.mutateAsync({ id, patch: { planned_for } }))
+    );
+    const failed = results
+      .map((r, i) => (r.status === "rejected" ? ids[i] : null))
+      .filter((x): x is string => x != null);
+    setPlanningToday(false);
+    const verb = action === "today" ? "planned for today" : "cleared from Today";
+    if (failed.length > 0) {
+      const failedLabels = failed
+        .map((id) => {
+          const it = items.find((x) => x.id === id);
+          return it?.ticket_number != null ? `MASH-${it.ticket_number}` : id.slice(0, 8);
+        })
+        .join(", ");
+      setBanner({
+        kind: "err",
+        msg: `${failed.length} of ${ids.length} couldn't be ${verb} (${failedLabels}). The rest landed.`,
+      });
+    } else {
+      setBanner({
+        kind: "ok",
+        msg: `${ids.length} item${ids.length === 1 ? "" : "s"} ${verb}.`,
+      });
+    }
+    setSelectedIds(new Set());
+  }
+
   async function addSelectedToSprint() {
     if (selectedIds.size === 0 || addingToSprint) return;
     setAddingToSprint(true);
@@ -311,6 +354,8 @@ export function S2DBoard() {
           selectedCount={selectedIds.size}
           addingToSprint={addingToSprint}
           onAddSelectedToSprint={addSelectedToSprint}
+          planningToday={planningToday}
+          onPlanSelected={planSelectedFor}
           onClearSelection={() => setSelectedIds(new Set())}
         />
         {banner && (
@@ -388,6 +433,8 @@ function BoardToolbar({
   selectedCount,
   addingToSprint,
   onAddSelectedToSprint,
+  planningToday,
+  onPlanSelected,
   onClearSelection,
 }: {
   view: BoardView;
@@ -397,6 +444,8 @@ function BoardToolbar({
   selectedCount: number;
   addingToSprint: boolean;
   onAddSelectedToSprint: () => void;
+  planningToday: boolean;
+  onPlanSelected: (action: "today" | "clear") => void;
   onClearSelection: () => void;
 }) {
   return (
@@ -450,17 +499,45 @@ function BoardToolbar({
 
       <div className="ml-auto flex items-center gap-2">
         {view === "select" && (
-          <Button
-            size="sm"
-            disabled={selectedCount === 0 || addingToSprint}
-            onClick={onAddSelectedToSprint}
-            className="h-7 gap-1.5"
-          >
-            <Zap className="h-3.5 w-3.5" />
-            {addingToSprint
-              ? "Adding…"
-              : `Add ${selectedCount > 0 ? selectedCount : ""} to sprint`}
-          </Button>
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={selectedCount === 0 || planningToday}
+              onClick={() => onPlanSelected("clear")}
+              className="h-7 gap-1.5"
+              title="Remove the Today tag from the selected items"
+            >
+              <SunDim className="h-3.5 w-3.5" />
+              {planningToday ? "Updating…" : "Clear Today"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={selectedCount === 0 || planningToday}
+              onClick={() => onPlanSelected("today")}
+              className="h-7 gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+              title="Tag the selected items as planned for today"
+            >
+              <Sun className="h-3.5 w-3.5" />
+              {planningToday
+                ? "Adding…"
+                : `Add ${selectedCount > 0 ? selectedCount : ""} to Today`}
+            </Button>
+            <Button
+              size="sm"
+              disabled={selectedCount === 0 || addingToSprint}
+              onClick={onAddSelectedToSprint}
+              className="h-7 gap-1.5"
+            >
+              <Zap className="h-3.5 w-3.5" />
+              {addingToSprint
+                ? "Adding…"
+                : `Add ${selectedCount > 0 ? selectedCount : ""} to sprint`}
+            </Button>
+          </>
         )}
       </div>
     </ChromeBar>
@@ -597,6 +674,7 @@ function SelectListView({
               <span className="hidden shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline">
                 {pwMeta.shortLabel}
               </span>
+              <PlannedBadge item={it} className="shrink-0" />
               {it.est_minutes != null && (
                 <span className="w-10 shrink-0 text-right font-mono text-[10px] text-muted-foreground">
                   {it.est_minutes}m
