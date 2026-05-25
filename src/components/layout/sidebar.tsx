@@ -75,7 +75,7 @@ export function Sidebar() {
             rather than disappearing into a primary-color slab. */}
         <Link
           href="/"
-          className="mb-3 flex h-9 items-center gap-2 rounded-md text-foreground"
+          className="mb-3 flex h-9 items-center gap-2 rounded-md px-1.5 text-foreground"
           aria-label="Mashi home"
         >
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -113,14 +113,14 @@ export function Sidebar() {
                 {/* Icon shell — relative so the glow halo can sit inside
                     and stay scoped to the icon, not stretch across the
                     full expanded pill. Active state pre-tints the halo. */}
-                <span className="relative isolate flex h-7 w-7 shrink-0 items-center justify-center">
+                <span className="relative isolate flex h-7 w-7 shrink-0 items-center justify-center transition-transform duration-200 group-hover/item:scale-110 group-active/item:scale-95">
                   <span
                     aria-hidden
                     className={cn(
                       "pointer-events-none absolute -inset-1 -z-10 rounded-md blur-md transition-colors duration-300",
                       active
-                        ? "bg-primary/25 group-hover/item:bg-primary/45"
-                        : "bg-primary/0 group-hover/item:bg-primary/35"
+                        ? "bg-primary/15 group-hover/item:bg-primary/30"
+                        : "bg-primary/0 group-hover/item:bg-primary/25"
                     )}
                   />
                   <Icon className="h-4 w-4 transition-transform duration-200 group-hover/item:rotate-[8deg] group-hover/item:scale-110" />
@@ -144,14 +144,14 @@ export function Sidebar() {
               pathname.startsWith("/settings") && "bg-accent text-foreground"
             )}
           >
-            <span className="relative isolate flex h-7 w-7 shrink-0 items-center justify-center">
+            <span className="relative isolate flex h-7 w-7 shrink-0 items-center justify-center transition-transform duration-200 group-hover/item:scale-110 group-active/item:scale-95">
               <span
                 aria-hidden
                 className={cn(
                   "pointer-events-none absolute -inset-1 -z-10 rounded-md blur-md transition-colors duration-300",
                   pathname.startsWith("/settings")
-                    ? "bg-primary/25 group-hover/item:bg-primary/45"
-                    : "bg-primary/0 group-hover/item:bg-primary/35"
+                    ? "bg-primary/15 group-hover/item:bg-primary/30"
+                    : "bg-primary/0 group-hover/item:bg-primary/25"
                 )}
               />
               <Settings className="h-4 w-4 transition-transform duration-200 group-hover/item:rotate-[8deg] group-hover/item:scale-110" />
