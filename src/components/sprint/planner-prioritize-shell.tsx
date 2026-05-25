@@ -26,6 +26,7 @@ import { PlannerPrioritizeList } from "./planner-prioritize-list";
 import { PlannerPrioritizeBoard } from "./planner-prioritize-board";
 import type { S2DItem } from "@/types";
 import { cn } from "@/lib/utils";
+import { getPlannedState } from "@/lib/planned";
 
 type ViewMode = "card" | "list" | "board";
 
@@ -50,15 +51,29 @@ const PRIORITY_ORDER: Record<string, number> = {
  * Shared filter + sort. Decoupled from the views so both render the
  * same items in the same order.
  *
+ * Sort order: planned-state first (Today, then Overdue, then unplanned),
+ * then priority, then created_at desc. This surfaces what the user
+ * already committed to before forcing them to wade through the rest of
+ * the backlog — the whole point of the daily-planning flow.
+ *
  * IMPORTANT: we DO NOT filter out items where sprint_date === today.
  * Previously we did — that's what caused the "Deck cleared with 150 open
  * items" bug. If the user had already planned a sprint with most items,
  * the filter ate them all and the planner looked empty. Better behavior:
  * include them, mark them "in sprint", and let the user re-confirm.
  */
+const PLANNED_WEIGHT: Record<NonNullable<ReturnType<typeof getPlannedState>> | "none", number> = {
+  today: 0,
+  overdue: 1,
+  none: 2,
+};
+
 export function eligibleForSprint(items: S2DItem[]): S2DItem[] {
   const eligible = items.filter((it) => it.status !== "done");
   eligible.sort((a, b) => {
+    const pwa = PLANNED_WEIGHT[getPlannedState(a) ?? "none"];
+    const pwb = PLANNED_WEIGHT[getPlannedState(b) ?? "none"];
+    if (pwa !== pwb) return pwa - pwb;
     const pa = PRIORITY_ORDER[a.priority] ?? 9;
     const pb = PRIORITY_ORDER[b.priority] ?? 9;
     if (pa !== pb) return pa - pb;
