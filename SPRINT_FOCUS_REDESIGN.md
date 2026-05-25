@@ -9,11 +9,28 @@
 
 ## How to use this doc
 
-1. Each phase below is a self-contained PR brief. Spawn a **fresh agent per PR** — do not continue the same agent across phases.
-2. Use the prompt template in [§ Per-PR agent prompt template](#per-pr-agent-prompt-template) when spawning each agent.
-3. At the end of every PR the agent will remind you to terminate the session and start a new one for the next phase. **Honor that.** Continuing a session across phases is how this project goes off-rails.
+1. **One unified prompt drives the whole project.** See [§ Unified phase-runner prompt](#unified-phase-runner-prompt) in Part 5. Spawn a fresh agent with that exact prompt; it self-routes to the next pending phase by reading the Progress tracker below.
+2. **Fresh agent per phase** — do not continue the same agent across phases. Each agent runs exactly one phase and stops at PR open.
+3. **Merge before spawning the next agent.** The agent refuses to start a new phase if a prior phase's PR is still open. The merge cycle is the human review step that keeps the project on rails.
 4. Edit this doc liberally as decisions evolve. Phase 2's reality will likely change Phase 4's spec — capture that here, not in chat history.
 5. **Phase 6 deletes this doc as part of its commit.** The agent running Phase 6 must verify this.
+
+## Progress tracker
+
+The unified prompt reads this table to decide what to do. The next phase to run is the first row with status `Pending`. When implementing a phase, the agent updates this row from `Pending` to `Shipped` with the PR URL **in the same commit** as the code. The merge brings the updated tracker to main; the next spawn sees the new state.
+
+| Phase | Subject | Status | PR |
+|---|---|---|---|
+| 1 | Chrome reset — TimerRing + merged context + single About | Pending | — |
+| 2 | Reply + Decide canvases + Refine Sheet + decision_log | Pending | — |
+| 3 | Heads-down + Watching + Delegated canvases + watch_check_ins | Pending | — |
+| 4 | Meeting-prep canvas + pre-warm scheduler | Pending | — |
+| 5 | Contract card + Spawned Rail + sprint-complete rewrite | Pending | — |
+| 6 | Polish + DELETE THIS DOC | Pending | — |
+
+**Status values**: `Pending` → `Shipped`. (No intermediate "In Review" — the open-PR check via `gh` covers that.)
+
+**If all rows are `Shipped`**: the redesign is complete. The Phase 6 PR should have deleted this doc; if you're reading this, that PR hasn't merged yet.
 
 ---
 
@@ -376,13 +393,14 @@ Single header above the workspace. Uses `<SectionHeader>` primitive.
 - [ ] All existing slot behaviors (drag, swap, done/skip/bench/snooze, detail) still work.
 - [ ] `pnpm verify` green; `pnpm audit:layers` green; `pnpm audit:translucency` green.
 - [ ] Visual baselines updated (`pnpm test:visual:update` + committed PNGs).
+- [ ] Progress tracker row for Phase 1 updated from `Pending` to `Shipped` with this PR's URL, in the same commit as the code.
 
 ### End-of-PR reminder (agent MUST include verbatim in its final user-facing message)
 
 > ✅ **Phase 1 complete.** Next steps for Sidd:
 > 1. Review the diff and merge this PR when satisfied.
-> 2. **Terminate this agent session** — do not continue it for Phase 2.
-> 3. Start a fresh agent using the Phase 2 prompt from `SPRINT_FOCUS_REDESIGN.md` § Per-PR agent prompt template.
+> 2. **Terminate this agent session** — do not continue it.
+> 3. Spawn a fresh agent with the **Unified phase-runner prompt** from `SPRINT_FOCUS_REDESIGN.md` § Part 5. It will self-route to Phase 2 by reading the Progress tracker on main.
 >
 > Continuing this session into Phase 2 carries accumulated context that should not bleed forward. Fresh agents per phase are non-negotiable per the project plan.
 
@@ -504,13 +522,14 @@ On `decide` exit:
 - [ ] Refine sheet opens via `/` or `⌥+R` from any active slot; pinning persists; Esc closes.
 - [ ] `decision_log` row queryable.
 - [ ] Migration 029 applied to local DB and CI green on push.
+- [ ] Progress tracker row for Phase 2 updated from `Pending` to `Shipped` with this PR's URL, in the same commit as the code.
 
 ### End-of-PR reminder (agent MUST include verbatim)
 
 > ✅ **Phase 2 complete.** Next steps for Sidd:
 > 1. Review the diff and merge this PR when satisfied.
-> 2. **Terminate this agent session** — do not continue it for Phase 3.
-> 3. Start a fresh agent using the Phase 3 prompt from `SPRINT_FOCUS_REDESIGN.md` § Per-PR agent prompt template.
+> 2. **Terminate this agent session** — do not continue it.
+> 3. Spawn a fresh agent with the **Unified phase-runner prompt** from `SPRINT_FOCUS_REDESIGN.md` § Part 5. It will self-route to Phase 3 by reading the Progress tracker on main.
 >
 > Continuing this session into Phase 3 carries accumulated context that should not bleed forward.
 
@@ -629,13 +648,14 @@ Urgency-based silence threshold for pre-warming a nudge:
 - [ ] Delegate canvas pre-warms a nudge only when silence ≥ urgency threshold.
 - [ ] `watch_check_ins` queryable per item in chronological order.
 - [ ] Migration 030 applied to local DB and CI green on push.
+- [ ] Progress tracker row for Phase 3 updated from `Pending` to `Shipped` with this PR's URL, in the same commit as the code.
 
 ### End-of-PR reminder (agent MUST include verbatim)
 
 > ✅ **Phase 3 complete.** Next steps for Sidd:
 > 1. Review the diff and merge this PR when satisfied.
-> 2. **Terminate this agent session** — do not continue it for Phase 4.
-> 3. Start a fresh agent using the Phase 4 prompt from `SPRINT_FOCUS_REDESIGN.md` § Per-PR agent prompt template.
+> 2. **Terminate this agent session** — do not continue it.
+> 3. Spawn a fresh agent with the **Unified phase-runner prompt** from `SPRINT_FOCUS_REDESIGN.md` § Part 5. It will self-route to Phase 4 by reading the Progress tracker on main.
 
 ---
 
@@ -699,13 +719,14 @@ Done exit: `onExit({ kind: "stage-meeting", calendarEventId, talkingPoints })`. 
 - [ ] Re-pathway triggers fresh pre-warm.
 - [ ] `prewarm_status` reads `'ready'` when canvas-relevant fields exist on `enriched_context`.
 - [ ] Migration 031 applied if `sprint_blocks` is server-backed.
+- [ ] Progress tracker row for Phase 4 updated from `Pending` to `Shipped` with this PR's URL, in the same commit as the code.
 
 ### End-of-PR reminder (agent MUST include verbatim)
 
 > ✅ **Phase 4 complete.** Next steps for Sidd:
 > 1. Review the diff and merge this PR when satisfied.
-> 2. **Terminate this agent session** — do not continue it for Phase 5.
-> 3. Start a fresh agent using the Phase 5 prompt from `SPRINT_FOCUS_REDESIGN.md` § Per-PR agent prompt template.
+> 2. **Terminate this agent session** — do not continue it.
+> 3. Spawn a fresh agent with the **Unified phase-runner prompt** from `SPRINT_FOCUS_REDESIGN.md` § Part 5. It will self-route to Phase 5 by reading the Progress tracker on main.
 
 ---
 
@@ -802,13 +823,14 @@ Renders per-item rows: pathway glyph + success_statement + outcome + spawned fol
 - [ ] `<SpawnedRail>` populates on every spawn event without page reload.
 - [ ] Sprint-complete shows success_statement ↔ outcomes, spawn chain, top Spotify track.
 - [ ] Migration 032 applied; CI green.
+- [ ] Progress tracker row for Phase 5 updated from `Pending` to `Shipped` with this PR's URL, in the same commit as the code.
 
 ### End-of-PR reminder (agent MUST include verbatim)
 
 > ✅ **Phase 5 complete.** Next steps for Sidd:
 > 1. Review the diff and merge this PR when satisfied.
-> 2. **Terminate this agent session** — do not continue it for Phase 6.
-> 3. Start a fresh agent using the Phase 6 prompt from `SPRINT_FOCUS_REDESIGN.md` § Per-PR agent prompt template.
+> 2. **Terminate this agent session** — do not continue it.
+> 3. Spawn a fresh agent with the **Unified phase-runner prompt** from `SPRINT_FOCUS_REDESIGN.md` § Part 5. It will self-route to Phase 6 by reading the Progress tracker on main.
 >
 > Phase 6 is the final phase — it deletes this redesign doc as part of its PR.
 
@@ -888,6 +910,7 @@ Text uses `text-foreground` only — never custom — to keep contrast guarantee
 - [ ] Spotify ambient tints card fills (perceptible but never harming text contrast).
 - [ ] `prefers-reduced-motion: reduce` short-circuits all morphs.
 - [ ] `pnpm audit:translucency` green; no new translucency values outside sanctioned scale.
+- [ ] Progress tracker row for Phase 6 updated from `Pending` to `Shipped` with this PR's URL — **note: the tracker update lands in the same commit that deletes the doc, so the tracker exists in git history but not on main after merge.** The agent should make the tracker edit first, then `git rm` the file, both in the same commit.
 - [ ] **`SPRINT_FOCUS_REDESIGN.md` deleted from repo** (verify with `git status` showing it as deleted).
 - [ ] PR description explicitly confirms doc removal: "Removes SPRINT_FOCUS_REDESIGN.md — redesign complete."
 
@@ -907,32 +930,63 @@ Text uses `text-foreground` only — never custom — to keep contrast guarantee
 
 # Part 5 — Operational
 
-## Per-PR agent prompt template
+## Unified phase-runner prompt
 
-When spawning a fresh agent for Phase N, use this exact prompt structure:
+Spawn a fresh agent with this exact prompt for every phase. It is identical every time. The agent self-routes by reading the Progress tracker.
 
 ```
-Read SPRINT_FOCUS_REDESIGN.md at the repo root in full before doing anything else.
+You are implementing one phase of the Sprint Focus Mode redesign. The full spec is in SPRINT_FOCUS_REDESIGN.md at the repo root.
 
-Implement Phase {N} as specified in § Phase {N}. Constraints:
+═══ STEP 1: ROUTE ═══
 
-- Acceptance criteria for this phase MUST all pass before opening the PR.
-- Follow AGENTS.md doctrine: shadcn-first, layout primitives, z-scale, sanctioned translucency, motion via DUR/EASE/withMotion.
-- Run pnpm verify, pnpm audit:layers, and pnpm audit:translucency. All green before PR.
-- {Phase 2/3/4/5 only:} Apply the migration locally first; verify schema; commit migration with code.
-- {Phase 1/2 only:} Update visual baselines (pnpm test:visual:update) and commit PNGs.
-- Open the PR with a body that maps each acceptance criterion to where it's satisfied (file:line or test).
-- At the end, include the verbatim end-of-PR reminder from § Phase {N} in your final user-facing message. This is non-negotiable.
+1. Read SPRINT_FOCUS_REDESIGN.md in full before doing anything else.
+2. Read the Progress tracker table near the top. The next phase to implement is the FIRST row with status "Pending".
+3. If all rows are "Shipped", the redesign is complete. Stop and report this — there is nothing to do.
+4. Run: `gh pr list --state open --search "Sprint focus"` (or scan for any open PR touching SPRINT_FOCUS_REDESIGN.md).
+   If any open PR exists for a prior phase, STOP and tell Sidd to merge it before spawning the next agent. Do not start a new phase while a prior one is in review.
 
-Do not implement any phase other than Phase {N}. Do not delete SPRINT_FOCUS_REDESIGN.md unless you are running Phase 6.
+═══ STEP 2: IMPLEMENT ═══
+
+Implement the chosen phase exactly as specified in its § Phase N section of the doc. Constraints (every phase):
+
+- All acceptance criteria for this phase MUST pass before opening the PR.
+- Follow AGENTS.md doctrine: shadcn-first primitives, layout primitives, z-scale tokens (Z.*/z-*), sanctioned translucency steps only (/15 /40 /55 /60 /80 /95), motion via DUR/EASE/withMotion (respects prefers-reduced-motion).
+- Run `pnpm verify`, `pnpm audit:layers`, `pnpm audit:translucency`. All must be green before opening the PR.
+- If the phase has a migration: apply it locally first (`supabase db push` or paste into local DB), verify schema, then commit the migration with the code.
+- If the phase requires visual baselines (Phase 1 and any phase that changes a dashboard route): run `pnpm test:visual:update` and commit the updated PNGs.
+- Update the Progress tracker row for this phase from "Pending" to "Shipped" with the PR URL — IN THE SAME COMMIT as the code. (For Phase 6: edit the tracker first, then `git rm SPRINT_FOCUS_REDESIGN.md` in the same commit.)
+
+═══ STEP 3: OPEN PR ═══
+
+- Title format: "Phase N: <subject from tracker>"
+- Body: map each acceptance criterion to where it's satisfied (file:line ref or test name).
+- Do not push to a protected branch. Open a PR; do not merge it. Sidd reviews and merges.
+
+═══ STEP 4: FINAL MESSAGE ═══
+
+- Include the verbatim "End-of-PR reminder" block from § Phase N in your final user-facing message. This is non-negotiable.
+- For Phase 6 only: explicitly confirm SPRINT_FOCUS_REDESIGN.md is in the deletion list of the PR.
+
+═══ HARD CONSTRAINTS ═══
+
+- Implement EXACTLY ONE phase per session — the first Pending one. Do not pre-emptively start the next phase even if there's time.
+- Do NOT skip ahead to a later phase. Phases have dependencies.
+- Do NOT delete SPRINT_FOCUS_REDESIGN.md unless implementing Phase 6.
+- Do NOT continue past PR open in this session. Stop, output the end-of-PR reminder, and let Sidd merge before spawning the next agent.
 ```
+
+### How the routing actually works
+
+Each phase's PR commits two things together: the code, and the Progress tracker update. When the PR merges to `main`, the tracker on `main` reflects the new state. The next fresh agent reads `main`'s tracker, sees the first Pending row, and runs that phase. No explicit phase number is ever passed — the codebase IS the state.
+
+The `gh pr list` check is the safety against running a new phase while the prior one is still under review.
 
 ## End-of-PR reminder template (already in each phase)
 
 Every phase ends with a verbatim reminder block. The agent must include it in its final user-facing message. The reminder always:
 - Names the completed phase.
 - Tells Sidd to terminate the agent session.
-- Points to the next phase's prompt in this doc.
+- Notes that the next phase auto-routes from the unified prompt above (no per-phase prompt needed).
 - (Phase 6 only) Confirms the doc has been deleted.
 
 ## Change ledger
