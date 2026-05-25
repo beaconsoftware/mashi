@@ -15,8 +15,8 @@
  * where useS2DItems is fetching but useCompanies hasn't returned yet.
  */
 
-import { useEffect, useState } from "react";
-import { LayoutGrid, List, Columns3 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { LayoutGrid, List, Columns3, Sun, AlertCircle } from "lucide-react";
 import { useS2DItems } from "@/hooks/use-s2d";
 import { useSprintStore } from "@/store/sprint-store";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,8 @@ import { PlannerPrioritizeBoard } from "./planner-prioritize-board";
 import type { S2DItem } from "@/types";
 import { cn } from "@/lib/utils";
 import { getPlannedState } from "@/lib/planned";
+
+type PlannedFilterValue = "today" | "overdue";
 
 type ViewMode = "card" | "list" | "board";
 
@@ -99,7 +101,43 @@ export function PlannerPrioritizeShell() {
     }
   }
 
-  const eligible = eligibleForSprint(items);
+  // Daily-planning filter: when any chip is on, narrow the planner's
+  // eligible list to items in that planned state. Empty set = show all
+  // eligible items (default). Mirrors the board's Today / Overdue filter.
+  const [plannedFilter, setPlannedFilter] = useState<Set<PlannedFilterValue>>(
+    () => new Set()
+  );
+  function togglePlanned(v: PlannedFilterValue) {
+    setPlannedFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(v)) next.delete(v);
+      else next.add(v);
+      return next;
+    });
+  }
+
+  const eligibleAll = useMemo(() => eligibleForSprint(items), [items]);
+  const eligible = useMemo(() => {
+    if (plannedFilter.size === 0) return eligibleAll;
+    return eligibleAll.filter((it) => {
+      const state = getPlannedState(it);
+      return !!state && plannedFilter.has(state);
+    });
+  }, [eligibleAll, plannedFilter]);
+
+  // Count of items in each planned bucket (over all eligible, not the
+  // currently-filtered slice) so chip labels can show "Today · 4" type
+  // hints when those items exist.
+  const plannedCounts = useMemo(() => {
+    let today = 0;
+    let overdue = 0;
+    for (const it of eligibleAll) {
+      const state = getPlannedState(it);
+      if (state === "today") today += 1;
+      else if (state === "overdue") overdue += 1;
+    }
+    return { today, overdue };
+  }, [eligibleAll]);
 
   // ── Defensive empty-state UI ──────────────────────────────────────
   if (isPending) {
@@ -169,11 +207,23 @@ export function PlannerPrioritizeShell() {
   // reads cleanly against bright art. The actual focal point — the
   // CardFace / list / board — keeps its own opaque bg-card so it
   // stands out against the ambient. See AGENTS.md "Layout doctrine".
+  const filterActive = plannedFilter.size > 0;
+
   return (
     <div className="flex h-full w-full flex-col">
-      <ChromeBar className="flex items-center justify-between px-5 py-2">
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-          Plan sprint · {eligible.length} eligible
+      <ChromeBar className="flex flex-wrap items-center justify-between gap-3 px-5 py-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Plan sprint ·{" "}
+            {filterActive
+              ? `${eligible.length} / ${eligibleAll.length}`
+              : `${eligible.length} eligible`}
+          </div>
+          <PlannedChips
+            value={plannedFilter}
+            onToggle={togglePlanned}
+            counts={plannedCounts}
+          />
         </div>
         <ViewToggle view={view} onChange={switchView} />
       </ChromeBar>
@@ -186,6 +236,90 @@ export function PlannerPrioritizeShell() {
         <PlannerPrioritizeBoard eligibleItems={eligible} />
       )}
     </div>
+  );
+}
+
+/**
+ * Today / Overdue filter chips, sized for the planner's ChromeBar.
+ * Multi-select like the board's chip set. Each chip shows its bucket
+ * count and disables itself when the bucket is empty so the user
+ * doesn't toggle into a guaranteed-empty state.
+ */
+function PlannedChips({
+  value,
+  onToggle,
+  counts,
+}: {
+  value: Set<PlannedFilterValue>;
+  onToggle: (v: PlannedFilterValue) => void;
+  counts: { today: number; overdue: number };
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <PlannedChip
+        active={value.has("today")}
+        disabled={counts.today === 0}
+        onClick={() => onToggle("today")}
+        icon={<Sun aria-hidden className="h-2.5 w-2.5" />}
+        label="Today"
+        count={counts.today}
+        tone="primary"
+      />
+      <PlannedChip
+        active={value.has("overdue")}
+        disabled={counts.overdue === 0}
+        onClick={() => onToggle("overdue")}
+        icon={<AlertCircle aria-hidden className="h-2.5 w-2.5" />}
+        label="Overdue"
+        count={counts.overdue}
+        tone="amber"
+      />
+    </div>
+  );
+}
+
+function PlannedChip({
+  active,
+  disabled,
+  onClick,
+  icon,
+  label,
+  count,
+  tone,
+}: {
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  tone: "primary" | "amber";
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-auto items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-normal transition-colors",
+        active
+          ? tone === "primary"
+            ? "border-primary/50 bg-primary/15 text-foreground hover:bg-primary/15 hover:text-foreground"
+            : "border-amber-500/50 bg-amber-500/15 text-foreground hover:bg-amber-500/15 hover:text-foreground"
+          : "border-border/40 text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+        disabled && "opacity-40"
+      )}
+    >
+      {icon}
+      <span>{label}</span>
+      {count > 0 && (
+        <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+          {count}
+        </span>
+      )}
+    </Button>
   );
 }
 
