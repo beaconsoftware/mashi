@@ -111,10 +111,18 @@ export function FocusOverlay({
 
   if (!host) return null;
 
+  // Inset the left edge by w-14 (56px = the sidebar's layout slot) so
+  // focus overlays don't paint underneath the sidebar (which sits at
+  // z-sidebar 110 > z-focus 100 and always wins). Without this offset
+  // every focus overlay (swipe deck, sprint mode, sprint complete) had
+  // its first 56px clipped behind the sidebar — first column of cards
+  // shows "P scraper" instead of "MPP scraper" type bugs. The expand-
+  // on-hover sidebar widens to w-56 but only as a transient floating
+  // layer; the layout slot stays w-14 and so does this reservation.
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-focus flex flex-col bg-background/15 text-foreground backdrop-blur-sm",
+        "fixed inset-y-0 right-0 left-14 z-focus flex flex-col bg-background/15 text-foreground backdrop-blur-sm",
         className
       )}
     >
