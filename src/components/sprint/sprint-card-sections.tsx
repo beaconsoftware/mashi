@@ -459,10 +459,18 @@ function Section3Act({ item }: { item: S2DItem }) {
         <TabPill active={tab === "draft"} onClick={() => setTab("draft")} icon={<Mail className="h-3 w-3" />} label="Draft" />
         <TabPill active={tab === "decide"} onClick={() => setTab("decide")} icon={<CheckSquare className="h-3 w-3" />} label="Decide" />
       </div>
-      <div className="mt-2 rounded-md border border-dashed border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
-        {tab === "claude" && "Hand off to Claude Desktop or Code with the enriched context baked in. PR 5."}
-        {tab === "draft" && "Live preview of a drafted reply in your style. Copy or send via Gmail / Slack. PR 6."}
-        {tab === "decide" && "Record the decision + optionally spin up a follow-up item. PR 7."}
+      <div className="mt-2">
+        {tab === "claude" && <ActPanelClaude item={item} />}
+        {tab === "draft" && (
+          <div className="rounded-md border border-dashed border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
+            Live preview of a drafted reply in your style. Copy or send via Gmail / Slack. PR 6.
+          </div>
+        )}
+        {tab === "decide" && (
+          <div className="rounded-md border border-dashed border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
+            Record the decision + optionally spin up a follow-up item. PR 7.
+          </div>
+        )}
       </div>
     </SectionShell>
   );
@@ -472,6 +480,103 @@ function defaultTabForPathway(pathway: S2DItem["pathway"]): ActTab {
   if (pathway === "quick_reply" || pathway === "drafted_response") return "draft";
   if (pathway === "decision_gate") return "decide";
   return "claude";
+}
+
+/**
+ * Claude tab — hand off the item to Claude Desktop / Code / clipboard
+ * with the cached sources AND the user's enriched context (plan +
+ * pinned sources + refine thread) baked in.
+ *
+ * Flow:
+ *   - Build the base prompt via the existing fetchAndRenderClaudePrompt
+ *     helper (Gmail / Slack / Linear / Fireflies / Calendar source dump).
+ *   - Append the enriched_context block (markdown) if enrich has run.
+ *   - Copy to clipboard; optionally open claude.ai/new in a new tab.
+ */
+function ActPanelClaude({ item }: { item: S2DItem }) {
+  const { data } = useEnrichedContext(item.id);
+  const ctx = data?.enriched_context ?? null;
+  const hasEnrich = !!ctx && ctx.plan.length + ctx.pulled_sources.length > 0;
+  const [working, setWorking] = useState(false);
+  const [copied, setCopied] = useState<"web" | "code" | "copy" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function packAndDispatch(target: "web" | "code" | "copy") {
+    if (working) return;
+    setWorking(true);
+    setError(null);
+    try {
+      const { fetchAndRenderClaudePrompt } = await import("@/lib/s2d/claude-prompt");
+      const { renderEnrichedContextBlock } = await import("@/lib/s2d/enriched-prompt");
+      const base = await fetchAndRenderClaudePrompt(item);
+      const enriched = renderEnrichedContextBlock(ctx);
+      const text = enriched ? `${base}\n\n${enriched}` : base;
+      await navigator.clipboard.writeText(text);
+      setCopied(target);
+      setTimeout(() => setCopied(null), 1800);
+      if (target === "web") {
+        window.open("https://claude.ai/new", "_blank", "noopener,noreferrer");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to build prompt");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/40 bg-card/55 p-2.5">
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        Hand off with the full pack: cached sources, plan, pinned sources,
+        and your refine thread.{" "}
+        {!hasEnrich && (
+          <span className="text-muted-foreground/80">
+            Run Enrich above first for richer context.
+          </span>
+        )}
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          size="sm"
+          onClick={() => packAndDispatch("web")}
+          disabled={working}
+          className="h-7 gap-1.5 px-2 text-[11px]"
+          title="Copy prompt and open claude.ai in a new tab"
+        >
+          {working && copied === null ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Bot className="h-3 w-3" />
+          )}
+          {copied === "web" ? "Copied → claude.ai" : "Open in Claude Desktop"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => packAndDispatch("code")}
+          disabled={working}
+          className="h-7 gap-1.5 px-2 text-[11px]"
+          title="Copy prompt for pasting into Claude Code"
+        >
+          <Bot className="h-3 w-3" />
+          {copied === "code" ? "Copied" : "For Claude Code"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => packAndDispatch("copy")}
+          disabled={working}
+          className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground"
+          title="Copy prompt to clipboard"
+        >
+          {copied === "copy" ? "Copied" : "Copy prompt"}
+        </Button>
+      </div>
+      {error && (
+        <div className="text-[10px] text-destructive">{error}</div>
+      )}
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────
