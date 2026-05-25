@@ -17,22 +17,37 @@ interface Body {
   calendarAccountId: string | null;
 }
 
+interface ItemRow {
+  id: string;
+  ticket_number: number | null;
+  title: string;
+  pathway: string;
+  priority: string;
+  description: string | null;
+}
+
 /**
  * POST /api/sprint/create-events
  *
  * 1. Stamps sprint_start_at / sprint_end_at on each S2D item (always).
  * 2. If createCalendarEvents is true and a calendar account is provided,
- *    creates one event per block on the user's calendar.
+ *    creates ONE consolidated calendar event covering the entire sprint
+ *    window (earliest block start → latest block end).
  *
- * Event design (per user preference):
- *   - Title is JUST the ticket id ("MASH-415") so peers on a shared
- *     calendar view see a vague reference but no work titles.
- *   - Description carries the full task title, pathway, priority, and a
- *     deep link back to the Mashi detail page so the user always has
- *     one click back to the task they planned to do.
- *   - Visibility uses the calendar's default — typically "details visible
- *     to people with calendar access". The ticket-only title is the
- *     primary privacy lever.
+ * Event design:
+ *   - Title: "Working on: <title 1>, <title 2>, …" — every item's title
+ *     joined, so the user's own calendar reads like a real day plan.
+ *     Truncated to ~250 chars with a trailing "+N more" if the joined
+ *     list runs long.
+ *   - Description: per-block details (task title, pathway, priority,
+ *     Mashi deep link, optional description) so opening the event
+ *     surfaces the same context the planner shows.
+ *   - The same calendar_event_id is stamped on every s2d_items row in
+ *     the sprint — they all point at the same calendar entry.
+ *
+ * Why one event vs N per block: a sprint is one focus window. N events
+ * stacked at the top of the day clutters the calendar and reads as
+ * multiple meetings when it's really one block of self-time.
  */
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as Body;
@@ -58,7 +73,9 @@ export async function POST(req: NextRequest) {
     .select("id, ticket_number, title, pathway, priority, description")
     .eq("user_id", user.id)
     .in("id", ids);
-  const itemMap = new Map((items ?? []).map((i) => [i.id, i]));
+  const itemMap = new Map<string, ItemRow>(
+    (items ?? []).map((i) => [i.id, i as ItemRow])
+  );
 
   const origin = req.nextUrl.origin;
 
@@ -76,25 +93,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const events: Array<{
-    s2dItemId: string;
-    calendarEventId: string | null;
-    error?: string;
-  }> = [];
-
+  // Stamp per-block sprint_start_at / sprint_end_at first. Each block's
+  // window stays per-item so the in-sprint UI keeps its block timing —
+  // only the calendar push collapses to one event.
   for (const b of body.blocks) {
     const item = itemMap.get(b.s2dItemId);
-    if (!item) {
-      events.push({ s2dItemId: b.s2dItemId, calendarEventId: null, error: "item not found" });
-      continue;
-    }
-
+    if (!item) continue;
     const start = new Date(b.startAt);
     const end = new Date(start.getTime() + b.durationMin * 60_000);
-
-    // Stamp the sprint window on the item (still scoped by user_id even
-    // though item.id only resolves to this user's rows above — defense in
-    // depth in case the loop is ever fed external ids).
     await sb
       .from("s2d_items")
       .update({
@@ -105,38 +111,90 @@ export async function POST(req: NextRequest) {
       })
       .eq("user_id", user.id)
       .eq("id", item.id);
+  }
 
-    if (!provider || !body.calendarAccountId) {
-      events.push({ s2dItemId: item.id, calendarEventId: null });
-      continue;
+  // Initial event response — one row per block, calendarEventId null
+  // until we push. If no calendar push is requested (or no provider),
+  // we return this as-is and the client uses the same shape.
+  const events: Array<{
+    s2dItemId: string;
+    calendarEventId: string | null;
+    error?: string;
+  }> = body.blocks.map((b) => ({ s2dItemId: b.s2dItemId, calendarEventId: null }));
+
+  if (!provider || !body.calendarAccountId) {
+    return NextResponse.json({ ok: true, events });
+  }
+
+  // Build the one consolidated event covering the whole sprint window.
+  // Earliest start, latest end. Skip blocks whose item we couldn't load
+  // (item not found / cross-tenant guard tripped) — they get an error
+  // entry in the per-block response.
+  const validBlocks = body.blocks
+    .map((b) => ({ block: b, item: itemMap.get(b.s2dItemId) }))
+    .filter((x): x is { block: BlockIn; item: ItemRow } => !!x.item);
+
+  for (const b of body.blocks) {
+    if (!itemMap.get(b.s2dItemId)) {
+      const idx = events.findIndex((e) => e.s2dItemId === b.s2dItemId);
+      if (idx >= 0) events[idx].error = "item not found";
     }
+  }
 
-    try {
-      const eventId =
-        provider === "gcal"
-          ? await createGoogleEvent({
-              accountId: body.calendarAccountId,
-              start,
-              end,
-              ticket: `MASH-${item.ticket_number}`,
-              title: item.title,
-              pathway: item.pathway,
-              priority: item.priority,
-              description: item.description ?? null,
-              mashiUrl: `${origin}/s2d?item=${item.id}`,
-            })
-          : null; // mscal: TODO when Outlook calendar push is wired
+  if (validBlocks.length === 0) {
+    return NextResponse.json({ ok: true, events });
+  }
 
-      await sb
-        .from("s2d_items")
-        .update({ sprint_calendar_event_id: eventId })
-        .eq("user_id", user.id)
-        .eq("id", item.id);
-      events.push({ s2dItemId: item.id, calendarEventId: eventId });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "calendar push failed";
-      console.warn(`[sprint/create-events] ${item.id} failed:`, msg);
-      events.push({ s2dItemId: item.id, calendarEventId: null, error: msg });
+  const sprintStart = new Date(
+    Math.min(...validBlocks.map((x) => new Date(x.block.startAt).getTime()))
+  );
+  const sprintEnd = new Date(
+    Math.max(
+      ...validBlocks.map(
+        (x) => new Date(x.block.startAt).getTime() + x.block.durationMin * 60_000
+      )
+    )
+  );
+
+  try {
+    const eventId =
+      provider === "gcal"
+        ? await createConsolidatedGoogleEvent({
+            accountId: body.calendarAccountId,
+            start: sprintStart,
+            end: sprintEnd,
+            blocks: validBlocks.map((x) => ({
+              ticket: x.item.ticket_number != null ? `MASH-${x.item.ticket_number}` : null,
+              title: x.item.title,
+              pathway: x.item.pathway,
+              priority: x.item.priority,
+              description: x.item.description ?? null,
+              mashiUrl: `${origin}/s2d?item=${x.item.id}`,
+              durationMin: x.block.durationMin,
+            })),
+          })
+        : null; // mscal: TODO when Outlook calendar push is wired
+
+    // Stamp the SAME event_id on every item in the sprint.
+    if (eventId) {
+      for (const { item } of validBlocks) {
+        await sb
+          .from("s2d_items")
+          .update({ sprint_calendar_event_id: eventId })
+          .eq("user_id", user.id)
+          .eq("id", item.id);
+        const idx = events.findIndex((e) => e.s2dItemId === item.id);
+        if (idx >= 0) events[idx].calendarEventId = eventId;
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "calendar push failed";
+    console.warn(`[sprint/create-events] consolidated event failed:`, msg);
+    // Stamp the error on every block so the client can surface a single
+    // sprint-level failure rather than implying per-item issues.
+    for (const { item } of validBlocks) {
+      const idx = events.findIndex((e) => e.s2dItemId === item.id);
+      if (idx >= 0) events[idx].error = msg;
     }
   }
 
@@ -145,40 +203,77 @@ export async function POST(req: NextRequest) {
 
 const GCAL_API = "https://www.googleapis.com/calendar/v3";
 
-async function createGoogleEvent(opts: {
-  accountId: string;
-  start: Date;
-  end: Date;
-  ticket: string;
+interface ConsolidatedBlock {
+  ticket: string | null;
   title: string;
   pathway: string;
   priority: string;
   description: string | null;
   mashiUrl: string;
+  durationMin: number;
+}
+
+/**
+ * Build "Working on: <title 1>, <title 2>, …". Caps at ~250 chars so
+ * Google Calendar's summary column doesn't get a giant string nobody
+ * can scan. Trailing "+N more" when truncated.
+ */
+function buildConsolidatedTitle(blocks: ConsolidatedBlock[]): string {
+  const prefix = "Working on: ";
+  const SOFT_LIMIT = 250;
+  const titles = blocks.map((b) => b.title);
+  let joined = "";
+  let included = 0;
+  for (const t of titles) {
+    const next = joined.length === 0 ? t : `${joined}, ${t}`;
+    if (`${prefix}${next}`.length > SOFT_LIMIT && included > 0) break;
+    joined = next;
+    included += 1;
+  }
+  const remaining = titles.length - included;
+  return remaining > 0 ? `${prefix}${joined} +${remaining} more` : `${prefix}${joined}`;
+}
+
+/**
+ * Build the description body: one section per block with task name,
+ * pathway/priority, duration, optional description, and a Mashi link.
+ */
+function buildConsolidatedDescription(blocks: ConsolidatedBlock[]): string {
+  const sections = blocks.map((b, i) => {
+    const ticketPrefix = b.ticket ? `${b.ticket} · ` : "";
+    const lines = [
+      `${i + 1}. ${ticketPrefix}${b.title}`,
+      `   ${b.pathway} · ${b.priority} · ${b.durationMin}m`,
+      `   ${b.mashiUrl}`,
+    ];
+    if (b.description) {
+      lines.push("");
+      lines.push(
+        b.description
+          .slice(0, 1000)
+          .split("\n")
+          .map((l) => `   ${l}`)
+          .join("\n")
+      );
+    }
+    return lines.join("\n");
+  });
+  return sections.join("\n\n");
+}
+
+async function createConsolidatedGoogleEvent(opts: {
+  accountId: string;
+  start: Date;
+  end: Date;
+  blocks: ConsolidatedBlock[];
 }): Promise<string | null> {
   const token = await getActiveAccessToken(opts.accountId);
 
-  const descLines = [
-    `Task: ${opts.title}`,
-    `Action type: ${opts.pathway}  ·  Priority: ${opts.priority}`,
-    `Mashi: ${opts.mashiUrl}`,
-  ];
-  if (opts.description) {
-    descLines.push("");
-    descLines.push(opts.description.slice(0, 2000));
-  }
-
-  // Title format: "Working on: <task title>". Previously this was just
-  // the ticket id ("MASH-415") to keep peers on shared calendar views
-  // from reading the work — user chose to surface the title instead so
-  // their own calendar reads like a real day plan. The description still
-  // carries pathway + priority + Mashi deep link below.
   const body = {
-    summary: `Working on: ${opts.title}`,
-    description: descLines.join("\n"),
+    summary: buildConsolidatedTitle(opts.blocks),
+    description: buildConsolidatedDescription(opts.blocks),
     start: { dateTime: opts.start.toISOString() },
     end: { dateTime: opts.end.toISOString() },
-    // Calendar default visibility; private/public toggles can be added later
     transparency: "opaque", // shows as busy
   };
 
