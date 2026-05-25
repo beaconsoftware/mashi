@@ -117,10 +117,10 @@ export function Sidebar() {
                   <span
                     aria-hidden
                     className={cn(
-                      "pointer-events-none absolute inset-0 -z-10 rounded-md blur-md transition-colors duration-300",
+                      "pointer-events-none absolute -inset-1 -z-10 rounded-md blur-md transition-colors duration-300",
                       active
-                        ? "bg-primary/15 group-hover/item:bg-primary/30"
-                        : "bg-primary/0 group-hover/item:bg-primary/25"
+                        ? "bg-primary/25 group-hover/item:bg-primary/45"
+                        : "bg-primary/0 group-hover/item:bg-primary/35"
                     )}
                   />
                   <Icon className="h-4 w-4 transition-transform duration-200 group-hover/item:rotate-[8deg] group-hover/item:scale-110" />
@@ -148,10 +148,10 @@ export function Sidebar() {
               <span
                 aria-hidden
                 className={cn(
-                  "pointer-events-none absolute inset-0 -z-10 rounded-md blur-md transition-colors duration-300",
+                  "pointer-events-none absolute -inset-1 -z-10 rounded-md blur-md transition-colors duration-300",
                   pathname.startsWith("/settings")
-                    ? "bg-primary/15 group-hover/item:bg-primary/30"
-                    : "bg-primary/0 group-hover/item:bg-primary/25"
+                    ? "bg-primary/25 group-hover/item:bg-primary/45"
+                    : "bg-primary/0 group-hover/item:bg-primary/35"
                 )}
               />
               <Settings className="h-4 w-4 transition-transform duration-200 group-hover/item:rotate-[8deg] group-hover/item:scale-110" />
