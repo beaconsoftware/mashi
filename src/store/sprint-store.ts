@@ -84,6 +84,20 @@ interface SprintState {
    * block in `blocks` whose status is still 'pending'.
    */
   activeSlotIds: string[];
+  /**
+   * Cockpit + Crew layout: the s2dItemId of the currently focused
+   * slot (the one rendered full-width in the center). The other 0-2
+   * active slots collapse to "rail cards" on the left/right.
+   *
+   * Stores the ID (not the slot index) so reorders don't shift focus
+   * unexpectedly. Reconciled inside every mutator that can drop the
+   * focused item out of activeSlotIds (completeBlock, moveSlotToQueue,
+   * swapSlotWithQueued, reopenBlock). When the focused id falls off
+   * the active set: if completeBlock auto-promoted a queued item, the
+   * promoted item takes focus; otherwise focus falls to
+   * activeSlotIds[0] (or null when activeSlotIds is empty).
+   */
+  focusedSlotId: string | null;
 
   /** When true, ALL active-slot timers are paused. */
   paused: boolean;
@@ -119,6 +133,12 @@ interface SprintState {
    * unaffected — only display order changes.
    */
   reorderActiveSlots: (nextActiveSlotIds: string[]) => void;
+  /**
+   * Cockpit + Crew: set the focused slot. Pass null to clear. Validates
+   * that the id is currently in activeSlotIds (a benched / done id is
+   * not a valid focus target — no-op).
+   */
+  focusSlot: (s2dItemId: string | null) => void;
   /**
    * Atomic swap: the slot occupied by slotId is replaced with queuedId.
    * Settles the outgoing block's live elapsed into accumulatedMs and
@@ -191,6 +211,7 @@ const INITIAL: Pick<
   | "blockElapsedMsAccum"
   | "activeIndex"
   | "activeSlotIds"
+  | "focusedSlotId"
   | "paused"
   | "sprintStartedAt"
 > = {
@@ -203,6 +224,7 @@ const INITIAL: Pick<
   blockElapsedMsAccum: 0,
   activeIndex: 0,
   activeSlotIds: [],
+  focusedSlotId: null,
   paused: false,
   sprintStartedAt: null,
 };
@@ -267,6 +289,11 @@ export const useSprintStore = create<SprintState>()(
           phase: "active",
           blocks: updatedBlocks,
           activeSlotIds: toActivate,
+          // Cockpit + Crew: focus the first activated slot. Lowest-
+          // priority-index = first by planner order; matches the
+          // existing keyboard model where `1` always operates on
+          // activeSlotIds[0].
+          focusedSlotId: toActivate[0] ?? null,
           // Legacy fields kept zeroed so any straggler reads don't blow up.
           activeIndex: 0,
           blockStartedAtMs: now,
@@ -359,10 +386,28 @@ export const useSprintStore = create<SprintState>()(
             nextActiveSlotIds.push(s.blocks[queuedIdx].s2dItemId);
           }
 
+          // Cockpit + Crew focus reconciliation:
+          //   - If the completed block held focus AND a queued block
+          //     just promoted into the freed slot, focus the promoted
+          //     block (natural continuation).
+          //   - Else if focus is still in activeSlotIds, leave it.
+          //   - Else fall to nextActiveSlotIds[0] ?? null.
+          const wasFocused = s.focusedSlotId === s2dItemId;
+          let nextFocusedSlotId: string | null = s.focusedSlotId;
+          if (wasFocused && queuedIdx >= 0) {
+            nextFocusedSlotId = s.blocks[queuedIdx].s2dItemId;
+          } else if (
+            !nextFocusedSlotId ||
+            !nextActiveSlotIds.includes(nextFocusedSlotId)
+          ) {
+            nextFocusedSlotId = nextActiveSlotIds[0] ?? null;
+          }
+
           return {
             ...s,
             blocks: updatedBlocks,
             activeSlotIds: nextActiveSlotIds,
+            focusedSlotId: nextFocusedSlotId,
           };
         }),
 
@@ -377,7 +422,17 @@ export const useSprintStore = create<SprintState>()(
           ) {
             return s;
           }
+          // focusedSlotId is by id, so a permutation is a no-op for focus.
           return { ...s, activeSlotIds: nextActiveSlotIds };
+        }),
+
+      focusSlot: (s2dItemId) =>
+        set((s) => {
+          if (s2dItemId === null) return { ...s, focusedSlotId: null };
+          // Guard: only allow focusing items currently in an active slot.
+          if (!s.activeSlotIds.includes(s2dItemId)) return s;
+          if (s.focusedSlotId === s2dItemId) return s;
+          return { ...s, focusedSlotId: s2dItemId };
         }),
 
       swapSlotWithQueued: (slotId, queuedId) =>
@@ -421,7 +476,17 @@ export const useSprintStore = create<SprintState>()(
           const nextActiveSlotIds = s.activeSlotIds.slice();
           nextActiveSlotIds[slotIdx] = queuedId;
 
-          return { ...s, blocks: updatedBlocks, activeSlotIds: nextActiveSlotIds };
+          // Cockpit + Crew: if the swapped-OUT id was focused, the
+          // user just dragged a replacement in — focus the incoming.
+          const nextFocusedSlotId =
+            s.focusedSlotId === slotId ? queuedId : s.focusedSlotId;
+
+          return {
+            ...s,
+            blocks: updatedBlocks,
+            activeSlotIds: nextActiveSlotIds,
+            focusedSlotId: nextFocusedSlotId,
+          };
         }),
 
       moveSlotToQueue: (slotId) =>
@@ -448,7 +513,17 @@ export const useSprintStore = create<SprintState>()(
               : b
           );
           const nextActiveSlotIds = s.activeSlotIds.filter((id) => id !== slotId);
-          return { ...s, blocks: updatedBlocks, activeSlotIds: nextActiveSlotIds };
+          // Cockpit + Crew: focus shifts off the benched item.
+          const nextFocusedSlotId =
+            s.focusedSlotId === slotId
+              ? nextActiveSlotIds[0] ?? null
+              : s.focusedSlotId;
+          return {
+            ...s,
+            blocks: updatedBlocks,
+            activeSlotIds: nextActiveSlotIds,
+            focusedSlotId: nextFocusedSlotId,
+          };
         }),
 
       fillEmptySlot: (slotIdx, queuedId) =>
@@ -476,7 +551,16 @@ export const useSprintStore = create<SprintState>()(
           const nextActiveSlotIds = s.activeSlotIds.slice();
           nextActiveSlotIds.splice(idx, 0, queuedId);
 
-          return { ...s, blocks: updatedBlocks, activeSlotIds: nextActiveSlotIds };
+          // Cockpit + Crew: if nothing was focused (empty cockpit), the
+          // newly-filled slot takes focus.
+          const nextFocusedSlotId = s.focusedSlotId ?? queuedId;
+
+          return {
+            ...s,
+            blocks: updatedBlocks,
+            activeSlotIds: nextActiveSlotIds,
+            focusedSlotId: nextFocusedSlotId,
+          };
         }),
 
       reorderQueue: (nextQueuedOrder) =>
@@ -537,10 +621,14 @@ export const useSprintStore = create<SprintState>()(
           );
 
           if (canSlot) {
+            // Cockpit + Crew: if cockpit was empty, the reopened item
+            // takes focus; otherwise leave focus where the user had it.
+            const nextFocusedSlotId = s.focusedSlotId ?? s2dItemId;
             return {
               ...s,
               blocks: updatedBlocks,
               activeSlotIds: [...s.activeSlotIds, s2dItemId],
+              focusedSlotId: nextFocusedSlotId,
             };
           }
           // Falls onto the bench. User can drag/pull into a slot afterwards.
@@ -660,12 +748,27 @@ export const useSprintStore = create<SprintState>()(
           blockElapsedMsAccum: s.blockElapsedMsAccum,
           activeIndex: s.activeIndex,
           activeSlotIds: s.activeSlotIds,
+          // Cockpit + Crew: preserve "I was looking at slot X" across reload.
+          focusedSlotId: s.focusedSlotId,
           paused: s.paused,
           sprintStartedAt: s.sprintStartedAt,
         };
       },
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+        // Cockpit + Crew defensive: if persisted focusedSlotId references
+        // an id that's no longer active (e.g. legacy state from before
+        // this field shipped, or a hand-edited persist blob), fall back
+        // to activeSlotIds[0].
+        if (
+          state.focusedSlotId &&
+          !state.activeSlotIds.includes(state.focusedSlotId)
+        ) {
+          state.focusedSlotId = state.activeSlotIds[0] ?? null;
+        } else if (!state.focusedSlotId && state.activeSlotIds.length > 0) {
+          state.focusedSlotId = state.activeSlotIds[0];
+        }
+
         if (state.paused) return;
         if (state.phase !== "active" && state.phase !== "minimized") return;
         const now = Date.now();
