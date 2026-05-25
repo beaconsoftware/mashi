@@ -51,6 +51,39 @@ function enrichKey(itemId: string) {
   return ["s2d-enriched-context", itemId] as const;
 }
 
+/**
+ * Server stores enriched_context with DEFAULT '{}'::jsonb, so rows that
+ * have never been enriched return an empty object. Normalise to the
+ * full shape with empty arrays so every consumer can safely read
+ * `.plan.length`, `.pulled_sources.length`, `.thread.length` without
+ * defensive checks at every call site.
+ *
+ * Returns null when ctx is null AND there's no timestamp — that's the
+ * "really nothing yet" state. Returns a normalised object whenever the
+ * server gave us anything (so the card can show "enriched Nm ago" if
+ * the timestamp is set even when the fields are missing — paranoid but
+ * cheap).
+ */
+function normalize(raw: unknown): EnrichedContext | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<EnrichedContext>;
+  const plan = Array.isArray(r.plan) ? r.plan : [];
+  const pulled_sources = Array.isArray(r.pulled_sources) ? r.pulled_sources : [];
+  const thread = Array.isArray(r.thread) ? r.thread : [];
+  const last_enriched_at = typeof r.last_enriched_at === "string" ? r.last_enriched_at : "";
+  // Empty defaults across the board → no enrich has happened. Signal
+  // null so callers' `hasRun` derivation stays simple.
+  if (
+    plan.length === 0 &&
+    pulled_sources.length === 0 &&
+    thread.length === 0 &&
+    !last_enriched_at
+  ) {
+    return null;
+  }
+  return { plan, pulled_sources, thread, last_enriched_at };
+}
+
 export function useEnrichedContext(itemId: string | null | undefined) {
   return useQuery({
     queryKey: enrichKey(itemId ?? ""),
@@ -58,7 +91,11 @@ export function useEnrichedContext(itemId: string | null | undefined) {
     queryFn: async (): Promise<ReadResponse> => {
       const res = await fetch(`/api/s2d/${itemId}/enrich`, { method: "GET" });
       if (!res.ok) throw new Error(`enrich-read ${res.status}`);
-      return (await res.json()) as ReadResponse;
+      const data = (await res.json()) as ReadResponse;
+      return {
+        enriched_context: normalize(data.enriched_context),
+        enriched_at: data.enriched_at,
+      };
     },
     staleTime: 5 * 60_000,
   });
@@ -78,11 +115,13 @@ export function useRunEnrich(itemId: string) {
         throw new Error(j.error ?? `enrich ${res.status}`);
       }
       const data = (await res.json()) as RunResponse;
-      return data.enriched_context;
+      // Normalise here too — defensive in case the server hands back
+      // a partial object after future schema changes.
+      return normalize(data.enriched_context) ?? data.enriched_context;
     },
     onSuccess: (next) => {
       qc.setQueryData<ReadResponse>(enrichKey(itemId), {
-        enriched_context: next,
+        enriched_context: normalize(next),
         enriched_at: next.last_enriched_at,
       });
     },
@@ -114,7 +153,7 @@ export function usePinSource(itemId: string) {
         throw new Error(j.error ?? `pin ${res.status}`);
       }
       const data = (await res.json()) as RunResponse;
-      return data.enriched_context;
+      return normalize(data.enriched_context) ?? data.enriched_context;
     },
     onMutate: async (args) => {
       await qc.cancelQueries({ queryKey: enrichKey(itemId) });
@@ -137,7 +176,7 @@ export function usePinSource(itemId: string) {
     },
     onSuccess: (next) => {
       qc.setQueryData<ReadResponse>(enrichKey(itemId), {
-        enriched_context: next,
+        enriched_context: normalize(next),
         enriched_at: next.last_enriched_at,
       });
     },
