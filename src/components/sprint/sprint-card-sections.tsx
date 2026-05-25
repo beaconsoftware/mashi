@@ -461,11 +461,7 @@ function Section3Act({ item }: { item: S2DItem }) {
       </div>
       <div className="mt-2">
         {tab === "claude" && <ActPanelClaude item={item} />}
-        {tab === "draft" && (
-          <div className="rounded-md border border-dashed border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
-            Live preview of a drafted reply in your style. Copy or send via Gmail / Slack. PR 6.
-          </div>
-        )}
+        {tab === "draft" && <ActPanelDraft item={item} />}
         {tab === "decide" && (
           <div className="rounded-md border border-dashed border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
             Record the decision + optionally spin up a follow-up item. PR 7.
@@ -577,6 +573,215 @@ function ActPanelClaude({ item }: { item: S2DItem }) {
       )}
     </div>
   );
+}
+
+/**
+ * Draft tab — streams a drafted reply via the existing per-pathway
+ * /api/s2d/{id}/action route, then offers Copy + (if the item is
+ * Gmail/Slack-sourced) Send inline via /api/s2d/{id}/send.
+ *
+ * Action key is auto-routed by pathway. The user can edit the streamed
+ * draft before sending — the textarea is editable from first paint.
+ */
+function ActPanelDraft({ item }: { item: S2DItem }) {
+  const { data } = useEnrichedContext(item.id);
+  const ctx = data?.enriched_context ?? null;
+  const hasEnrich = !!ctx && ctx.plan.length + ctx.pulled_sources.length > 0;
+
+  const actionKey = draftActionKeyForPathway(item.pathway);
+  const canSendInline =
+    !!actionKey && (item.source_type === "gmail" || item.source_type === "slack");
+
+  const [draft, setDraft] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [streamErr, setStreamErr] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Reset state when the item changes (e.g., the slot promotes a new
+  // queued block into this position).
+  useEffect(() => {
+    setDraft("");
+    setStreamErr(null);
+    setToast(null);
+    return () => abortRef.current?.abort();
+  }, [item.id]);
+
+  async function generate() {
+    if (!actionKey) return;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setStreaming(true);
+    setStreamErr(null);
+    setDraft("");
+    let acc = "";
+    try {
+      const { streamPostText } = await import("@/lib/streaming");
+      await streamPostText(
+        `/api/s2d/${item.id}/action`,
+        { action: actionKey },
+        (delta) => {
+          acc += delta;
+          setDraft(acc);
+        },
+        ctrl.signal
+      );
+    } catch (e) {
+      if (!ctrl.signal.aborted) {
+        setStreamErr(e instanceof Error ? e.message : "stream failed");
+      }
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  async function copyDraft() {
+    if (!draft.trim()) return;
+    await navigator.clipboard.writeText(draft);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function send() {
+    if (!canSendInline || !draft.trim() || sending) return;
+    setSending(true);
+    setToast(null);
+    try {
+      const res = await fetch(`/api/s2d/${item.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: draft }),
+      });
+      const j = (await res.json()) as { ok?: boolean; message?: string; error?: string };
+      if (!res.ok) {
+        setToast(j.error ?? `send failed (${res.status})`);
+      } else {
+        setToast(j.message ?? "Sent.");
+      }
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "send failed");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!actionKey) {
+    return (
+      <div className="rounded-md border border-dashed border-border/40 bg-secondary/20 p-3 text-[11px] text-muted-foreground">
+        Draft isn&apos;t the natural action for {item.pathway} items. Try the
+        Claude tab to hand this off, or Decide to record what you concluded.
+      </div>
+    );
+  }
+
+  const sendLabel =
+    item.source_type === "gmail" ? "Send via Gmail" : item.source_type === "slack" ? "Send via Slack" : "Send";
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/40 bg-card/55 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Draft · {item.pathway.replace("_", " ")}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={generate}
+          disabled={streaming}
+          className="h-6 gap-1 px-2 text-[11px]"
+          title={hasEnrich ? "Re-stream draft (uses cached sources)" : "Generate draft. Better with Enrich + pinned sources above."}
+        >
+          {streaming ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3 w-3" />
+          )}
+          {streaming ? "Streaming" : draft ? "Re-stream" : "Generate draft"}
+        </Button>
+      </div>
+      {!draft && !streaming && !streamErr && (
+        <div className="text-[11px] text-muted-foreground">
+          Click <em>Generate draft</em> to stream a reply in your style.
+          {!hasEnrich && (
+            <>
+              {" "}
+              <span className="text-muted-foreground/80">
+                Run Enrich above for richer context.
+              </span>
+            </>
+          )}
+        </div>
+      )}
+      {streamErr && (
+        <div className="rounded border border-destructive/40 bg-destructive/10 p-2 text-[11px] text-destructive">
+          {streamErr}
+        </div>
+      )}
+      {(streaming || draft) && (
+        <Textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={6}
+          placeholder={streaming ? "Streaming…" : "Draft will appear here."}
+          className="resize-none rounded-md border-border/40 bg-card/80 px-2 py-1.5 text-[12px] leading-snug"
+        />
+      )}
+      {(streaming || draft) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={copyDraft}
+            disabled={!draft.trim()}
+            className="h-7 gap-1.5 px-2 text-[11px]"
+          >
+            {copied ? "Copied" : "Copy"}
+          </Button>
+          {canSendInline && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={send}
+              disabled={sending || !draft.trim() || streaming}
+              className="h-7 gap-1.5 px-2 text-[11px]"
+              title={
+                item.source_type === "gmail"
+                  ? "Send as a Gmail reply on the source thread"
+                  : "Send to the source Slack channel/DM"
+              }
+            >
+              {sending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+              {sending ? "Sending" : sendLabel}
+            </Button>
+          )}
+          {!canSendInline && item.source_type && (
+            <span className="text-[10px] text-muted-foreground/70">
+              Inline send not available for {item.source_type}.
+            </span>
+          )}
+        </div>
+      )}
+      {toast && <div className="text-[10px] text-muted-foreground">{toast}</div>}
+    </div>
+  );
+}
+
+function draftActionKeyForPathway(pathway: S2DItem["pathway"]): string | null {
+  switch (pathway) {
+    case "quick_reply":
+      return "quick_reply_draft";
+    case "drafted_response":
+      return "drafted_response_prose";
+    case "delegated":
+      return "delegated_check_in";
+    default:
+      return null;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
