@@ -14,9 +14,11 @@ import { SprintGlobalMount } from "@/components/sprint/sprint-global-mount";
 import { SpotifyGlobalMount } from "@/components/sprint/spotify-global-mount";
 import { SpotlightProvider } from "@/components/spotlight/spotlight-context";
 import { SpotlightModal } from "@/components/spotlight/spotlight-modal";
+import { CursorContextProvider } from "@/lib/agent/cursor-context";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
+    <CursorContextProvider>
     <SpotlightProvider>
       {/* Shell stacking context:
           - relative + z-shell keeps the shell positioned so the ambient
@@ -69,5 +71,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <OverlayRoot />
       </div>
     </SpotlightProvider>
+    </CursorContextProvider>
   );
 }
