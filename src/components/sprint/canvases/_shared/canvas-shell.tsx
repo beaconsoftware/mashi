@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { forwardRef, useState, type ReactNode } from "react";
 import {
   Loader2,
   SkipForward,
@@ -20,6 +20,9 @@ import { Input } from "@/components/ui/input";
 import { SectionHeader } from "@/components/layout/primitives";
 import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
+import { RepathwayPopover } from "@/components/sprint/repathway-popover";
+import { useSprintStore } from "@/store/sprint-store";
+import { PATHWAY_META } from "@/types";
 import { cn } from "@/lib/utils";
 import { useRefineSheet } from "@/store/refine-sheet-store";
 import type { S2DItem, Pathway } from "@/types";
@@ -86,35 +89,72 @@ interface CanvasShellProps extends CanvasBaseProps {
   footerVariant?: "full" | "compact";
 }
 
-export function CanvasShell({
-  item,
-  prewarm,
-  onExit,
-  onOpenDetail,
-  children,
-  primary,
-  footerVariant = "full",
-}: CanvasShellProps) {
-  return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CanvasHeader item={item} prewarm={prewarm} />
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">{children}</div>
-      <CanvasFooter
-        primary={primary}
-        onExit={onExit}
-        onOpenDetail={onOpenDetail}
-        itemId={item.id}
-        variant={footerVariant}
-      />
-    </div>
-  );
-}
+export const CanvasShell = forwardRef<HTMLDivElement, CanvasShellProps>(
+  function CanvasShell(
+    {
+      item,
+      prewarm,
+      onExit,
+      onOpenDetail,
+      children,
+      primary,
+      footerVariant = "full",
+    },
+    ref
+  ) {
+    const meta = PATHWAY_META[item.pathway];
+    // Phase 6: compose the ambient album tint over a faint pathway hue
+    // over the canonical card translucency. The tint is set by
+    // SpotifyAmbientBg as --sprint-card-tint when an album is playing;
+    // when absent the gradient falls back to a transparent stop so the
+    // pathway hue + card surface remain unchanged. Text uses
+    // text-foreground only (header / footer / children) — never custom
+    // colors — to keep contrast guarantees across tinted backdrops.
+    const style: React.CSSProperties = {
+      backgroundImage: `linear-gradient(var(--sprint-card-tint, transparent), var(--sprint-card-tint, transparent)), linear-gradient(180deg, hsl(var(${meta.colorVar}) / 0.04) 0%, transparent 60%)`,
+    };
+    return (
+      <div
+        ref={ref}
+        className="relative flex h-full min-h-0 flex-col overflow-hidden"
+        style={style}
+      >
+        <CanvasHeader item={item} prewarm={prewarm} />
+        <div className="flex-1 min-h-0 overflow-y-auto p-3">{children}</div>
+        <CanvasFooter
+          primary={primary}
+          onExit={onExit}
+          onOpenDetail={onOpenDetail}
+          itemId={item.id}
+          variant={footerVariant}
+        />
+      </div>
+    );
+  }
+);
 
 function CanvasHeader({ item, prewarm }: { item: S2DItem; prewarm: PrewarmState }) {
+  const block = useSprintStore((s) =>
+    s.blocks.find((b) => b.s2dItemId === item.id)
+  );
   return (
     <SectionHeader as="header" className="flex-col items-stretch !py-2.5">
       <div className="flex w-full items-center gap-2">
-        <PathwayBadge pathway={item.pathway} compact />
+        {/* Phase 6: PathwayBadge becomes a re-pathway trigger. Clicking
+            opens the popover; selecting an alternative runs the canvas
+            morph + persists the new pathway. */}
+        <RepathwayPopover item={item} block={block}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mashi-press h-auto rounded p-0.5 hover:bg-secondary/60"
+            aria-label={`Change pathway from ${item.pathway}`}
+            title="Re-pathway this item"
+          >
+            <PathwayBadge pathway={item.pathway} compact />
+          </Button>
+        </RepathwayPopover>
         <PriorityDot priority={item.priority} />
         {item.company && (
           <span className="truncate text-[11px] normal-case tracking-normal text-foreground/80">

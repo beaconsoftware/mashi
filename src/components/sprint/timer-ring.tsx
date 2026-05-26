@@ -140,9 +140,16 @@ export function TimerRing({
   );
 
   const meta = PATHWAY_META[pathway];
+  // Phase 6: the stroke colour stays anchored to the pathway hue
+  // (so the ring still announces "decision" vs "reply" vs "watch"),
+  // but a faint album-palette glow drawn just outside the path blends
+  // the chrome into the ambient art. The glow uses --sprint-card-tint
+  // when the ambient layer has set it; otherwise it falls back to
+  // transparent and the ring renders unchanged from Phase 1's look.
   const strokeColor = `hsl(var(${meta.colorVar}))`;
   const destructiveColor = "hsl(var(--destructive))";
   const dimAlpha = paused ? 0.5 : 1;
+  const tintGlow = `var(--sprint-card-tint, transparent)`;
 
   return (
     <div
@@ -165,6 +172,19 @@ export function TimerRing({
       >
         {pathData && (
           <>
+            {/* Phase 6: album-tinted outer halo. Drawn first so it sits
+                BENEATH the track + fill. The stroke is the ambient tint
+                CSS var which the Spotify ambient bg sets from the
+                current album palette; when unset, it's transparent and
+                this path is invisible. */}
+            <path
+              d={pathData}
+              fill="none"
+              stroke={tintGlow}
+              strokeWidth={strokeWidth + 6}
+              strokeLinecap="round"
+              strokeOpacity={1}
+            />
             {/* Track — faint full ring so the dasharray fill reads. */}
             <path
               d={pathData}
