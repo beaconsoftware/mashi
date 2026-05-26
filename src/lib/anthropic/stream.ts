@@ -1,5 +1,8 @@
 import { MODELS } from "./client";
 import { trackedStream } from "./tracked";
+import { sanitizeForAITells } from "./sanitize";
+
+export { sanitizeForAITells };
 
 type ModelKey = keyof typeof MODELS;
 
@@ -73,14 +76,5 @@ export async function streamClaudeText(opts: StreamOpts): Promise<ReadableStream
   });
 }
 
-/**
- * Per-delta sanitizer. Applied to every text chunk before forwarding to the
- * client. Pure function, safe to test independently.
- */
-export function sanitizeForAITells(s: string): string {
-  return s
-    // " — " or "—" → ", "
-    .replace(/\s*[—–]\s*/g, ", ")
-    // ASCII double-hyphen used as em-dash: " -- "
-    .replace(/\s+--\s+/g, ", ");
-}
+// Per-delta sanitizer lives in ./sanitize and is re-exported above so
+// existing callers continue to import `sanitizeForAITells` from this file.
