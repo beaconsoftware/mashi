@@ -67,6 +67,13 @@ import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
 import { SprintCardWorkspace } from "@/components/sprint/sprint-card-workspace";
+import {
+  PathwayCanvas,
+  isNativePathway,
+  type SlotExit,
+} from "@/components/sprint/canvases/pathway-canvas";
+import { RefineSheet } from "@/components/sprint/refine-sheet";
+import { useRefineSheet } from "@/store/refine-sheet-store";
 import { TimerRing } from "@/components/sprint/timer-ring";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 // Spotify ambient bg is mounted globally in AppShell. Sprint also mounts
@@ -392,6 +399,79 @@ export function SprintActiveModeMulti() {
       });
     }
   }
+  /**
+   * Canvas-driven slot exit. The PathwayCanvas in each native pathway
+   * fires this with a structured payload; we translate it into the
+   * existing markDone / skip / bench / snooze logic and (for Reply
+   * sends) optionally spawn a `watching` follow-up item via the
+   * /api/s2d/[id]/spawn-follow-up endpoint.
+   */
+  async function handleSlotExit(s2dItemId: string, exit: SlotExit) {
+    switch (exit.kind) {
+      case "send": {
+        if (exit.spawnsWatchItem) {
+          try {
+            await fetch(`/api/s2d/${s2dItemId}/spawn-follow-up`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                pathway: "watching",
+                queueHours: 48,
+                reason: "post-reply-watch",
+                title: `Watch for reply: ${ticketLabel(s2dItemId)}`,
+              }),
+            });
+          } catch {
+            // Non-fatal — the reply was sent; the follow-up is convenience.
+          }
+        }
+        // /api/s2d/:id/send already marks the item done server-side.
+        completeBlock(s2dItemId, "done");
+        return;
+      }
+      case "decide": {
+        // /api/s2d/:id/decision wrote status (done or deferred). Slot
+        // exits regardless — for `defer` the item simply leaves the
+        // sprint and reappears when snoozed_until expires.
+        completeBlock(s2dItemId, "done");
+        return;
+      }
+      case "done":
+        await markDone(s2dItemId);
+        return;
+      case "skip":
+        await skip(s2dItemId);
+        return;
+      case "bench":
+        await sendToBench(s2dItemId);
+        return;
+      case "snooze": {
+        try {
+          await updateItem.mutateAsync({
+            id: s2dItemId,
+            patch: {
+              status: "in_queue",
+              snoozed_until: exit.until,
+              queue_reason: `Snoozed via canvas`,
+            },
+          });
+          completeBlock(s2dItemId, "skipped");
+        } catch (err) {
+          setBanner({
+            kind: "err",
+            msg: `Couldn't snooze ${ticketLabel(s2dItemId)}: ${
+              err instanceof Error ? err.message : "save failed"
+            } — try again`,
+          });
+        }
+        return;
+      }
+      default:
+        // Phases 3+ wire check-in, nudge-delegate, stage-meeting, repathway.
+        return;
+    }
+  }
+
   async function snooze(s2dItemId: string) {
     const t = new Date();
     t.setDate(t.getDate() + 1);
@@ -554,11 +634,24 @@ export function SprintActiveModeMulti() {
     }
   }
 
-  // Keyboard: 1/2/3 = Done on slot N; q/w/e = Skip on slot N; space = pause
+  // Keyboard: 1/2/3 = Done on slot N; q/w/e = Skip on slot N; space = pause;
+  // / or ⌥+R summons the global Refine sheet bound to the focused slot.
+  const openRefineFor = useRefineSheet((s) => s.openFor);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement | null)?.tagName ?? "";
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const inField = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      // Refine sheet shortcuts work even when nothing is focused but never
+      // hijack typing inside a textarea / input.
+      if ((e.key === "/" || (e.altKey && (e.key === "r" || e.key === "R"))) && !inField) {
+        const target = focusedSlotId ?? activeSlotIds[0];
+        if (target) {
+          e.preventDefault();
+          openRefineFor(target);
+          return;
+        }
+      }
+      if (inField) return;
       if (e.key === " ") {
         e.preventDefault();
         paused ? resume() : pause();
@@ -706,6 +799,7 @@ export function SprintActiveModeMulti() {
           onSnooze={snooze}
           onBench={sendToBench}
           onOpen={(id) => setDetailItemId(id)}
+          onExit={handleSlotExit}
         />
 
         {/* Bench (formerly "Up next" — items selected for this sprint that
@@ -747,6 +841,12 @@ export function SprintActiveModeMulti() {
           onClose={() => setDetailItemId(null)}
         />
       )}
+
+      {/* Global slide-up refine sheet — summoned by `/` or `⌥+R` from any
+          focused slot. Bound to one item at a time via the refine-sheet
+          store. Phases 3+ canvases also open it via the Refine chip in
+          the canvas footer. */}
+      <RefineSheet />
     </FocusOverlay>
   );
 }
@@ -865,6 +965,7 @@ function CockpitCrewLayout({
   onSnooze,
   onBench,
   onOpen,
+  onExit,
 }: {
   activeBlocks: SprintBlock[];
   focusedSlotId: string | null;
@@ -878,6 +979,7 @@ function CockpitCrewLayout({
   onSnooze: (id: string) => void;
   onBench: (id: string) => void;
   onOpen: (id: string) => void;
+  onExit: (id: string, exit: SlotExit) => Promise<void>;
 }) {
   // No active blocks → empty cockpit. Mirrors the previous behavior
   // where each empty slot rendered <EmptySlot />.
@@ -947,6 +1049,7 @@ function CockpitCrewLayout({
             onSnooze={() => onSnooze(focused.s2dItemId)}
             onBench={() => onBench(focused.s2dItemId)}
             onOpen={() => onOpen(focused.s2dItemId)}
+            onExit={(exit) => onExit(focused.s2dItemId, exit)}
           />
         ) : (
           <div className="rounded-xl border border-border/30 bg-card/60 p-4 text-[12px] text-muted-foreground">
@@ -1190,6 +1293,7 @@ function SlotCard({
   onSnooze,
   onBench,
   onOpen,
+  onExit,
 }: {
   slotIdx: number;
   block: SprintBlock;
@@ -1202,6 +1306,7 @@ function SlotCard({
   onSnooze: () => void;
   onBench: () => void;
   onOpen: () => void;
+  onExit: (exit: SlotExit) => Promise<void>;
 }) {
   const elapsedMs = blockLiveElapsedMs(block, paused);
   const totalMs = block.durationMin * 60_000;
@@ -1301,13 +1406,25 @@ function SlotCard({
 
         {/* Body — identity strip + workspace + footer. Scroll lives
             INSIDE the rail and the active tab panel, never on the whole
-            card. */}
+            card. Native pathways (Phase 2 onward: quick_reply, drafted_
+            response, decision_gate) render through PathwayCanvas; the
+            other four still flow through the legacy tabbed workspace
+            until Phase 3-4 ports them. */}
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
-          <SprintCardWorkspace
-            item={item}
-            active
-            timer={{ label: timerLabel, overrun: overrunMs > 0, paused }}
-          />
+          {isNativePathway(item.pathway) ? (
+            <PathwayCanvas
+              item={item}
+              active
+              onExit={onExit}
+              onOpenDetail={onOpen}
+            />
+          ) : (
+            <SprintCardWorkspace
+              item={item}
+              active
+              timer={{ label: timerLabel, overrun: overrunMs > 0, paused }}
+            />
+          )}
 
           {/* Footer actions */}
           <div className="shrink-0 flex flex-wrap items-center gap-1.5 border-t border-border/30 px-3 py-2">
