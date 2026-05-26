@@ -196,7 +196,15 @@ export async function syncSlackConnection(connectionId: string): Promise<{
     const userLabel = (uid?: string) => {
       if (!uid) return "unknown";
       const u = userMap.get(uid);
-      return u?.profile?.display_name || u?.real_name || u?.name || uid;
+      const label = u?.profile?.display_name || u?.real_name || u?.name;
+      if (label) return label;
+      // Slack Connect / external-workspace users sometimes can't be
+      // resolved via users.list OR users.info (the latter sees more but
+      // not always). Prefer a friendly placeholder over leaking the
+      // raw uid into card titles (e.g. "Sort logins for U095S48SFLL").
+      // The participant list and slice text both flow through this
+      // function before going to the triage LLM.
+      return "external user";
     };
 
     const convLabel = (conv: SlackConversation): string => {
@@ -585,8 +593,11 @@ async function loadUsers(
   ids: string[]
 ): Promise<Map<string, SlackUser>> {
   const map = new Map<string, SlackUser>();
-  let cursor: string | undefined;
   const wanted = new Set(ids);
+
+  // First pass: users.list — bulk fetch of workspace members. Fast and
+  // covers everyone in the user's own workspace.
+  let cursor: string | undefined;
   do {
     const params: Record<string, string> = { limit: "1000" };
     if (cursor) params.cursor = cursor;
@@ -603,6 +614,30 @@ async function loadUsers(
       break;
     }
   } while (cursor);
+
+  // Second pass: users.info per-uid for anyone still missing. Slack
+  // Connect users (from external workspaces in shared channels/DMs)
+  // do NOT appear in users.list but ARE resolvable via users.info.
+  // Without this fallback, external participants leaked into triage
+  // payloads as raw `U095S48SFLL`-shape strings and the s2d title LLM
+  // copied them verbatim into card titles ("Sort logins for U095…").
+  // One API call per missing user; in practice a slice has a small
+  // number of external participants so the cost is negligible.
+  const stillMissing = Array.from(wanted).filter((id) => !map.has(id));
+  for (const id of stillMissing) {
+    try {
+      const j = await slackGet<{ user?: SlackUser }>(token, "users.info", {
+        user: id,
+      });
+      if (j.user) map.set(id, j.user);
+    } catch (err) {
+      // users.info also failed (token scope gap, deleted user, etc.).
+      // userLabel falls through to a friendly placeholder so the raw
+      // ID never reaches card titles.
+      console.warn(`[slack-sync] users.info failed for ${id}:`, err);
+    }
+  }
+
   return map;
 }
 
