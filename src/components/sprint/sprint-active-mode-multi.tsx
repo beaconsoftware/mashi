@@ -83,6 +83,8 @@ import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
 import { SpotifyAmbientBg } from "@/components/sprint/spotify-ambient-bg";
 import { FocusOverlay } from "@/components/layout/primitives";
 import { SpawnedRail } from "@/components/sprint/spawned-rail";
+import { Acknowledgement } from "@/components/sprint/acknowledgement";
+import { useSpawnedRail } from "@/store/spawned-rail-store";
 import { useGSAP } from "@gsap/react";
 import { gsap, DUR, EASE, withMotion } from "@/lib/animation";
 import { useDeckCardHover } from "@/lib/animation/interactions";
@@ -122,6 +124,21 @@ export function SprintActiveModeMulti() {
   // ghost of the source. Activation distance of 6px avoids hijacking
   // clicks on the slot's buttons.
   const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // Phase 6: acknowledgement micro-state. When a slot exits, instead of
+  // immediately calling completeBlock (which promotes the next queued
+  // item), we mount <Acknowledgement /> over the focused slot, hold it
+  // for ~1.5s, and only then run the deferred `commit`. This produces
+  // the 1.5s beat spec'd in the redesign — "what just happened + what
+  // spawned" — before the next slot lands.
+  const [pendingAck, setPendingAck] = useState<{
+    itemId: string;
+    kind: SlotExit["kind"];
+    summary: string;
+    artifactIds?: string[];
+    commit: () => void;
+  } | null>(null);
+  const artifactsAll = useSpawnedRail((s) => s.artifacts);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
@@ -329,6 +346,47 @@ export function SprintActiveModeMulti() {
     return it ? `MASH-${it.ticket_number}` : "item";
   }
 
+  /**
+   * Phase 6: stage the slot's completion behind a 1.5s acknowledgement.
+   * Callers that previously called `completeBlock(id, status)` route
+   * through here so the user sees the ack — including any artifacts the
+   * canvas pushed to the spawned-rail before firing onExit — before the
+   * next queued block promotes.
+   *
+   * `preArtifactCount` is the spawned-rail length captured BEFORE the
+   * exit's side effects fired; anything added after that is "what just
+   * spawned" and gets surfaced inside the ack card.
+   *
+   * Skip exits (manual Skip button, Snooze, Bench, Re-pathway exits)
+   * don't show the ack — they're either user-initiated dismissals or
+   * non-terminal transitions, and the 1.5s hold would feel like a
+   * penalty.
+   */
+  function finalizeWithAck(
+    itemId: string,
+    status: "done" | "skipped",
+    kind: SlotExit["kind"],
+    summary: string,
+    preArtifactCount: number
+  ) {
+    const SKIP_ACK: SlotExit["kind"][] = ["skip", "bench", "snooze", "repathway"];
+    if (SKIP_ACK.includes(kind)) {
+      completeBlock(itemId, status);
+      return;
+    }
+    const newArtifactIds = useSpawnedRail
+      .getState()
+      .artifacts.slice(preArtifactCount)
+      .map((a) => a.id);
+    setPendingAck({
+      itemId,
+      kind,
+      summary,
+      artifactIds: newArtifactIds,
+      commit: () => completeBlock(itemId, status),
+    });
+  }
+
   // ── DnD ───────────────────────────────────────────────────────────
   //
   // Draggables: `slot:<itemId>` and `queue:<itemId>`.
@@ -445,6 +503,7 @@ export function SprintActiveModeMulti() {
   }, [draggingId, blocks, itemMap]);
 
   async function markDone(s2dItemId: string) {
+    const pre = useSpawnedRail.getState().artifacts.length;
     try {
       await updateItem.mutateAsync({
         id: s2dItemId,
@@ -454,7 +513,13 @@ export function SprintActiveModeMulti() {
           resolved_via: "manual",
         },
       });
-      completeBlock(s2dItemId, "done");
+      finalizeWithAck(
+        s2dItemId,
+        "done",
+        "done",
+        `Done · ${ticketLabel(s2dItemId)}`,
+        pre
+      );
     } catch (err) {
       setBanner({
         kind: "err",
@@ -465,9 +530,16 @@ export function SprintActiveModeMulti() {
     }
   }
   async function skip(s2dItemId: string) {
+    const pre = useSpawnedRail.getState().artifacts.length;
     try {
       await updateItem.mutateAsync({ id: s2dItemId, patch: { status: "todo" } });
-      completeBlock(s2dItemId, "skipped");
+      finalizeWithAck(
+        s2dItemId,
+        "skipped",
+        "skip",
+        `Skipped · ${ticketLabel(s2dItemId)}`,
+        pre
+      );
     } catch (err) {
       setBanner({
         kind: "err",
@@ -485,6 +557,12 @@ export function SprintActiveModeMulti() {
    * /api/s2d/[id]/spawn-follow-up endpoint.
    */
   async function handleSlotExit(s2dItemId: string, exit: SlotExit) {
+    // Snapshot artifact count BEFORE side effects so the ack can show
+    // anything the canvas pushes (sends, decisions, follow-ups, etc.)
+    // as "spawned" chips. Side effects in each case below may add
+    // entries to the spawned-rail store.
+    const preArtifacts = useSpawnedRail.getState().artifacts.length;
+    const label = ticketLabel(s2dItemId);
     switch (exit.kind) {
       case "send": {
         if (exit.spawnsWatchItem) {
@@ -496,7 +574,7 @@ export function SprintActiveModeMulti() {
                 pathway: "watching",
                 queueHours: 48,
                 reason: "post-reply-watch",
-                title: `Watch for reply: ${ticketLabel(s2dItemId)}`,
+                title: `Watch for reply: ${label}`,
               }),
             });
           } catch {
@@ -504,14 +582,26 @@ export function SprintActiveModeMulti() {
           }
         }
         // /api/s2d/:id/send already marks the item done server-side.
-        completeBlock(s2dItemId, "done");
+        finalizeWithAck(
+          s2dItemId,
+          "done",
+          "send",
+          `Reply sent · ${label}`,
+          preArtifacts
+        );
         return;
       }
       case "decide": {
         // /api/s2d/:id/decision wrote status (done or deferred). Slot
         // exits regardless — for `defer` the item simply leaves the
         // sprint and reappears when snoozed_until expires.
-        completeBlock(s2dItemId, "done");
+        finalizeWithAck(
+          s2dItemId,
+          "done",
+          "decide",
+          `Decided: ${exit.choice} · ${label}`,
+          preArtifacts
+        );
         return;
       }
       case "done":
@@ -533,11 +623,17 @@ export function SprintActiveModeMulti() {
               queue_reason: `Snoozed via canvas`,
             },
           });
-          completeBlock(s2dItemId, "skipped");
+          finalizeWithAck(
+            s2dItemId,
+            "skipped",
+            "snooze",
+            `Snoozed · ${label}`,
+            preArtifacts
+          );
         } catch (err) {
           setBanner({
             kind: "err",
-            msg: `Couldn't snooze ${ticketLabel(s2dItemId)}: ${
+            msg: `Couldn't snooze ${label}: ${
               err instanceof Error ? err.message : "save failed"
             } — try again`,
           });
@@ -550,7 +646,15 @@ export function SprintActiveModeMulti() {
         // already marked done server-side by /check-in. Both flow
         // through completeBlock so the sprint store advances. The
         // canvas itself wrote to watch_check_ins before this fired.
-        completeBlock(s2dItemId, "done");
+        finalizeWithAck(
+          s2dItemId,
+          "done",
+          "check-in",
+          exit.continue
+            ? `Still watching · ${label}`
+            : `Stopped watching · ${label}`,
+          preArtifacts
+        );
         return;
       }
       case "repathway": {
@@ -558,7 +662,13 @@ export function SprintActiveModeMulti() {
         // Delegate canvas pulls back to heads_down. The canvas wrote
         // the pathway change before this fired; we exit the slot so
         // the user can re-enter the item under its new pathway later.
-        completeBlock(s2dItemId, "skipped");
+        finalizeWithAck(
+          s2dItemId,
+          "skipped",
+          "repathway",
+          `Re-pathway · ${label}`,
+          preArtifacts
+        );
         return;
       }
       case "stage-meeting": {
@@ -577,11 +687,17 @@ export function SprintActiveModeMulti() {
               (j as { error?: string }).error ?? `stage ${res.status}`
             );
           }
-          completeBlock(s2dItemId, "done");
+          finalizeWithAck(
+            s2dItemId,
+            "done",
+            "stage-meeting",
+            `Staged for meeting · ${label}`,
+            preArtifacts
+          );
         } catch (err) {
           setBanner({
             kind: "err",
-            msg: `Couldn't stage ${ticketLabel(s2dItemId)}: ${
+            msg: `Couldn't stage ${label}: ${
               err instanceof Error ? err.message : "save failed"
             } — try again`,
           });
@@ -935,6 +1051,23 @@ export function SprintActiveModeMulti() {
           onBench={sendToBench}
           onOpen={(id) => setDetailItemId(id)}
           onExit={handleSlotExit}
+          ackForItem={
+            pendingAck
+              ? {
+                  itemId: pendingAck.itemId,
+                  kind: pendingAck.kind,
+                  summary: pendingAck.summary,
+                  spawned: artifactsAll.filter((a) =>
+                    pendingAck.artifactIds?.includes(a.id)
+                  ),
+                  onComplete: () => {
+                    const c = pendingAck.commit;
+                    setPendingAck(null);
+                    c();
+                  },
+                }
+              : null
+          }
         />
 
         {/* Bench (formerly "Up next" — items selected for this sprint that
@@ -1109,6 +1242,7 @@ function CockpitCrewLayout({
   onBench,
   onOpen,
   onExit,
+  ackForItem,
 }: {
   activeBlocks: SprintBlock[];
   focusedSlotId: string | null;
@@ -1123,6 +1257,13 @@ function CockpitCrewLayout({
   onBench: (id: string) => void;
   onOpen: (id: string) => void;
   onExit: (id: string, exit: SlotExit) => Promise<void>;
+  ackForItem: {
+    itemId: string;
+    kind: SlotExit["kind"];
+    summary: string;
+    spawned: import("@/store/spawned-rail-store").SpawnedArtifact[];
+    onComplete: () => void;
+  } | null;
 }) {
   // No active blocks → empty cockpit. Mirrors the previous behavior
   // where each empty slot rendered <EmptySlot />.
@@ -1193,6 +1334,11 @@ function CockpitCrewLayout({
             onBench={() => onBench(focused.s2dItemId)}
             onOpen={() => onOpen(focused.s2dItemId)}
             onExit={(exit) => onExit(focused.s2dItemId, exit)}
+            ack={
+              ackForItem && ackForItem.itemId === focused.s2dItemId
+                ? ackForItem
+                : null
+            }
           />
         ) : (
           <div className="rounded-xl border border-border/30 bg-card/60 p-4 text-[12px] text-muted-foreground">
@@ -1437,6 +1583,7 @@ function SlotCard({
   onBench,
   onOpen,
   onExit,
+  ack,
 }: {
   slotIdx: number;
   block: SprintBlock;
@@ -1450,6 +1597,12 @@ function SlotCard({
   onBench: () => void;
   onOpen: () => void;
   onExit: (exit: SlotExit) => Promise<void>;
+  ack: {
+    kind: SlotExit["kind"];
+    summary: string;
+    spawned: import("@/store/spawned-rail-store").SpawnedArtifact[];
+    onComplete: () => void;
+  } | null;
 }) {
   const elapsedMs = blockLiveElapsedMs(block, paused);
   const totalMs = block.durationMin * 60_000;
@@ -1515,11 +1668,19 @@ function SlotCard({
       <div
         ref={composedRef}
         className={cn(
-          "flex h-full min-h-0 flex-col overflow-hidden rounded-xl bg-card shadow-md transition-shadow",
+          "relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl bg-card shadow-md transition-shadow",
           isOver && "ring-2 ring-primary/60",
           isDragging && "opacity-50"
         )}
       >
+        {ack && (
+          <Acknowledgement
+            kind={ack.kind}
+            summary={ack.summary}
+            spawned={ack.spawned}
+            onComplete={ack.onComplete}
+          />
+        )}
         {/* Slot header strip — drag handle + slot number. Identity
             (pathway / priority / company / ticket / title / quick
             context / timer) lives in the workspace's identity strip. */}

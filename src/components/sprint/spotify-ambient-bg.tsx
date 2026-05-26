@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useMemo, useReducer, useRef } from "react";
 import { gsap, withMotion } from "@/lib/animation";
 import { useSpotifyState } from "@/hooks/use-spotify";
 import { AmbientGround } from "@/components/layout/primitives";
+import { extractAlbumPalette } from "@/lib/spotify/album-palette";
 
 /**
  * Ambient album-art background.
@@ -78,6 +79,37 @@ export function SpotifyAmbientBg({ enabled }: { enabled: boolean }) {
       });
     });
   }, [layers.show]);
+
+  // Phase 6: derive a dominant-color tint from the current album art and
+  // publish it as `--sprint-card-tint` on document.documentElement so
+  // canvas shells can compose a subtle album-driven background without
+  // burning through the sanctioned translucency scale. We always tint
+  // through a final hsl() so text contrast stays predictable. Cleared
+  // when the URL drops (no track / disconnect).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    if (!url) {
+      root.style.removeProperty("--sprint-card-tint");
+      return;
+    }
+    let cancelled = false;
+    extractAlbumPalette(url).then((palette) => {
+      if (cancelled) return;
+      if (!palette) {
+        root.style.removeProperty("--sprint-card-tint");
+        return;
+      }
+      const { h, s, l } = palette.raw;
+      root.style.setProperty(
+        "--sprint-card-tint",
+        `hsl(${h.toFixed(0)} ${s.toFixed(0)}% ${l.toFixed(0)}% / 0.08)`
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
 
   // PERF: previously this ran an infinite rotate+scale yoyo timeline
   // (24s sine) on the root so the album art slowly drifted while music
