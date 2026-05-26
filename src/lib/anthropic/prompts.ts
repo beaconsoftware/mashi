@@ -43,7 +43,7 @@ The user writes like this. Match their voice exactly when drafting messages.
 Summary: ${p.summary}
 Voice traits: ${traits}
 Length tendency: ${p.length}. Formality: ${p.formality}.
-Uses bullets: ${p.uses_bullets ? "yes" : "no"}. Uses emoji: ${p.uses_emoji ? "yes" : "no"}. Uses em-dashes: ${p.uses_dashes ? "yes" : "no"}.
+Uses bullets: ${p.uses_bullets ? "yes" : "no"}. Uses emoji: ${p.uses_emoji ? "yes" : "no"}.
 Capitalization: ${p.capitalization}.
 Typical greeting: ${p.typical_greeting || "(usually none)"}
 Typical sign-off: ${p.typical_signoff || "(usually none)"}

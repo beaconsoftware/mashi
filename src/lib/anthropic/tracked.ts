@@ -1,5 +1,6 @@
 import { anthropic, MODELS } from "./client";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { sanitizeMessageResponse } from "./sanitize";
 import type Anthropic from "@anthropic-ai/sdk";
 
 /**
@@ -101,7 +102,10 @@ export async function trackedCreate(
       request_ms: Date.now() - t0,
       user_id: userId,
     });
-    return resp;
+    // Unconditional em/en dash strip on every text content block. This is
+    // the non-streaming sibling of the per-delta sanitizer in stream.ts; the
+    // ban applies regardless of which entry point Claude is called through.
+    return sanitizeMessageResponse(resp);
   } catch (err) {
     await logUsage({
       purpose,

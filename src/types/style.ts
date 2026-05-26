@@ -19,6 +19,12 @@ export interface StyleProfile {
   /** Behavior signals (presence/absence). */
   uses_bullets: boolean;
   uses_emoji: boolean;
+  /**
+   * @deprecated The em / en dash ban is unconditional — we never produce
+   * dashes regardless of what the user's profile shows. Field stays on the
+   * type so existing extracted rows continue to deserialize, but it is no
+   * longer surfaced to any system prompt and should not be read by new code.
+   */
   uses_dashes: boolean;
   capitalization: "standard" | "lowercase" | "mixed";
 
