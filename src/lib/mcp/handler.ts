@@ -1,10 +1,12 @@
 /**
  * Shared scaffolding for every /api/mcp/tools/* endpoint.
  *
- * Each tool is a small function `(args, ctx) => Promise<result>` where
- * ctx has `userId` and `supabase` (service-role client, scoped by the
- * caller passing `userId` into every query — we don't do anything
- * special at the client level, the discipline is at the query level).
+ * Phase 1 of the Mashi Agent buildout (Sep 2026) moved every tool body
+ * into `src/lib/agent/tools/<name>.ts` as a `ToolDefinition`. This file
+ * stayed put — it still owns the Bearer-token auth flow — but `mcpTool`
+ * now consumes a `ToolDefinition` directly so the same tool body is
+ * reachable from PATs (Claude Code / DXT) and from the in-app agent
+ * loop (Phase 2+).
  *
  * Why service-role + manual user_id filtering rather than a user-scoped
  * client tied to the bearer token? Because MCP tokens aren't Supabase
@@ -15,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { bearerFromRequest, verifyToken } from "./tokens";
+import type { AnyToolDefinition, ToolDefinition } from "@/lib/agent/types";
 
 export interface ToolContext {
   userId: string;
@@ -27,21 +30,28 @@ export type ToolHandler<TArgs, TResult> = (
 ) => Promise<TResult>;
 
 /**
- * Wraps a tool handler with auth + JSON parsing + error formatting.
- * Use in /api/mcp/tools/<name>/route.ts like:
+ * Wraps a tool into a Bearer-authed route handler.
  *
- *   export const POST = mcpTool<{ query: string }, MyResult>(async (args, ctx) => {
- *     const { data } = await ctx.supabase
- *       .from("s2d_items")
- *       .select("*")
- *       .eq("user_id", ctx.userId)
- *       .ilike("title", `%${args.query}%`);
- *     return data ?? [];
- *   });
+ * Two calling conventions are supported:
+ *
+ *   1. ToolDefinition (preferred, used by the registry):
+ *        export const POST = mcpTool(registry.get_item);
+ *      Args are validated via the tool's zod schema before the handler runs.
+ *
+ *   2. Raw handler (legacy):
+ *        export const POST = mcpTool<{ q: string }, MyResult>(async (args, ctx) => …);
+ *      No arg validation — kept so callers outside the registry don't
+ *      have to migrate in lockstep. Prefer ToolDefinition for new tools.
  */
 export function mcpTool<TArgs, TResult>(
-  handler: ToolHandler<TArgs, TResult>
+  defOrHandler: ToolDefinition<TArgs, TResult> | ToolHandler<TArgs, TResult>
 ): (req: NextRequest) => Promise<NextResponse> {
+  const isDefinition =
+    typeof defOrHandler === "object" &&
+    defOrHandler !== null &&
+    "handler" in defOrHandler &&
+    "args" in defOrHandler;
+
   return async (req: NextRequest) => {
     const token = bearerFromRequest(req);
     if (!token) {
@@ -58,15 +68,36 @@ export function mcpTool<TArgs, TResult>(
       );
     }
 
-    let args: TArgs;
+    let raw: unknown = {};
     try {
-      args = (await req.json()) as TArgs;
+      raw = await req.json();
     } catch {
-      args = {} as TArgs;
+      // Empty body is allowed; tools with required args reject below.
     }
 
     try {
-      const result = await handler(args, {
+      if (isDefinition) {
+        const def = defOrHandler as ToolDefinition<TArgs, TResult>;
+        const parsed = def.args.safeParse(raw);
+        if (!parsed.success) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "Invalid arguments.",
+              issues: parsed.error.issues,
+            },
+            { status: 400 }
+          );
+        }
+        const result = await def.handler(parsed.data, {
+          userId: auth.userId,
+          supabase: createSupabaseServiceClient(),
+          origin: "mcp",
+        });
+        return NextResponse.json({ ok: true, result });
+      }
+      const handler = defOrHandler as ToolHandler<TArgs, TResult>;
+      const result = await handler(raw as TArgs, {
         userId: auth.userId,
         supabase: createSupabaseServiceClient(),
       });
@@ -81,4 +112,12 @@ export function mcpTool<TArgs, TResult>(
       );
     }
   };
+}
+
+/** Variant for the registry — accepts a heterogeneously-typed
+ * definition without forcing the caller to thread the generics through. */
+export function mcpToolAny(
+  def: AnyToolDefinition
+): (req: NextRequest) => Promise<NextResponse> {
+  return mcpTool(def);
 }
