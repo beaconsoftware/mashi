@@ -466,8 +466,27 @@ export function SprintActiveModeMulti() {
         }
         return;
       }
+      case "check-in": {
+        // Watch canvas: "Still watching" (continue=true) keeps the item
+        // in_queue and promotes the next slot; "Stop watching" was
+        // already marked done server-side by /check-in. Both flow
+        // through completeBlock so the sprint store advances. The
+        // canvas itself wrote to watch_check_ins before this fired.
+        completeBlock(s2dItemId, "done");
+        return;
+      }
+      case "repathway": {
+        // Watch canvas can promote to quick_reply / decision_gate;
+        // Delegate canvas pulls back to heads_down. The canvas wrote
+        // the pathway change before this fired; we exit the slot so
+        // the user can re-enter the item under its new pathway later.
+        completeBlock(s2dItemId, "skipped");
+        return;
+      }
       default:
-        // Phases 3+ wire check-in, nudge-delegate, stage-meeting, repathway.
+        // Phase 4 wires nudge-delegate / stage-meeting. Today: nudge
+        // is NOT a slot exit (the delegate canvas POSTs /nudge inline
+        // and keeps the slot live) and stage-meeting lands with Phase 4.
         return;
     }
   }

@@ -3,6 +3,9 @@
 import type { S2DItem, Pathway } from "@/types";
 import { ReplyCanvas } from "./reply-canvas";
 import { DecideCanvas } from "./decide-canvas";
+import { HeadsDownCanvas } from "./heads-down-canvas";
+import { WatchCanvas } from "./watch-canvas";
+import { DelegateCanvas } from "./delegate-canvas";
 import type {
   CanvasBaseProps,
   PrewarmState,
@@ -17,17 +20,19 @@ export interface PathwayCanvasProps {
   prewarm?: PrewarmState;
   onExit: (exit: SlotExit) => Promise<void> | void;
   onOpenDetail?: () => void;
-  /**
-   * Pathways still served by the legacy tabbed workspace in this phase.
-   * The dispatcher returns null for these so the caller falls back to
-   * `<SprintCardWorkspace>`. Phases 3–4 remove this fallback.
-   */
 }
 
+/**
+ * The set of pathways with a native canvas. Phase 4 adds `meeting_backed`
+ * and deletes `<SprintCardWorkspace>` entirely.
+ */
 const NATIVE_PATHWAYS: Pathway[] = [
   "quick_reply",
   "drafted_response",
   "decision_gate",
+  "heads_down",
+  "watching",
+  "delegated",
 ];
 
 export function isNativePathway(pathway: Pathway): boolean {
@@ -37,14 +42,14 @@ export function isNativePathway(pathway: Pathway): boolean {
 /**
  * Dispatch a pathway-specific canvas component.
  *
- * Phase 2 lands three:
- *   - quick_reply / drafted_response  → ReplyCanvas
- *   - decision_gate                   → DecideCanvas
+ * Phase 3 lands the remaining three action-shaped pathways:
+ *   - heads_down  → HeadsDownCanvas
+ *   - watching    → WatchCanvas
+ *   - delegated   → DelegateCanvas
  *
- * The remaining four (heads_down, meeting_backed, delegated, watching)
- * still flow through the legacy tabbed `<SprintCardWorkspace>`; the
- * caller checks `isNativePathway()` to decide which to render. Phases
- * 3–4 fill in the rest and remove the fallback.
+ * The one remaining pathway (`meeting_backed`) still falls through to
+ * the legacy tabbed `<SprintCardWorkspace>` via `isNativePathway()`
+ * returning false; Phase 4 ports it and deletes the fallback.
  */
 export function PathwayCanvas(props: PathwayCanvasProps) {
   const prewarm: PrewarmState = props.prewarm ?? { status: "pending" };
@@ -61,6 +66,12 @@ export function PathwayCanvas(props: PathwayCanvasProps) {
       return <ReplyCanvas {...base} />;
     case "decision_gate":
       return <DecideCanvas {...base} />;
+    case "heads_down":
+      return <HeadsDownCanvas {...base} />;
+    case "watching":
+      return <WatchCanvas {...base} />;
+    case "delegated":
+      return <DelegateCanvas {...base} />;
     default:
       return null;
   }
