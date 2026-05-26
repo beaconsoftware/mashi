@@ -94,6 +94,12 @@ export interface S2DItem {
   delegated_to?: string | null;
   outcome?: string | null;
   resolved_via?: string | null;
+  /**
+   * Set at the contract card (Phase 5) before launching a sprint:
+   * "At the end of this sprint you will have ___". Surfaces in the
+   * sprint-complete recap alongside the actual outcome.
+   */
+  success_statement?: string | null;
   snoozed_until?: string | null;
   linked_sources?: Array<{
     source_type?: string | null;

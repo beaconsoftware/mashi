@@ -27,6 +27,7 @@ export type SprintPhase =
   | "prioritize"
   | "schedule"
   | "review"
+  | "contract"
   | "active"
   | "minimized";
 
@@ -280,7 +281,12 @@ export const useSprintStore = create<SprintState>()(
 
       enterPlanner: () => {
         const s = get();
-        if (s.phase === "active" || s.phase === "minimized") return;
+        if (
+          s.phase === "active" ||
+          s.phase === "minimized" ||
+          s.phase === "contract"
+        )
+          return;
         // Fresh plan
         set({
           ...INITIAL,
