@@ -81,6 +81,7 @@ import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 // player otherwise) and the play logger to tag tracks to the active slot.
 import { SpotifyPlayer } from "@/components/sprint/spotify-player";
 import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
+import { SpotifyAmbientBg } from "@/components/sprint/spotify-ambient-bg";
 import { FocusOverlay } from "@/components/layout/primitives";
 import { useGSAP } from "@gsap/react";
 import { gsap, DUR, EASE, withMotion } from "@/lib/animation";
@@ -730,6 +731,17 @@ export function SprintActiveModeMulti() {
 
   return (
     <FocusOverlay>
+      {/* Ambient album art INSIDE the focus overlay. The global mount in
+          AppShell sits behind the page layer; the FocusOverlay's
+          bg-background/95 (sanctioned step for "must read solid but keep
+          a tint") obscures almost all of it on /sprint. Re-mounting the
+          ambient bg here paints it ABOVE the /95 floor (children paint
+          on top of their parent's background) so the album art is
+          clearly visible inside the takeover — matching how it looks on
+          /cockpit, /s2d, and the other dashboard routes — without
+          relaxing the floor (which would let underlying page text
+          bleed through when entering Sprint from another route). */}
+      <SpotifyAmbientBg enabled />
       {/* Headless poller writes track-task plays during sprints. */}
       <SpotifyPlayLogger enabled />
       {/* Header */}

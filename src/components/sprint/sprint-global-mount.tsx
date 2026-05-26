@@ -6,6 +6,7 @@ import { FocusOverlay } from "@/components/layout/primitives";
 import { SprintActiveModeMulti } from "./sprint-active-mode-multi";
 import { SprintComplete } from "./sprint-complete";
 import { SprintWidget } from "./sprint-widget";
+import { SpotifyAmbientBg } from "./spotify-ambient-bg";
 
 /**
  * Top-level mount in AppShell. ROUTES the active sprint surface to the
@@ -53,6 +54,12 @@ export function SprintGlobalMount() {
       {showOverlay &&
         (allSettled ? (
           <FocusOverlay>
+            {/* Re-mount ambient album art INSIDE the focus overlay so
+                it paints above the bg-background/95 floor and stays
+                visible to the user — matches sprint-active-mode-multi's
+                pattern. See AGENTS.md "Layout doctrine" + the comment
+                in primitives.tsx for why /95 is the sanctioned floor. */}
+            <SpotifyAmbientBg enabled />
             <SprintComplete />
           </FocusOverlay>
         ) : (
