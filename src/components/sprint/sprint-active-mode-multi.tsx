@@ -82,6 +82,7 @@ import { SpotifyPlayer } from "@/components/sprint/spotify-player";
 import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
 import { SpotifyAmbientBg } from "@/components/sprint/spotify-ambient-bg";
 import { FocusOverlay } from "@/components/layout/primitives";
+import { SpawnedRail } from "@/components/sprint/spawned-rail";
 import { useGSAP } from "@gsap/react";
 import { gsap, DUR, EASE, withMotion } from "@/lib/animation";
 import { useDeckCardHover } from "@/lib/animation/interactions";
@@ -981,6 +982,14 @@ export function SprintActiveModeMulti() {
           store. Phases 3+ canvases also open it via the Refine chip in
           the canvas footer. */}
       <RefineSheet />
+
+      {/* Spawned-rail (Phase 5): bottom strip of artifacts produced by
+          slot exits — sends, decisions, follow-ups, check-ins, nudges,
+          staged meetings. Lives at the bottom of the focus overlay,
+          above the sidebar bottom margin. The component itself is
+          empty-aware (36px caption when no artifacts yet, expands to
+          48px on first push). */}
+      <SpawnedRail />
     </FocusOverlay>
   );
 }

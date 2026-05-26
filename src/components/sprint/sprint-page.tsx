@@ -8,6 +8,7 @@ import { useSprintStore } from "@/store/sprint-store";
 import { PlannerPrioritizeShell } from "./planner-prioritize-shell";
 import { PlannerSchedule } from "./planner-schedule";
 import { PlannerReview } from "./planner-review";
+import { ContractCard } from "./contract-card";
 // Multi-active is the default sprint experience now (up to 3 items in
 // parallel slots with a rolling queue dock). The legacy single-focus
 // SprintActiveMode is kept on disk if we ever want a "focus mode" toggle.
@@ -30,6 +31,7 @@ const SPRINT_SUBTITLE: Record<string, string> = {
   prioritize: "Stage 1 of 3 — pick + order the items you'll work on.",
   schedule: "Stage 2 of 3 — assign durations + slot positions.",
   review: "Stage 3 of 3 — lock in the plan.",
+  contract: "Commit to the sprint — Mashi is warming up.",
 };
 
 /**
@@ -76,7 +78,12 @@ export function SprintPage() {
     );
   }
 
-  if (phase === "prioritize" || phase === "schedule" || phase === "review") {
+  if (
+    phase === "prioritize" ||
+    phase === "schedule" ||
+    phase === "review" ||
+    phase === "contract"
+  ) {
     return (
       <>
         <TopBar title="Sprint" subtitle={SPRINT_SUBTITLE[phase]} />
@@ -84,6 +91,7 @@ export function SprintPage() {
           {phase === "prioritize" && <PlannerPrioritizeShell />}
           {phase === "schedule" && <PlannerSchedule />}
           {phase === "review" && <PlannerReview />}
+          {phase === "contract" && <ContractCard />}
         </div>
       </>
     );

@@ -45,7 +45,6 @@ export function PlannerReview() {
   const calAccountId = useSprintStore((s) => s.calendarAccountId);
   const setCalAccountId = useSprintStore((s) => s.setCalendarAccountId);
   const setPhase = useSprintStore((s) => s.setPhase);
-  const start = useSprintStore((s) => s.startSprint);
   const updateBlock = useSprintStore((s) => s.updateBlock);
   const exit = useSprintStore((s) => s.exitSprint);
 
@@ -107,7 +106,11 @@ export function PlannerReview() {
           updateBlock(ev.s2dItemId, { calendarEventId: ev.calendarEventId });
         }
       }
-      start();
+      // Phase 5 — route to the contract card instead of straight into
+      // the takeover. The card persists success_statement, asks for
+      // decision-pre-warm opt-in, and kicks off cheap pre-warms on mount
+      // so the canvases are cooking by the time the user clicks Start.
+      setPhase("contract");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Lock-in failed");
     } finally {
@@ -251,7 +254,7 @@ export function PlannerReview() {
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}
-            {locking ? "Locking in…" : "Start sprint"}
+            {locking ? "Locking in…" : "Commit & start"}
           </Button>
         </div>
       </div>
