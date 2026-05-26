@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic";
  * Records a full DecisionLog on the item and (for yes-but) spawns a
  * follow-up s2d_item carrying the condition forward.
  *
- * Replaces /api/s2d/:id/decide for the Phase-2 DecideCanvas. The older
- * /decide route stays for the legacy tabs path until Phase 4 deletes
- * sprint-card-workspace.
+ * Replaces /api/s2d/:id/decide for the DecideCanvas. (The older /decide
+ * route used to back the legacy tabs path; the tabs path was removed
+ * with Phase 4.)
  */
 
 type Choice = "yes" | "yes-but" | "no" | "defer";

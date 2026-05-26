@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useRefineSheet } from "@/store/refine-sheet-store";
-import { MergedSourceList } from "@/components/sprint/sprint-card-workspace";
+import { MergedSourceList } from "@/components/sprint/merged-source-list";
 import { useS2DItems } from "@/hooks/use-s2d";
 import {
   useEnrichedContext,

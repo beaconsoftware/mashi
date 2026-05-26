@@ -30,6 +30,13 @@ export type SprintPhase =
   | "active"
   | "minimized";
 
+export type PrewarmStatus =
+  | "pending"
+  | "warming"
+  | "ready"
+  | "skipped"
+  | "failed";
+
 export interface SprintBlock {
   s2dItemId: string;
   /** ISO string */
@@ -49,6 +56,25 @@ export interface SprintBlock {
    */
   activatedAtMs?: number | null;
   accumulatedMs?: number;
+
+  // ── Phase 4: pre-warm state ────────────────────────────────────────
+  // Tracks the agent's pre-warm of canvas-relevant fields on
+  // enriched_context. The scheduler reads/writes these via the store;
+  // the api/sprint/prewarm route is what actually fills enriched_context
+  // (server-side). Sprint blocks are client-only so this state is in
+  // localStorage; on a fresh load (no cache) the scheduler treats
+  // missing prewarm_status as "pending" and warms again.
+  prewarm_status?: PrewarmStatus;
+  /** Decision-gate pre-warm is opt-in (token cost). Defaults to false. */
+  prewarm_opt_in?: boolean;
+  prewarm_completed_at?: string | null;
+  prewarm_error?: string | null;
+  /**
+   * 90%-of-time tick fires once per block to warm the queue head. This
+   * flag dedupes that signal so we don't fire repeatedly while the user
+   * lingers in the last 10%.
+   */
+  prewarm_queued_soon_fired?: boolean;
 }
 
 /**
@@ -111,6 +137,24 @@ interface SprintState {
   reorderSelected: (next: string[]) => void;
   setBlocks: (blocks: SprintBlock[]) => void;
   updateBlock: (s2dItemId: string, patch: Partial<SprintBlock>) => void;
+  /**
+   * Phase 4: scheduler-only mutator for pre-warm state. Kept separate
+   * from updateBlock so call-sites read clearly and we can pre-clear
+   * downstream stale fields on `warming` re-entry.
+   */
+  setPrewarm: (
+    s2dItemId: string,
+    patch: Partial<
+      Pick<
+        SprintBlock,
+        | "prewarm_status"
+        | "prewarm_opt_in"
+        | "prewarm_completed_at"
+        | "prewarm_error"
+        | "prewarm_queued_soon_fired"
+      >
+    >
+  ) => void;
   setCreateCalendarEvents: (v: boolean) => void;
   setCalendarAccountId: (id: string | null) => void;
 
@@ -259,6 +303,13 @@ export const useSprintStore = create<SprintState>()(
       setBlocks: (blocks) => set({ blocks }),
 
       updateBlock: (s2dItemId, patch) =>
+        set((s) => ({
+          blocks: s.blocks.map((b) =>
+            b.s2dItemId === s2dItemId ? { ...b, ...patch } : b
+          ),
+        })),
+
+      setPrewarm: (s2dItemId, patch) =>
         set((s) => ({
           blocks: s.blocks.map((b) =>
             b.s2dItemId === s2dItemId ? { ...b, ...patch } : b

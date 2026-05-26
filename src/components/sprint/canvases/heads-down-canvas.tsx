@@ -45,7 +45,7 @@ export function HeadsDownCanvas({
   onExit,
   onOpenDetail,
 }: CanvasBaseProps) {
-  const enrich = useEnrichedContext(item.id);
+  const enrich = useEnrichedContext(item.id, { polling: prewarm.status === "warming" });
   const stored = readPlan(enrich.data?.enriched_context);
   const [steps, setSteps] = useState<PlanStep[]>(() => stored?.steps ?? []);
   const [handoff, setHandoff] = useState<string>(stored?.handoffPrompt ?? "");

@@ -66,7 +66,6 @@ import { PathwayBadge } from "@/components/shared/pathway-badge";
 import { PriorityDot } from "@/components/shared/priority-dot";
 import { CompanyBadge } from "@/components/shared/company-badge";
 import { SprintItemContext } from "@/components/sprint/sprint-item-context";
-import { SprintCardWorkspace } from "@/components/sprint/sprint-card-workspace";
 import {
   PathwayCanvas,
   isNativePathway,
@@ -242,6 +241,83 @@ export function SprintActiveModeMulti() {
       startedSetRef.current.add(id);
     }
   }, [activeSlotIds, itemMap, updateItem]);
+
+  // ── Pre-warm scheduler ─────────────────────────────────────────────
+  // Every time an item enters an active slot, schedule its pathway's
+  // pre-warm work (server fills enriched_context fields the canvas
+  // reads). The scheduler dedupes per (s2dItemId, reason) so the same
+  // slot doesn't refetch on every render. Phase 5's contract card will
+  // additionally warm slots 1-3 on mount BEFORE the takeover opens —
+  // by then most warms will already be `ready` when we hit this hook.
+  const warmedSetRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { schedulePrewarmDebounced } = await import(
+        "@/lib/sprint/prewarm-scheduler"
+      );
+      if (cancelled) return;
+      for (const id of activeSlotIds) {
+        if (warmedSetRef.current.has(`activate:${id}`)) continue;
+        const item = itemMap.get(id);
+        const block = blocks.find((b) => b.s2dItemId === id);
+        if (!item || !block) continue;
+        // Already ready (from a prior queued-soon warm or contract card)?
+        // Skip — re-warming wastes tokens.
+        if (block.prewarm_status === "ready") {
+          warmedSetRef.current.add(`activate:${id}`);
+          continue;
+        }
+        warmedSetRef.current.add(`activate:${id}`);
+        schedulePrewarmDebounced({ block, item, reason: "activate" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSlotIds, itemMap, blocks]);
+
+  // 90%-of-time trigger: warm queue[0] when the focused active slot
+  // crosses the threshold. Per-block dedupe via prewarm_queued_soon_fired.
+  const setPrewarmStore = useSprintStore((s) => s.setPrewarm);
+  useEffect(() => {
+    if (paused) return;
+    if (activeSlotIds.length === 0 || queuedBlocks.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { schedulePrewarmDebounced } = await import(
+        "@/lib/sprint/prewarm-scheduler"
+      );
+      if (cancelled) return;
+      let triggered = false;
+      for (const slotId of activeSlotIds) {
+        const block = blocks.find((b) => b.s2dItemId === slotId);
+        if (!block || block.prewarm_queued_soon_fired) continue;
+        const elapsed = blockLiveElapsedMs(block, false);
+        const totalMs = block.durationMin * 60_000;
+        if (totalMs <= 0) continue;
+        if (elapsed / totalMs < 0.9) continue;
+        triggered = true;
+        setPrewarmStore(slotId, { prewarm_queued_soon_fired: true });
+      }
+      if (!triggered) return;
+      const headQueued = queuedBlocks[0];
+      const item = itemMap.get(headQueued.s2dItemId);
+      if (!item) return;
+      schedulePrewarmDebounced({
+        block: headQueued,
+        item,
+        reason: "queued-soon",
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Re-run on every render tick (force increments) so we catch the 90%
+    // crossing within ~1s. The scheduler dedupes via prewarm_queued_soon_fired
+    // so we don't spam POSTs after the first crossing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSlotIds, queuedBlocks, blocks, paused]);
 
   // Await the PATCH before promoting the next queued block into the freed
   // slot. If the save fails, surface a banner and keep the item in its
@@ -484,10 +560,37 @@ export function SprintActiveModeMulti() {
         completeBlock(s2dItemId, "skipped");
         return;
       }
+      case "stage-meeting": {
+        try {
+          const res = await fetch(`/api/s2d/${s2dItemId}/stage-meeting`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              calendarEventId: exit.calendarEventId,
+              talkingPoints: exit.talkingPoints,
+            }),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(
+              (j as { error?: string }).error ?? `stage ${res.status}`
+            );
+          }
+          completeBlock(s2dItemId, "done");
+        } catch (err) {
+          setBanner({
+            kind: "err",
+            msg: `Couldn't stage ${ticketLabel(s2dItemId)}: ${
+              err instanceof Error ? err.message : "save failed"
+            } — try again`,
+          });
+        }
+        return;
+      }
       default:
-        // Phase 4 wires nudge-delegate / stage-meeting. Today: nudge
-        // is NOT a slot exit (the delegate canvas POSTs /nudge inline
-        // and keeps the slot live) and stage-meeting lands with Phase 4.
+        // nudge-delegate is intentionally not handled as a slot exit:
+        // the delegate canvas POSTs /nudge inline and keeps the timer
+        // running. Resolution comes through "done".
         return;
     }
   }
@@ -967,7 +1070,7 @@ function DetailPanel({
  * Cockpit + Crew layout shell. Splits activeBlocks around focusedSlotId:
  * lower-index actives go to the left rail, higher-index go right. The
  * focused block fills the center column at full width and renders the
- * full SlotCard (header / timer / SprintCardWorkspace / footer).
+ * full SlotCard (header / timer / PathwayCanvas / footer).
  *
  * Edge cases:
  *   - 0 active blocks      → center renders <EmptySlot /> for slot 0.
@@ -1341,7 +1444,6 @@ function SlotCard({
 }) {
   const elapsedMs = blockLiveElapsedMs(block, paused);
   const totalMs = block.durationMin * 60_000;
-  const remainingMs = Math.max(0, totalMs - elapsedMs);
   const overrunMs = elapsedMs > totalMs ? elapsedMs - totalMs : 0;
 
   // For dialog labels: "1/2/3" matches the keyboard shortcut user sees.
@@ -1381,8 +1483,6 @@ function SlotCard({
     setDragRef(el);
     rootRef.current = el;
   };
-
-  const timerLabel = overrunMs > 0 ? `+${fmtMs(overrunMs)}` : fmtMs(remainingMs);
 
   return (
     <TimerRing
@@ -1437,24 +1537,37 @@ function SlotCard({
 
         {/* Body — identity strip + workspace + footer. Scroll lives
             INSIDE the rail and the active tab panel, never on the whole
-            card. Native pathways (Phase 2 onward: quick_reply, drafted_
-            response, decision_gate) render through PathwayCanvas; the
-            other four still flow through the legacy tabbed workspace
-            until Phase 3-4 ports them. */}
+            card. As of Phase 4 every pathway renders through
+            PathwayCanvas; the legacy tabbed SprintCardWorkspace is
+            gone. isNativePathway() still gates so an item with a
+            corrupt/legacy pathway value doesn't crash the slot. */}
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
           {isNativePathway(item.pathway) ? (
             <PathwayCanvas
               item={item}
               active
+              prewarm={{
+                status:
+                  block.prewarm_status === "warming"
+                    ? "warming"
+                    : block.prewarm_status === "ready"
+                      ? "ready"
+                      : block.prewarm_status === "skipped"
+                        ? "skipped"
+                        : block.prewarm_status === "failed"
+                          ? "failed"
+                          : "pending",
+                error: block.prewarm_error ?? undefined,
+                completedAt: block.prewarm_completed_at ?? undefined,
+              }}
               onExit={onExit}
               onOpenDetail={onOpen}
             />
           ) : (
-            <SprintCardWorkspace
-              item={item}
-              active
-              timer={{ label: timerLabel, overrun: overrunMs > 0, paused }}
-            />
+            <div className="p-6 text-[12px] text-muted-foreground">
+              No canvas for pathway &quot;{item.pathway}&quot;. Re-pathway via
+              the Refine sheet to continue.
+            </div>
           )}
 
           {/* Footer actions */}

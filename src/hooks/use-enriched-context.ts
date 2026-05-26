@@ -84,7 +84,10 @@ function normalize(raw: unknown): EnrichedContext | null {
   return { plan, pulled_sources, thread, last_enriched_at };
 }
 
-export function useEnrichedContext(itemId: string | null | undefined) {
+export function useEnrichedContext(
+  itemId: string | null | undefined,
+  opts?: { polling?: boolean }
+) {
   return useQuery({
     queryKey: enrichKey(itemId ?? ""),
     enabled: !!itemId,
@@ -98,6 +101,12 @@ export function useEnrichedContext(itemId: string | null | undefined) {
       };
     },
     staleTime: 5 * 60_000,
+    // Phase 4: while the sprint pre-warm scheduler is mid-flight on this
+    // item, the server-written enriched_context fields land outside the
+    // mutation cache. Caller passes polling=true to refetch every 2s so
+    // the canvas paints the pre-warmed content as soon as it's there.
+    refetchInterval: opts?.polling ? 2_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 

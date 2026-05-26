@@ -6,6 +6,7 @@ import { DecideCanvas } from "./decide-canvas";
 import { HeadsDownCanvas } from "./heads-down-canvas";
 import { WatchCanvas } from "./watch-canvas";
 import { DelegateCanvas } from "./delegate-canvas";
+import { MeetingPrepCanvas } from "./meeting-prep-canvas";
 import type {
   CanvasBaseProps,
   PrewarmState,
@@ -23,8 +24,8 @@ export interface PathwayCanvasProps {
 }
 
 /**
- * The set of pathways with a native canvas. Phase 4 adds `meeting_backed`
- * and deletes `<SprintCardWorkspace>` entirely.
+ * All 7 pathways have a native canvas as of Phase 4. The
+ * `<SprintCardWorkspace>` tabbed fallback is gone.
  */
 const NATIVE_PATHWAYS: Pathway[] = [
   "quick_reply",
@@ -33,6 +34,7 @@ const NATIVE_PATHWAYS: Pathway[] = [
   "heads_down",
   "watching",
   "delegated",
+  "meeting_backed",
 ];
 
 export function isNativePathway(pathway: Pathway): boolean {
@@ -41,15 +43,6 @@ export function isNativePathway(pathway: Pathway): boolean {
 
 /**
  * Dispatch a pathway-specific canvas component.
- *
- * Phase 3 lands the remaining three action-shaped pathways:
- *   - heads_down  → HeadsDownCanvas
- *   - watching    → WatchCanvas
- *   - delegated   → DelegateCanvas
- *
- * The one remaining pathway (`meeting_backed`) still falls through to
- * the legacy tabbed `<SprintCardWorkspace>` via `isNativePathway()`
- * returning false; Phase 4 ports it and deletes the fallback.
  */
 export function PathwayCanvas(props: PathwayCanvasProps) {
   const prewarm: PrewarmState = props.prewarm ?? { status: "pending" };
@@ -72,6 +65,8 @@ export function PathwayCanvas(props: PathwayCanvasProps) {
       return <WatchCanvas {...base} />;
     case "delegated":
       return <DelegateCanvas {...base} />;
+    case "meeting_backed":
+      return <MeetingPrepCanvas {...base} />;
     default:
       return null;
   }
