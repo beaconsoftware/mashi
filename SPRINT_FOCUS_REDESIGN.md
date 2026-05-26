@@ -24,7 +24,7 @@ The unified prompt reads this table to decide what to do. The next phase to run 
 | 1 | Chrome reset — TimerRing + merged context + single About | Shipped | https://github.com/sidd-beacon/mashi/pull/90 |
 | 2 | Reply + Decide canvases + Refine Sheet + decision_log | Shipped | https://github.com/sidd-beacon/mashi/pull/92 |
 | 3 | Heads-down + Watching + Delegated canvases + watch_check_ins | Shipped | https://github.com/sidd-beacon/mashi/pull/93 |
-| 4 | Meeting-prep canvas + pre-warm scheduler | Pending | — |
+| 4 | Meeting-prep canvas + pre-warm scheduler | Shipped | https://github.com/beaconsoftware/mashi/pull/95 |
 | 5 | Contract card + Spawned Rail + sprint-complete rewrite | Pending | — |
 | 6 | Polish + DELETE THIS DOC | Pending | — |
 

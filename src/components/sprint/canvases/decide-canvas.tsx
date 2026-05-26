@@ -50,7 +50,7 @@ export function DecideCanvas({
   onExit,
   onOpenDetail,
 }: CanvasBaseProps) {
-  const enrich = useEnrichedContext(item.id);
+  const enrich = useEnrichedContext(item.id, { polling: prewarm.status === "warming" });
   const ctx = enrich.data?.enriched_context;
   const brief = readDecisionBrief(ctx);
   const cited = (ctx?.pulled_sources ?? []).slice(0, 5);

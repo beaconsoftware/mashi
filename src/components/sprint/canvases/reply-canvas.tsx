@@ -59,7 +59,7 @@ export function ReplyCanvas({
   const [trackFollowUp, setTrackFollowUp] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const pushArtifact = useSpawnedRail((s) => s.push);
-  const enrich = useEnrichedContext(item.id);
+  const enrich = useEnrichedContext(item.id, { polling: prewarm.status === "warming" });
   const replyDraftPrewarm = readReplyDraft(enrich.data?.enriched_context);
 
   const channel: "gmail" | "slack" | null =
