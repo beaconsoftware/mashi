@@ -37,6 +37,7 @@ import { set_success_statement } from "@/lib/agent/tools/set_success_statement";
 import { log_decision } from "@/lib/agent/tools/log_decision";
 import { record_watch_check_in } from "@/lib/agent/tools/record_watch_check_in";
 import { set_watch_target } from "@/lib/agent/tools/set_watch_target";
+import { set_plan } from "@/lib/agent/tools/set_plan";
 import { resolve_reference } from "@/lib/agent/tools/resolve_reference";
 import { attach_thread_to_item } from "@/lib/agent/tools/attach_thread_to_item";
 import { list_recent_threads } from "@/lib/agent/tools/list_recent_threads";
@@ -117,6 +118,8 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [log_decision.name]: log_decision,
   [record_watch_check_in.name]: record_watch_check_in,
   [set_watch_target.name]: set_watch_target,
+  // Phase 8 — Focus card plan editor
+  [set_plan.name]: set_plan,
   // Phase 4 — binding orphan threads to items
   [attach_thread_to_item.name]: attach_thread_to_item,
   // Phase 5 — supporting read for Linear creates

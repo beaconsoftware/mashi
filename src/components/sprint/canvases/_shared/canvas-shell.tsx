@@ -88,6 +88,12 @@ interface CanvasShellProps extends CanvasBaseProps {
    * other use cases.
    */
   footerVariant?: "full" | "compact";
+  /**
+   * When true, the footer hides the "Ask Mashi" / Refine chip. Used by
+   * surfaces (Phase 8 Focus card) that already host the persistent
+   * thread inline, so the chip would just summon a redundant sheet.
+   */
+  hideRefine?: boolean;
 }
 
 export const CanvasShell = forwardRef<HTMLDivElement, CanvasShellProps>(
@@ -100,6 +106,7 @@ export const CanvasShell = forwardRef<HTMLDivElement, CanvasShellProps>(
       children,
       primary,
       footerVariant = "full",
+      hideRefine = false,
     },
     ref
   ) {
@@ -128,6 +135,7 @@ export const CanvasShell = forwardRef<HTMLDivElement, CanvasShellProps>(
           onOpenDetail={onOpenDetail}
           itemId={item.id}
           variant={footerVariant}
+          hideRefine={hideRefine}
         />
       </div>
     );
@@ -239,12 +247,14 @@ function CanvasFooter({
   onOpenDetail,
   itemId,
   variant,
+  hideRefine,
 }: {
   primary: ReactNode;
   onExit: (e: SlotExit) => Promise<void> | void;
   onOpenDetail?: () => void;
   itemId: string;
   variant: "full" | "compact";
+  hideRefine: boolean;
 }) {
   // Phase 2 of the agent buildout: the Refine chip now opens the
   // persistent agent thread for the item, not the legacy
@@ -254,17 +264,19 @@ function CanvasFooter({
   return (
     <div className="flex shrink-0 items-center gap-1.5 border-t border-border/40 bg-card/55 px-3 py-2">
       <div className="flex-1">{primary}</div>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onClick={() => openAgent(itemId)}
-        className="mashi-press h-7 gap-1 px-2 text-[11px] text-muted-foreground"
-        title="Ask Mashi — open the persistent thread for this item (⌥+R or /)"
-      >
-        <Wand2 className="h-3 w-3" />
-        Ask Mashi
-      </Button>
+      {!hideRefine && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => openAgent(itemId)}
+          className="mashi-press h-7 gap-1 px-2 text-[11px] text-muted-foreground"
+          title="Ask Mashi — open the persistent thread for this item (⌥+R or /)"
+        >
+          <Wand2 className="h-3 w-3" />
+          Ask Mashi
+        </Button>
+      )}
       {variant === "full" && (
         <>
           <SnoozePopover onExit={onExit} />

@@ -3,7 +3,6 @@ import {
   createSupabaseServerClient,
   createSupabaseServiceClient,
 } from "@/lib/supabase/server";
-import { generateHeadsDownPlan } from "@/lib/anthropic/heads-down-plan";
 import { generateDecisionBrief } from "@/lib/anthropic/decide-brief";
 import { generateTalkingPoints } from "@/lib/anthropic/talking-points";
 import { scanActivitySinceLast } from "@/lib/sprint/activity-scan";
@@ -37,7 +36,8 @@ export const maxDuration = 60;
  * Mapping:
  *   quick_reply / drafted_response → enriched_context.reply_draft
  *   decision_gate                  → enriched_context.decision_brief
- *   heads_down                     → enriched_context.heads_down_plan
+ *   heads_down                     → no AI pre-warm (Focus card chat
+ *                                    pulls context lazily via tools)
  *   meeting_backed                 → enriched_context.talking_points
  *   delegated                      → enriched_context.signals_since_last
  *                                    + enriched_context.nudge_draft (if stale)
@@ -66,7 +66,6 @@ interface StoredEnrichedContext {
   pulled_sources?: EnrichedSource[];
   reply_draft?: { body: string; generatedAt: string };
   decision_brief?: unknown;
-  heads_down_plan?: unknown;
   talking_points?: { bullets: string[]; meetingId?: string | null };
   signals_since_last?: { signals: unknown[]; at: string };
   nudge_draft?: { body: string; tone: "gentle" | "direct" | "escalate" };
@@ -191,15 +190,9 @@ export async function POST(req: NextRequest) {
         fields.push("decision_brief");
       }
     } else if (pathway === "heads_down") {
-      if (!enriched.heads_down_plan || reason === "repathway") {
-        const plan = await generateHeadsDownPlan({
-          item,
-          sources,
-          userId: user.id,
-        });
-        enriched.heads_down_plan = plan;
-        fields.push("heads_down_plan");
-      }
+      // Phase 8: Focus card replaced the legacy HeadsDownCanvas; the
+      // chat thread pulls context lazily via tools, so there's nothing
+      // to pre-warm here.
     } else if (pathway === "meeting_backed") {
       if (!enriched.talking_points || reason === "repathway") {
         // Find the most likely meeting first so the points are anchored
