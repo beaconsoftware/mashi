@@ -95,7 +95,7 @@ export function UndoStrip({ action, onUndone, onExpired }: Props) {
 
   if (resolved === "undone") {
     return (
-      <div className="mashi-magnetic flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1.5 text-[12px]">
+      <div className="mashi-magnetic flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1.5 text-xs">
         <Check className="h-3 w-3 text-emerald-400" />
         <span className="text-foreground/85">Undone</span>
       </div>
@@ -120,7 +120,7 @@ export function UndoStrip({ action, onUndone, onExpired }: Props) {
         "relative overflow-hidden rounded-md border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5"
       )}
     >
-      <div className="flex items-center gap-2 text-[12px]">
+      <div className="flex items-center gap-2 text-xs">
         <Check className="h-3 w-3 shrink-0 text-amber-400" />
         <span className="flex-1 truncate text-foreground/85">
           {action.summary}

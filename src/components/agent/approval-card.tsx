@@ -146,7 +146,7 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
   }
 
   return (
-    <Alert className="block border-amber-500/40 bg-amber-500/15 px-3 py-2 text-[12px]">
+    <Alert className="block border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs">
       <div className="mb-1.5 flex items-center gap-1.5">
         <span className="font-mono text-[10px] uppercase tracking-wider text-amber-200">
           approval needed
@@ -302,13 +302,13 @@ function ArgsEditor({
                 value={draft[key] ?? ""}
                 onChange={(e) => onChange(key, e.target.value)}
                 rows={Math.min(8, Math.max(3, Math.ceil((draft[key] ?? "").length / 60)))}
-                className="text-[12px]"
+                className="text-xs"
               />
             ) : (
               <Input
                 value={draft[key] ?? ""}
                 onChange={(e) => onChange(key, e.target.value)}
-                className="h-7 text-[12px]"
+                className="h-7 text-xs"
               />
             )}
           </div>

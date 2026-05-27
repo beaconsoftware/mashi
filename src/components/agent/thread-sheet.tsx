@@ -61,7 +61,7 @@ export function AgentThreadSheet() {
             <ThreadView itemId={item.id} key={item.id} />
           </div>
         ) : (
-          <div className="p-5 pt-2 text-[12px] text-muted-foreground">
+          <div className="p-5 pt-2 text-xs text-muted-foreground">
             No item bound — open this from the board or detail sheet.
           </div>
         )}

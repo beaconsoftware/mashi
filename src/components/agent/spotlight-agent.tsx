@@ -105,11 +105,11 @@ export function SpotlightAgent() {
         >
           <div className="flex items-center justify-between border-b border-border/40 bg-card/95 px-3 py-2">
             <TabsList variant="line" className="h-7 gap-2">
-              <TabsTrigger value="ask" className="px-2 text-[12px]">
+              <TabsTrigger value="ask" className="px-2 text-xs">
                 <Sparkles className="h-3 w-3 text-primary" />
                 Ask Mashi
               </TabsTrigger>
-              <TabsTrigger value="search" className="px-2 text-[12px]">
+              <TabsTrigger value="search" className="px-2 text-xs">
                 <Search className="h-3 w-3" />
                 Search
               </TabsTrigger>
@@ -270,7 +270,7 @@ function AskMashiTab({
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-1 min-h-0 flex-col gap-2 overflow-hidden">
-        <div className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/40 bg-card/60 p-3 text-center text-[12px] text-muted-foreground">
+        <div className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/40 bg-card/60 p-3 text-center text-xs text-muted-foreground">
           {creating || sending ? (
             <div className="flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -362,7 +362,7 @@ function RecentThreadRow({
       <span className="min-w-0 flex-1 truncate text-foreground/90">
         {thread.title}
       </span>
-      <span className="shrink-0 font-mono text-[9px] text-muted-foreground/70">
+      <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
         {relative}
       </span>
     </Button>
