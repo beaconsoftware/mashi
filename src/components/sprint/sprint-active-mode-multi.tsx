@@ -37,6 +37,7 @@ import {
   ArrowUpFromLine,
   Undo2,
   CheckCheck,
+  Plus,
 } from "lucide-react";
 import {
   DndContext,
@@ -82,6 +83,7 @@ import { SpotifyPlayer } from "@/components/sprint/spotify-player";
 import { SpotifyPlayLogger } from "@/components/sprint/spotify-play-logger";
 import { SpotifyAmbientBg } from "@/components/sprint/spotify-ambient-bg";
 import { FocusOverlay } from "@/components/layout/primitives";
+import { AddTasksSheet } from "@/components/sprint/add-tasks-sheet";
 import { SpawnedRail } from "@/components/sprint/spawned-rail";
 import { Acknowledgement } from "@/components/sprint/acknowledgement";
 import { useSpawnedRail } from "@/store/spawned-rail-store";
@@ -103,7 +105,7 @@ export function SprintActiveModeMulti() {
   const pause = useSprintStore((s) => s.pause);
   const resume = useSprintStore((s) => s.resume);
   const minimize = useSprintStore((s) => s.minimize);
-  const exitSprint = useSprintStore((s) => s.exitSprint);
+  const endSprint = useSprintStore((s) => s.endSprint);
   const reorderActiveSlots = useSprintStore((s) => s.reorderActiveSlots);
   const swapSlotWithQueued = useSprintStore((s) => s.swapSlotWithQueued);
   const moveSlotToQueue = useSprintStore((s) => s.moveSlotToQueue);
@@ -119,6 +121,10 @@ export function SprintActiveModeMulti() {
   // open item locally — sprint focus shouldn't context-switch to a side
   // route, and embedding keeps the other slots visible.
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
+
+  // Phase 7: mid-sprint task picker visibility. Sheet stays open across
+  // multiple adds — explicit close is the only way out.
+  const [addTasksOpen, setAddTasksOpen] = useState(false);
 
   // DnD state — track the id being dragged so the overlay can render a
   // ghost of the source. Activation distance of 6px avoids hijacking
@@ -898,14 +904,15 @@ export function SprintActiveModeMulti() {
         e.preventDefault();
         paused ? resume() : pause();
       } else if (e.key === "Escape") {
-        e.preventDefault();
-        // Detail panel takes Esc first — closing it is the obviously-
-        // intended action, not "exit the whole sprint".
+        // Phase 7: Escape now only closes open detail panels. It used
+        // to gate-fire `confirm("Exit sprint?")` which was too easy to
+        // hit accidentally mid-flow. Ending the sprint is now an
+        // explicit click on the End sprint button.
         if (detailItemId) {
+          e.preventDefault();
           setDetailItemId(null);
           return;
         }
-        if (confirm("Exit sprint? Progress on active items is saved.")) exitSprint();
       } else if (e.key >= "1" && e.key <= "3") {
         const idx = parseInt(e.key, 10) - 1;
         const id = activeSlotIds[idx];
@@ -1003,16 +1010,13 @@ export function SprintActiveModeMulti() {
           </Button>
           <Button
             size="sm"
-            variant="ghost"
-            onClick={() => {
-              if (confirm("Exit sprint? Progress on active items is saved.")) {
-                exitSprint();
-              }
-            }}
-            className="gap-1.5 text-destructive"
+            variant="outline"
+            onClick={endSprint}
+            className="gap-1.5"
+            title="End sprint and route to the recap"
           >
-            <X className="h-3.5 w-3.5" />
-            Exit
+            <CheckCheck className="h-3.5 w-3.5" />
+            End sprint
           </Button>
         </div>
       </div>
@@ -1072,29 +1076,23 @@ export function SprintActiveModeMulti() {
           }
         />
 
-        {/* Bench (formerly "Up next" — items selected for this sprint that
-            aren't in an active slot). Always rendered so a slot can be
-            dragged here to send it back. */}
-        <BenchStrip
-          blocks={queuedBlocks}
+        {/* Phase 7 bottom tray: done + bench in one strip on a darker
+            translucent surface (bg-card/55, sanctioned step), with a
+            divider between the two sets and the "+ Add tasks" button
+            left-aligned inside the tray. Replaces the two separate
+            BenchStrip + DoneStrip rows of the previous layout. */}
+        <BottomTray
+          completedBlocks={completedBlocks}
+          queuedBlocks={queuedBlocks}
           itemMap={itemMap}
           draggingId={draggingId}
           activeSlotsFull={activeSlotIds.length >= MAX_PARALLEL_SLOTS}
+          onAddTasks={() => setAddTasksOpen(true)}
           onPull={pullFromBench}
           onMarkDone={markBenchDone}
+          onReopen={reopen}
           onOpen={(id) => setDetailItemId(id)}
         />
-
-        {/* Done strip */}
-        {completedBlocks.length > 0 && (
-          <DoneStrip
-            blocks={completedBlocks}
-            itemMap={itemMap}
-            activeSlotsFull={activeSlotIds.length >= MAX_PARALLEL_SLOTS}
-            onReopen={reopen}
-            onOpen={(id) => setDetailItemId(id)}
-          />
-        )}
 
         <DragOverlay dropAnimation={null}>
           {draggingBlock && draggingBlock.item ? (
@@ -1117,6 +1115,64 @@ export function SprintActiveModeMulti() {
           store. Phases 3+ canvases also open it via the Refine chip in
           the canvas footer. */}
       <RefineSheet />
+
+      {/* Phase 7: mid-sprint task picker. Sheet portals to body via Radix
+          Dialog primitive so it paints above the focus overlay. Stays
+          open across multiple adds; onAdded triggers calendar-invite
+          extension when an invite was created at sprint start. */}
+      <AddTasksSheet
+        open={addTasksOpen}
+        onOpenChange={setAddTasksOpen}
+        onAdded={(s2dItemId) => {
+          // Best-effort: extend the sprint-level calendar invite, if any,
+          // by the new block's planned duration and append the new
+          // item's title to the description. Failures don't roll the
+          // local add back — the toast surfaces in the banner.
+          void (async () => {
+            try {
+              const res = await fetch("/api/sprint/finalize-events", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  mode: "extend-for-add",
+                  s2dItemId,
+                  durationMin: 30,
+                }),
+              });
+              if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                const msg =
+                  (j as { error?: string }).error ??
+                  `extend ${res.status}`;
+                setBanner({
+                  kind: "err",
+                  msg: `Couldn't extend the sprint invite: ${msg}`,
+                });
+                return;
+              }
+              const j = (await res.json()) as {
+                ok: boolean;
+                calendarUpdated: boolean;
+                error?: string;
+              };
+              if (j.ok === false && j.error) {
+                setBanner({
+                  kind: "err",
+                  msg: `Couldn't extend the sprint invite: ${j.error}`,
+                });
+              }
+            } catch (err) {
+              setBanner({
+                kind: "err",
+                msg:
+                  err instanceof Error
+                    ? `Couldn't extend the sprint invite: ${err.message}`
+                    : "Couldn't extend the sprint invite.",
+              });
+            }
+          })();
+        }}
+      />
 
       {/* Spawned-rail (Phase 5): bottom strip of artifacts produced by
           slot exits — sends, decisions, follow-ups, check-ins, nudges,
@@ -1817,13 +1873,111 @@ function EmptySlot({
 }
 
 /**
- * Bench (formerly "Up next"): items selected for this sprint that aren't
- * in an active slot. Each card lifts on hover and reveals a popover
- * with full preview + source context + action buttons (Pull to slot,
- * Mark done, Detail). Drag-and-drop is preserved — drag handle lives
- * on the card itself so a click flow doesn't fight the drag flow.
+ * Phase 7 bottom tray: one continuous strip combining done + bench
+ * with a divider between them, on a darker translucent surface
+ * (bg-card/55, sanctioned step) so it reads as a separate plane from
+ * the workspace above. The "+ Add tasks" button lives inside the
+ * tray, left-aligned. Done sits left of the divider, pending sits
+ * right.
+ *
+ * The pending side keeps the existing "queue" droppable so dragging a
+ * slot back to the bench still works. The done side has no DnD —
+ * dragging a done card is intentionally not supported (re-open is the
+ * affordance for un-finishing).
  */
-function BenchStrip({
+function BottomTray({
+  completedBlocks,
+  queuedBlocks,
+  itemMap,
+  draggingId,
+  activeSlotsFull,
+  onAddTasks,
+  onPull,
+  onMarkDone,
+  onReopen,
+  onOpen,
+}: {
+  completedBlocks: SprintBlock[];
+  queuedBlocks: SprintBlock[];
+  itemMap: Map<string, S2DItem>;
+  draggingId: string | null;
+  activeSlotsFull: boolean;
+  onAddTasks: () => void;
+  onPull: (id: string) => void;
+  onMarkDone: (id: string) => void;
+  onReopen: (id: string, target: "active" | "bench") => void;
+  onOpen: (id: string) => void;
+}) {
+  const hasDone = completedBlocks.length > 0;
+  const hasBench = queuedBlocks.length > 0;
+  return (
+    <div className="shrink-0 border-t border-border/40 bg-card/55 px-4 pt-2 pb-2">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onAddTasks}
+          className="h-7 gap-1 text-[11px]"
+          title="Pull more S2D items into this sprint"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add tasks
+        </Button>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <CheckCheck className="h-3 w-3" />
+            Done <span className="font-mono opacity-70">{completedBlocks.length}</span>
+          </span>
+          <span className="mx-2 opacity-40">·</span>
+          <span className="inline-flex items-center gap-1">
+            <ArrowDownToLine className="h-3 w-3" />
+            Bench <span className="font-mono opacity-70">{queuedBlocks.length}</span>
+          </span>
+        </span>
+        {hasBench && (
+          <span className="ml-auto normal-case text-[10px] text-muted-foreground opacity-70">
+            Hover to preview · drag to slot · click to pull
+          </span>
+        )}
+      </div>
+      <div className="-mx-1 overflow-x-auto overflow-y-visible">
+        <div className="flex items-end gap-3 px-1 pt-10 pb-6">
+          {hasDone && (
+            <DoneRow
+              blocks={completedBlocks}
+              itemMap={itemMap}
+              activeSlotsFull={activeSlotsFull}
+              onReopen={onReopen}
+              onOpen={onOpen}
+            />
+          )}
+          {hasDone && (
+            <span
+              aria-hidden
+              className="mx-1 self-stretch border-l border-border/40"
+            />
+          )}
+          <BenchRow
+            blocks={queuedBlocks}
+            itemMap={itemMap}
+            draggingId={draggingId}
+            activeSlotsFull={activeSlotsFull}
+            onPull={onPull}
+            onMarkDone={onMarkDone}
+            onOpen={onOpen}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Inner: the row of bench cards. Owns the "queue" droppable so a slot
+ * card can be dragged here to send it back. Empty state is a thin
+ * dashed placeholder so the drop target is still discoverable.
+ */
+function BenchRow({
   blocks,
   itemMap,
   draggingId,
@@ -1840,8 +1994,6 @@ function BenchStrip({
   onMarkDone: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
-  // Whole strip is a fallback drop target — landing on the strip (not
-  // on a specific card) appends to the end.
   const { setNodeRef: setDockRef, isOver: isDockOver } = useDroppable({
     id: "queue",
   });
@@ -1850,52 +2002,70 @@ function BenchStrip({
     <div
       ref={setDockRef}
       className={cn(
-        "shrink-0 border-t border-border/30 bg-secondary/20 px-4 pt-2 pb-2 transition-colors",
-        isDockOver && "bg-primary/5"
+        "flex shrink-0 items-end gap-3 rounded-md p-1 transition-colors",
+        isDockOver && "bg-primary/15"
       )}
     >
-      <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-        <ArrowDownToLine className="h-3 w-3" />
-        Bench <span className="font-mono opacity-70">{blocks.length}</span>
-        {!empty && (
-          <span className="ml-2 normal-case text-[10px] opacity-60">
-            Hover to preview · drag to slot · click to pull
-          </span>
-        )}
-      </div>
       {empty ? (
-        <div className="rounded border border-dashed border-border/30 px-3 py-2 text-[11px] text-muted-foreground">
+        <div className="rounded border border-dashed border-border/40 px-3 py-2 text-[11px] text-muted-foreground">
           Bench is empty. Drag a slot here to park it.
         </div>
       ) : (
-        // Two-layer overflow trick: the outer is overflow-visible so card
-        // lifts (transform: translateY(-Npx)) aren't clipped. The inner
-        // is overflow-x-auto for horizontal scroll, with generous vertical
-        // padding so the lift stays inside its bounds. Without the
-        // padding, the magnetic shadow gets sliced off at the strip's
-        // top edge — that was the user-visible "Bench is cutting off"
-        // bug from the redesign feedback.
-        <div className="-mx-1 overflow-x-auto overflow-y-visible">
-          <div className="flex items-end gap-3 px-1 pt-10 pb-6">
-            {blocks.map((b) => {
-              const it = itemMap.get(b.s2dItemId);
-              if (!it) return null;
-              return (
-                <BenchCard
-                  key={b.s2dItemId}
-                  block={b}
-                  item={it}
-                  isDragging={draggingId === `queue:${b.s2dItemId}`}
-                  activeSlotsFull={activeSlotsFull}
-                  onPull={() => onPull(b.s2dItemId)}
-                  onMarkDone={() => onMarkDone(b.s2dItemId)}
-                  onOpen={() => onOpen(b.s2dItemId)}
-                />
-              );
-            })}
-          </div>
-        </div>
+        blocks.map((b) => {
+          const it = itemMap.get(b.s2dItemId);
+          if (!it) return null;
+          return (
+            <BenchCard
+              key={b.s2dItemId}
+              block={b}
+              item={it}
+              isDragging={draggingId === `queue:${b.s2dItemId}`}
+              activeSlotsFull={activeSlotsFull}
+              onPull={() => onPull(b.s2dItemId)}
+              onMarkDone={() => onMarkDone(b.s2dItemId)}
+              onOpen={() => onOpen(b.s2dItemId)}
+            />
+          );
+        })
       )}
+    </div>
+  );
+}
+
+/**
+ * Inner: the row of done cards. Composed inside BottomTray to keep
+ * spacing/animation parity with the bench row. No droppable here —
+ * dragging a slot to the done side is not a meaningful action.
+ */
+function DoneRow({
+  blocks,
+  itemMap,
+  activeSlotsFull,
+  onReopen,
+  onOpen,
+}: {
+  blocks: SprintBlock[];
+  itemMap: Map<string, S2DItem>;
+  activeSlotsFull: boolean;
+  onReopen: (id: string, target: "active" | "bench") => void;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-end gap-3">
+      {blocks.map((b) => {
+        const it = itemMap.get(b.s2dItemId);
+        if (!it) return null;
+        return (
+          <DoneCard
+            key={b.s2dItemId}
+            block={b}
+            item={it}
+            activeSlotsFull={activeSlotsFull}
+            onReopen={(target) => onReopen(b.s2dItemId, target)}
+            onOpen={() => onOpen(b.s2dItemId)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -2115,55 +2285,6 @@ function DragGhost({
       </div>
       <div className="line-clamp-1 max-w-[260px] pt-0.5 text-foreground/85">
         {item.title}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Done: completed (or skipped) blocks. Each card lifts on hover and
- * reveals a popover with the outcome + reopen affordances. Un-finishing
- * goes through the PATCH endpoint so done_at + outcome + resolved_via
- * get cleared server-side.
- */
-function DoneStrip({
-  blocks,
-  itemMap,
-  activeSlotsFull,
-  onReopen,
-  onOpen,
-}: {
-  blocks: SprintBlock[];
-  itemMap: Map<string, S2DItem>;
-  activeSlotsFull: boolean;
-  onReopen: (id: string, target: "active" | "bench") => void;
-  onOpen: (id: string) => void;
-}) {
-  return (
-    <div className="shrink-0 border-t border-border/30 px-4 pt-2 pb-2">
-      <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-        <CheckCheck className="h-3 w-3" />
-        Done <span className="font-mono opacity-70">{blocks.length}</span>
-      </div>
-      {/* Two-layer overflow so card lifts don't clip — same pattern as
-          the Bench strip. */}
-      <div className="-mx-1 overflow-x-auto overflow-y-visible">
-        <div className="flex items-end gap-3 px-1 pt-10 pb-6">
-          {blocks.map((b) => {
-            const it = itemMap.get(b.s2dItemId);
-            if (!it) return null;
-            return (
-              <DoneCard
-                key={b.s2dItemId}
-                block={b}
-                item={it}
-                activeSlotsFull={activeSlotsFull}
-                onReopen={(target) => onReopen(b.s2dItemId, target)}
-                onOpen={() => onOpen(b.s2dItemId)}
-              />
-            );
-          })}
-        </div>
       </div>
     </div>
   );

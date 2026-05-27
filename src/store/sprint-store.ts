@@ -29,7 +29,8 @@ export type SprintPhase =
   | "review"
   | "contract"
   | "active"
-  | "minimized";
+  | "minimized"
+  | "complete";
 
 export type PrewarmStatus =
   | "pending"
@@ -243,6 +244,34 @@ interface SprintState {
   unminimize: () => void;
   exitSprint: () => void;
   resetAll: () => void;
+
+  /**
+   * Phase 7: pull a board item into the running sprint mid-flight.
+   * Builds a new SprintBlock with defaults (durationMin 30, status
+   * "pending"). target="bench" appends to blocks and leaves it queued;
+   * target="active" appends and, when a slot is free, calls
+   * fillEmptySlot so the item starts immediately. The s2d_items
+   * status flip to in_progress is handled by the existing
+   * startedSetRef effect in sprint-active-mode-multi.tsx — no
+   * separate PATCH path needed here.
+   */
+  addItemMidSprint: (s2dItemId: string, target: "bench" | "active") => void;
+  /**
+   * Phase 7: end the sprint early without settling each pending block.
+   * Settles in-flight timer state via tick(), then transitions to the
+   * "complete" phase so the SprintComplete recap can render with
+   * per-pending-row dispositions. Does NOT mutate block statuses —
+   * pending blocks stay pending so the recap can distinguish "done
+   * during sprint" from "ended early".
+   */
+  endSprint: () => void;
+  /**
+   * Phase 7: return from the "complete" recap back to active. Used by
+   * the recap's "Back to sprint" button when the user ended early and
+   * wants to keep working. No data loss — block statuses and slot
+   * activations are unchanged.
+   */
+  goBackToActive: () => void;
 }
 
 const INITIAL: Pick<
@@ -284,7 +313,8 @@ export const useSprintStore = create<SprintState>()(
         if (
           s.phase === "active" ||
           s.phase === "minimized" ||
-          s.phase === "contract"
+          s.phase === "contract" ||
+          s.phase === "complete"
         )
           return;
         // Fresh plan
@@ -770,6 +800,39 @@ export const useSprintStore = create<SprintState>()(
       exitSprint: () => set({ ...INITIAL }),
 
       resetAll: () => set({ ...INITIAL }),
+
+      addItemMidSprint: (s2dItemId, target) => {
+        const s = get();
+        // Idempotent against accidental double-clicks: if the item is
+        // already in blocks, don't duplicate. Phase 7 keeps each board
+        // item to a single block per sprint.
+        if (s.blocks.some((b) => b.s2dItemId === s2dItemId)) return;
+        const newBlock: SprintBlock = {
+          s2dItemId,
+          startAt: new Date().toISOString(),
+          durationMin: 30,
+          status: "pending",
+          activatedAtMs: null,
+          accumulatedMs: 0,
+          prewarm_status: "pending",
+          prewarm_opt_in: false,
+        };
+        set({ blocks: [...s.blocks, newBlock] });
+        if (target === "active" && s.activeSlotIds.length < MAX_PARALLEL_SLOTS) {
+          // After commit, fillEmptySlot reads activeSlotIds.length to
+          // decide where to insert; appending to the end is correct.
+          get().fillEmptySlot(get().activeSlotIds.length, s2dItemId);
+        }
+      },
+
+      endSprint: () => {
+        // Settle live timers into accumulatedMs so the recap reads the
+        // most recent focus minutes.
+        get().tick();
+        set({ phase: "complete" });
+      },
+
+      goBackToActive: () => set({ phase: "active" }),
     }),
     {
       name: "mashi.sprint",

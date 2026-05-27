@@ -111,6 +111,10 @@ export function SprintPage() {
     return <SprintActiveModeMulti />;
   }
 
+  // Phase 7: early-end recap. User hit "End sprint" with pending blocks;
+  // SprintComplete renders with disposition controls + "Back to sprint".
+  if (phase === "complete") return <SprintComplete />;
+
   if (phase === "minimized") {
     // The fullscreen overlay is dismissed; the global SprintWidget (in
     // AppShell's SprintGlobalMount) floats over every page including
