@@ -22,7 +22,7 @@ The unified prompt reads this table to decide what to do. The next phase to run 
 | Phase | Subject | Status | PR |
 |---|---|---|---|
 | 1 | Foundations — schema + tool registry + cursor context + sessionTool | Shipped | https://github.com/beaconsoftware/mashi/pull/99 |
-| 2 | Read-only agent loop + "Ask Mashi" button + persistent threads | Shipped | _pending PR_ |
+| 2 | Read-only agent loop + "Ask Mashi" button + persistent threads | Shipped | https://github.com/beaconsoftware/mashi/pull/103 |
 | 3 | Ring 2 write tools + agent_actions audit + 30s undo | Pending | — |
 | 4 | Spotlight surface + orphan threads + reference resolver | Pending | — |
 | 5 | Ring 3 write tools (send/calendar/Linear) + approval gate | Pending | — |
