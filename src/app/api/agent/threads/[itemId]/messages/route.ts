@@ -7,9 +7,10 @@ import type { CursorContext } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Streaming through Vercel: bump the cap so a long tool-using turn
-// (multiple iterations) doesn't get killed at the default 10s.
-export const maxDuration = 60;
+// Streaming through Vercel: bump the cap to 300s (Pro tier ceiling) so
+// a ring-3 approval gate has up to 5 minutes for the user to decide
+// without the stream getting killed mid-wait.
+export const maxDuration = 300;
 
 /**
  * POST → streams a single agent turn over Server-Sent Events.
@@ -102,9 +103,8 @@ export async function POST(
           userMessage: parsed.data.message,
           cursor: parsed.data.cursor as CursorContext,
           onDelta: enqueue,
-          // Phase 3: surface ring 2 (write_mashi) tools. Ring 3
-          // (write_world) lands in Phase 5 with the approval gate.
-          toolRings: ["read", "write_mashi"],
+          // Phase 5: ring 3 (write_world) gated by the approval card.
+          toolRings: ["read", "write_mashi", "write_world"],
         });
       } catch (err) {
         enqueue({

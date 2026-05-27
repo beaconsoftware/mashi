@@ -8,6 +8,10 @@ import { appendMessage, loadThread } from "@/lib/agent/threads";
 import type { AnyToolDefinition, CursorContext, ToolRing } from "@/lib/agent/types";
 import { serializeCursor } from "@/lib/agent/cursor-context";
 import { recordAction, type ReverseOp } from "@/lib/agent/undo";
+import {
+  awaitApprovalDecision,
+  createPendingApproval,
+} from "@/lib/agent/approval";
 
 /**
  * Mashi Agent — read-only loop (Phase 2).
@@ -43,6 +47,23 @@ export type AgentDelta =
       /** Which tool emitted this, so the UI can correlate to the
        * collapsed tool row in the timeline. */
       toolName: string;
+    }
+  | {
+      kind: "approval-needed";
+      /** Anthropic tool_use_id — the client POSTs to
+       * /approvals/[callId] with this. */
+      id: string;
+      name: string;
+      args: unknown;
+      /** Server-stamped expiry (~5 min). After this the loop returns a
+       * synthetic error to the model. */
+      expiresAt: string;
+    }
+  | {
+      kind: "approval-resolved";
+      /** Mirrors the id of the approval-needed delta. */
+      id: string;
+      outcome: "approve" | "edit" | "cancel" | "expired";
     }
   | { kind: "done" }
   | { kind: "error"; message: string };
@@ -110,6 +131,9 @@ function buildSystemPrompt(opts: {
   );
   lines.push(
     "Orphan threads: if this conversation has no item binding yet (Spotlight chat), once the user confirms an item, call attach_thread_to_item so subsequent turns are anchored to it."
+  );
+  lines.push(
+    "External writes (send_email, draft_email, send_slack_message, create_calendar_event, create_linear_issue, etc.) pause for explicit user approval before firing. Before calling one of these, briefly tell the user what you're about to send so the approval card lands in context. If a call comes back with `edited: true` and `edited_args`, re-issue the tool with the edited arguments (do not call any other tool first). If a ring-3 call returns `user cancelled` or `approval window expired`, acknowledge it and ask what they'd like instead. Linear: call list_linear_teams first to pick the right team_id; never invent one."
   );
   lines.push("");
   lines.push("# Cursor context");
@@ -381,7 +405,113 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
       }
       opts.onDelta({ kind: "tool_call_args", id: call.id, args: call.input });
       try {
-        const parsed = def.args.safeParse(call.input);
+        // Ring 3 (write_world) gate: pause before any external call and
+        // wait for the user's Approve / Edit / Cancel decision via the
+        // approval channel. Edit returns a synthetic tool result so the
+        // model re-issues the call with the edited args (intentional —
+        // gives the user a second chance to approve the revision).
+        // Cancel + Expired surface as synthetic errors so the model can
+        // gracefully recover ("got it, want me to draft a different
+        // version?"). Approve falls through to the normal arg-parse +
+        // handler dispatch path below.
+        let effectiveInput: unknown = call.input;
+        if (def.ring === "write_world") {
+          const pending = await createPendingApproval({
+            userId: opts.userId,
+            threadId: opts.threadId,
+            callId: call.id,
+            toolName: def.name,
+            args: call.input,
+            supabase,
+          });
+          opts.onDelta({
+            kind: "approval-needed",
+            id: call.id,
+            name: def.name,
+            args: call.input,
+            expiresAt: pending.expiresAt,
+          });
+          const outcome = await awaitApprovalDecision({
+            userId: opts.userId,
+            threadId: opts.threadId,
+            callId: call.id,
+            supabase,
+          });
+          if (outcome.kind === "edit") {
+            opts.onDelta({
+              kind: "approval-resolved",
+              id: call.id,
+              outcome: "edit",
+            });
+            const synth = {
+              ok: true,
+              edited: true,
+              edited_args: outcome.editedArgs,
+              note: "User edited the call. Re-issue the tool with these arguments to seek a fresh approval.",
+            };
+            toolResults.push({
+              tool_use_id: call.id,
+              content: JSON.stringify(synth),
+              is_error: false,
+            });
+            opts.onDelta({
+              kind: "tool_call_result",
+              id: call.id,
+              ok: true,
+              result: synth,
+            });
+            continue;
+          }
+          if (outcome.kind === "cancel" || outcome.kind === "expired") {
+            opts.onDelta({
+              kind: "approval-resolved",
+              id: call.id,
+              outcome: outcome.kind === "cancel" ? "cancel" : "expired",
+            });
+            const synth = {
+              ok: false,
+              error:
+                outcome.kind === "cancel"
+                  ? "user cancelled"
+                  : "approval window expired",
+            };
+            try {
+              await recordAction({
+                userId: opts.userId,
+                threadId: opts.threadId,
+                toolName: def.name,
+                ring: "write_world",
+                args: call.input,
+                result: synth,
+                ok: false,
+                supabase,
+              });
+            } catch {
+              // best-effort
+            }
+            toolResults.push({
+              tool_use_id: call.id,
+              content: JSON.stringify(synth),
+              is_error: true,
+            });
+            opts.onDelta({
+              kind: "tool_call_result",
+              id: call.id,
+              ok: false,
+              error: synth.error,
+            });
+            continue;
+          }
+          // outcome.kind === "approve" — fall through using original args.
+          opts.onDelta({
+            kind: "approval-resolved",
+            id: call.id,
+            outcome: "approve",
+          });
+          effectiveInput = outcome.args ?? call.input;
+        }
+
+        const parsed = def.args.safeParse(effectiveInput);
         if (!parsed.success) {
           throw new Error(
             `Invalid arguments: ${parsed.error.issues
@@ -440,6 +570,29 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
               toolName: def.name,
             });
           }
+        } else if (def.ring === "write_world") {
+          // Ring 3 audit: every external write lands in agent_actions
+          // with ring='write_world' and no undo_payload (irreversible
+          // by design — they're explicitly approved, not optimistic).
+          // Cancel / expired paths above already audit failures; this
+          // branch only reaches here on approve.
+          const ok =
+            isObjectResult &&
+            (result as { ok?: boolean }).ok !== false;
+          try {
+            await recordAction({
+              userId: opts.userId,
+              threadId: opts.threadId,
+              toolName: def.name,
+              ring: "write_world",
+              args: effectiveInput,
+              result: modelResult,
+              ok,
+              supabase,
+            });
+          } catch {
+            // best-effort
+          }
         }
 
         toolResults.push({
@@ -455,15 +608,15 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "tool failed";
-        // Ring 2 failures also land an audit row so the user can see
-        // what was attempted; ring 1 failures stay in-band only.
-        if (def.ring === "write_mashi") {
+        // Ring 2/3 failures land an audit row so the user can see what
+        // was attempted; ring 1 failures stay in-band only.
+        if (def.ring === "write_mashi" || def.ring === "write_world") {
           try {
             await recordAction({
               userId: opts.userId,
               threadId: opts.threadId,
               toolName: def.name,
-              ring: "write_mashi",
+              ring: def.ring,
               args: call.input,
               result: { error: message },
               ok: false,

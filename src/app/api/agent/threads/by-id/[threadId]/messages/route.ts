@@ -6,7 +6,8 @@ import type { CursorContext } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Bumped to 300s for ring-3 approval gates (Phase 5).
+export const maxDuration = 300;
 
 /**
  * POST → stream a single agent turn over SSE for a thread keyed by id.
@@ -91,7 +92,7 @@ export async function POST(
           userMessage: parsed.data.message,
           cursor: parsed.data.cursor as CursorContext,
           onDelta: enqueue,
-          toolRings: ["read", "write_mashi"],
+          toolRings: ["read", "write_mashi", "write_world"],
         });
       } catch (err) {
         enqueue({

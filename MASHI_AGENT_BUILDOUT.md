@@ -25,7 +25,7 @@ The unified prompt reads this table to decide what to do. The next phase to run 
 | 2 | Read-only agent loop + "Ask Mashi" button + persistent threads | Shipped | 1 | https://github.com/beaconsoftware/mashi/pull/103 |
 | 3 | Ring 2 write tools + agent_actions audit + 30s undo | Shipped | 2 | https://github.com/beaconsoftware/mashi/pull/104 |
 | 4 | Spotlight surface + orphan threads + reference resolver | Shipped | 3 | https://github.com/beaconsoftware/mashi/pull/106 |
-| 5 | Ring 3 write tools (send/calendar/Linear) + approval gate | Pending | 3 | — |
+| 5 | Ring 3 write tools (send/calendar/Linear) + approval gate | Shipped | 3 | https://github.com/beaconsoftware/mashi/pull/107 |
 | 6 | Thread compaction + spawn-chain inheritance | Pending | 5 | — |
 | 7 | Sprint controls — Add-tasks picker + End-sprint review | Pending | — | — |
 | 8 | Focus card — Plan / Chat / Context replaces heads-down + DELETE THIS DOC | Pending | 3 | — |
