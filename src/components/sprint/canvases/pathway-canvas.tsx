@@ -3,7 +3,7 @@
 import type { S2DItem, Pathway } from "@/types";
 import { ReplyCanvas } from "./reply-canvas";
 import { DecideCanvas } from "./decide-canvas";
-import { HeadsDownCanvas } from "./heads-down-canvas";
+import { FocusCard } from "./focus-card";
 import { WatchCanvas } from "./watch-canvas";
 import { DelegateCanvas } from "./delegate-canvas";
 import { MeetingPrepCanvas } from "./meeting-prep-canvas";
@@ -60,7 +60,7 @@ export function PathwayCanvas(props: PathwayCanvasProps) {
     case "decision_gate":
       return <DecideCanvas {...base} />;
     case "heads_down":
-      return <HeadsDownCanvas {...base} />;
+      return <FocusCard {...base} />;
     case "watching":
       return <WatchCanvas {...base} />;
     case "delegated":

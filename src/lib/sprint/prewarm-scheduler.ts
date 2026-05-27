@@ -9,9 +9,10 @@ import type { S2DItem, Pathway } from "@/types";
  * Client-side dispatcher that POSTs to /api/sprint/prewarm for the
  * pathway-specific work that should be in flight before the user lands
  * in the slot. The route fills the appropriate enriched_context field
- * (reply_draft, decision_brief, heads_down_plan, talking_points,
- * signals_since_last, nudge_draft) and the canvas — already polling
- * enriched_context — picks it up automatically.
+ * (reply_draft, decision_brief, talking_points, signals_since_last,
+ * nudge_draft) and the canvas, already polling enriched_context, picks
+ * it up automatically. heads_down has no pre-warm: the Focus card chat
+ * thread pulls context lazily via tools.
  *
  * Behavior:
  *   - Per-block dedupe via an in-flight Map keyed on block.s2dItemId.

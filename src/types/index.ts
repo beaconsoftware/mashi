@@ -127,9 +127,32 @@ export interface S2DItem {
   /** 1-sentence "what changed" from the agent's TriageUpdateOp.reason. */
   last_update_summary?: string | null;
   last_update_at?: string | null;
+  /**
+   * Focus card plan checklist — user-owned, agent-editable via the
+   * `set_plan` ring-2 tool. Empty array for items that haven't had a
+   * plan written yet.
+   */
+  plan?: PlanStep[];
+  /** Provenance — set on items the agent spawned from another item. */
+  spawned_from_item_id?: string | null;
+  /**
+   * Latest decision recorded via the Decide canvas or `log_decision`
+   * tool. Structured payload (`choice`, `note`, etc.); rendered raw on
+   * the Focus card Context tab.
+   */
+  decision_log?: Record<string, unknown> | null;
+  decision_note?: string | null;
+  decision_at?: string | null;
   created_at: string;
   updated_at: string;
   done_at?: string | null;
+}
+
+export interface PlanStep {
+  id: string;
+  text: string;
+  checked: boolean;
+  created_at: string;
 }
 
 export interface PathwayMeta {
