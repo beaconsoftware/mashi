@@ -17,6 +17,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   useEnrichedContext,
   type EnrichSourceKind,
+  type EnrichPulledSource,
 } from "@/hooks/use-enriched-context";
 import { useWatchCheckIns } from "@/hooks/use-watch-check-ins";
 import { useS2DItems } from "@/hooks/use-s2d";
@@ -32,6 +33,8 @@ import type { S2DItem } from "@/types";
 export function ContextTab({ item }: { item: S2DItem }) {
   const enriched = useEnrichedContext(item.id);
   const sources = enriched.data?.enriched_context?.pulled_sources ?? [];
+  const visibleSources = sources.slice(0, 8);
+  const deepLinks = useSourceDeepLinks(visibleSources);
 
   const checkIns = useWatchCheckIns(item.id);
   const lastCheckIn = checkIns.data?.history?.[0] ?? null;
@@ -65,28 +68,44 @@ export function ContextTab({ item }: { item: S2DItem }) {
 
   return (
     <div className="space-y-3">
-      {sources.length > 0 && (
+      {visibleSources.length > 0 && (
         <Section title="Sources" icon={<Layers />}>
           <ul className="space-y-1.5">
-            {sources.slice(0, 8).map((s, idx) => (
-              <li
-                key={`${s.kind}-${s.ref}-${idx}`}
-                className="rounded border border-border/40 bg-card/80 px-2 py-1.5 text-[11px] leading-snug"
-              >
-                <div className="mb-0.5 flex items-center gap-1.5 text-muted-foreground">
-                  <SourceIcon kind={s.kind} />
-                  <span className="font-mono text-[10px] uppercase tracking-wider">
-                    {s.kind}
-                  </span>
-                  <span className="truncate text-foreground/80">{s.label}</span>
-                </div>
-                {s.snippet && (
-                  <p className="line-clamp-2 text-foreground/80">
-                    {s.snippet}
-                  </p>
-                )}
-              </li>
-            ))}
+            {visibleSources.map((s, idx) => {
+              const url = deepLinks.get(`${s.kind}:${s.ref}`) ?? null;
+              return (
+                <li
+                  key={`${s.kind}-${s.ref}-${idx}`}
+                  className="rounded border border-border/40 bg-card/80 px-2 py-1.5 text-[11px] leading-snug"
+                >
+                  <div className="mb-0.5 flex items-center gap-1.5 text-muted-foreground">
+                    <SourceIcon kind={s.kind} />
+                    <span className="font-mono text-[10px] uppercase tracking-wider">
+                      {s.kind}
+                    </span>
+                    <span className="truncate text-foreground/80">
+                      {s.label}
+                    </span>
+                    {url && (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mashi-press ml-auto inline-flex shrink-0 items-center gap-0.5 text-primary hover:underline"
+                        title={`Open in ${labelForKind(s.kind)}`}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                  {s.snippet && (
+                    <p className="line-clamp-2 text-foreground/80">
+                      {s.snippet}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </Section>
       )}
@@ -135,10 +154,20 @@ export function ContextTab({ item }: { item: S2DItem }) {
                 key={r.id}
                 className="flex items-center gap-1.5 rounded border border-border/40 bg-card/80 px-2 py-1 text-[11px]"
               >
-                <span className="font-mono text-[10px] text-primary">
-                  MASH-{r.ticket_number}
-                </span>
-                <span className="truncate text-foreground/80">{r.title}</span>
+                <a
+                  href={`/s2d?focus=${encodeURIComponent(r.id)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mashi-press flex min-w-0 flex-1 items-center gap-1.5 hover:underline"
+                  title="Open on the S2D board"
+                >
+                  <span className="font-mono text-[10px] text-primary">
+                    MASH-{r.ticket_number}
+                  </span>
+                  <span className="truncate text-foreground/80">
+                    {r.title}
+                  </span>
+                </a>
                 <span
                   className={cn(
                     "ml-auto rounded px-1 py-0.5 font-mono text-[9px] uppercase tracking-wider",
@@ -267,6 +296,167 @@ interface ThreadPreview {
   kind: EnrichSourceKind;
   subject: string | null;
   snippets: { sender: string | null; at: string | null; text: string }[];
+}
+
+function labelForKind(kind: EnrichSourceKind): string {
+  switch (kind) {
+    case "gmail":
+      return "Gmail";
+    case "slack":
+      return "Slack";
+    case "linear":
+      return "Linear";
+    case "fireflies":
+      return "Fireflies";
+    case "s2d":
+      return "Mashi";
+  }
+}
+
+/**
+ * Resolve a best-effort deep link for each visible source. Different
+ * kinds need different lookups since `pulled_sources.ref` was written
+ * as the Mashi DB id at enrich time — we have to translate to the
+ * upstream id (or url) to build a working external URL.
+ *
+ *   gmail / slack → look up `messages` by id, build URL from thread_id
+ *   linear        → if ref already looks like a URL, use it; else look
+ *                   up `linear_issues.url`
+ *   fireflies     → look up `meetings.external_id`
+ *   s2d           → /s2d?focus=<id> deep-link inside Mashi
+ */
+function useSourceDeepLinks(
+  sources: EnrichPulledSource[]
+): Map<string, string> {
+  const refsByKind = sources.reduce<Record<EnrichSourceKind, string[]>>(
+    (acc, s) => {
+      if (!acc[s.kind]) acc[s.kind] = [];
+      acc[s.kind].push(s.ref);
+      return acc;
+    },
+    {
+      gmail: [],
+      slack: [],
+      linear: [],
+      fireflies: [],
+      s2d: [],
+    }
+  );
+
+  const cacheKey = sources.map((s) => `${s.kind}:${s.ref}`).join("|");
+
+  const { data } = useQuery({
+    queryKey: ["focus-card-source-deep-links", cacheKey],
+    enabled: sources.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<Record<string, string>> => {
+      const sb = createSupabaseBrowserClient();
+      const out: Record<string, string> = {};
+
+      // Linear: ref may already BE the url (linear_issues.url is preferred
+      // at enrich time). If not, lookup by id.
+      const linearRefs = refsByKind.linear ?? [];
+      const linearUrls = linearRefs.filter((r) => /^https?:\/\//.test(r));
+      for (const url of linearUrls) out[`linear:${url}`] = url;
+      const linearIds = linearRefs.filter((r) => !/^https?:\/\//.test(r));
+      if (linearIds.length > 0) {
+        const { data: rows } = await sb
+          .from("linear_issues")
+          .select("id, url")
+          .in("id", linearIds);
+        for (const r of rows ?? []) {
+          if (r.url) out[`linear:${r.id}`] = r.url as string;
+        }
+      }
+
+      // Gmail + Slack messages: ref is messages.id; need thread_id +
+      // (for slack) the workspace team_id off connected_accounts.
+      const msgIds = [
+        ...(refsByKind.gmail ?? []),
+        ...(refsByKind.slack ?? []),
+      ];
+      if (msgIds.length > 0) {
+        const { data: rows } = await sb
+          .from("messages")
+          .select("id, source, thread_id, channel, connected_account_id")
+          .in("id", msgIds);
+        const slackAccountIds = new Set<string>();
+        for (const r of rows ?? []) {
+          if (r.source === "slack" && r.connected_account_id) {
+            slackAccountIds.add(r.connected_account_id as string);
+          }
+        }
+        const teamByAccount = new Map<string, string>();
+        if (slackAccountIds.size > 0) {
+          const { data: accts } = await sb
+            .from("connected_accounts")
+            .select("id, raw_provider_data")
+            .in("id", Array.from(slackAccountIds));
+          for (const a of accts ?? []) {
+            const raw = a.raw_provider_data as
+              | { team_id?: string; team?: { id?: string } }
+              | null;
+            const teamId = raw?.team_id ?? raw?.team?.id ?? null;
+            if (teamId) teamByAccount.set(a.id as string, teamId);
+          }
+        }
+        for (const r of rows ?? []) {
+          if (r.source === "gmail" && r.thread_id) {
+            out[`gmail:${r.id}`] =
+              `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(
+                r.thread_id as string
+              )}`;
+          } else if (r.source === "slack") {
+            const teamId =
+              (r.connected_account_id &&
+                teamByAccount.get(r.connected_account_id as string)) ||
+              null;
+            // thread_id is "<channel>:<date>"; the channel id is the
+            // first half. Falls back to messages.channel.
+            const [channelFromThread] = (r.thread_id ?? "")
+              .toString()
+              .split(":");
+            const channelId = channelFromThread || (r.channel as string | null);
+            if (teamId && channelId) {
+              out[`slack:${r.id}`] =
+                `https://app.slack.com/client/${teamId}/${channelId}`;
+            } else if (channelId) {
+              out[`slack:${r.id}`] =
+                `https://slack.com/app_redirect?channel=${encodeURIComponent(
+                  channelId
+                )}`;
+            }
+          }
+        }
+      }
+
+      // Fireflies meetings: ref is meetings.id, lookup external_id.
+      const meetingIds = refsByKind.fireflies ?? [];
+      if (meetingIds.length > 0) {
+        const { data: rows } = await sb
+          .from("meetings")
+          .select("id, external_id")
+          .in("id", meetingIds);
+        for (const r of rows ?? []) {
+          if (r.external_id) {
+            out[`fireflies:${r.id}`] =
+              `https://app.fireflies.ai/view/${encodeURIComponent(
+                r.external_id as string
+              )}`;
+          }
+        }
+      }
+
+      // S2D: link to the in-app board with the item focused.
+      for (const id of refsByKind.s2d ?? []) {
+        out[`s2d:${id}`] = `/s2d?focus=${encodeURIComponent(id)}`;
+      }
+
+      return out;
+    },
+  });
+
+  return new Map(Object.entries(data ?? {}));
 }
 
 function useSourceThreadPreview(item: S2DItem) {
