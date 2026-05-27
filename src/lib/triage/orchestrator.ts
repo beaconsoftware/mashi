@@ -150,9 +150,16 @@ async function applyOperation(
     // itself is the work surface; a "prep for X" item rarely converts
     // into action. Block at the orchestrator so these don't even hit
     // the review queue. Log the skip so the suppression is visible.
+    //
+    // Exception: recurring meetings (Iteration Planning, weekly 1:1s,
+    // sprint retros) ARE the work surface — there's rarely a Gmail
+    // thread to corroborate them and the prep is the action item.
+    // `unit.is_recurring` is set by gcal-sync from Google Calendar's
+    // recurringEventId.
     if (
       op.pathway === "meeting_backed" &&
-      MEETING_ONLY_SOURCES.includes(unit.source_type)
+      MEETING_ONLY_SOURCES.includes(unit.source_type) &&
+      !unit.is_recurring
     ) {
       await supabase.from("triage_runs").insert({
         user_id: userId,

@@ -854,13 +854,39 @@ export async function reconcileMeetingOnlyPrepItems(
 
   const { data: items } = await supabase
     .from("s2d_items")
-    .select("id, title, source_type, linked_sources")
+    .select("id, title, source_type, source_thread_id, linked_sources")
     .eq("user_id", userId)
     .eq("pathway", "meeting_backed")
     .neq("status", "done");
   if (!items || items.length === 0) return { closed: 0, closedIds: [] };
 
+  // Find which calendar-backed items point to a recurring series — those
+  // are cadence meetings (Iteration Planning, weekly 1:1s) and their
+  // prep IS the work, so we spare them from the noise-cleanup pass.
+  const calendarItemIds = items
+    .filter((i) => i.source_type === "calendar" && i.source_thread_id)
+    .map((i) => i.source_thread_id as string);
+  const recurringExternalIds = new Set<string>();
+  if (calendarItemIds.length > 0) {
+    const { data: events } = await supabase
+      .from("calendar_events")
+      .select("external_id, recurring_event_id")
+      .eq("user_id", userId)
+      .in("external_id", calendarItemIds)
+      .not("recurring_event_id", "is", null);
+    for (const e of events ?? []) {
+      if (e.external_id) recurringExternalIds.add(e.external_id as string);
+    }
+  }
+
   for (const it of items) {
+    if (
+      it.source_type === "calendar" &&
+      it.source_thread_id &&
+      recurringExternalIds.has(it.source_thread_id)
+    ) {
+      continue;
+    }
     const sources = new Set<string>();
     if (it.source_type) sources.add(it.source_type);
     const linked = Array.isArray(it.linked_sources) ? it.linked_sources : [];

@@ -129,4 +129,13 @@ export interface TriageUnit {
   content: unknown;
   /** Open S2D items already attached to this unit. */
   existing_items: ExistingS2DContext[];
+  /**
+   * True when this unit is an instance of a recurring meeting series
+   * (Google Calendar's recurringEventId is set). The orchestrator's
+   * meeting-only noise filter bypasses recurring units so cadence
+   * meetings (Iteration Planning, weekly 1:1s, sprint retros) can
+   * land on the board even without cross-source corroboration.
+   * Only meaningful when source_type is "calendar".
+   */
+  is_recurring?: boolean;
 }
