@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@/lib/agent/types";
 import type { ReverseOp } from "@/lib/agent/undo";
+import { appendMessage } from "@/lib/agent/threads";
 
 const args = z.object({
   primary_id: z.string().uuid(),
@@ -74,6 +75,61 @@ export const merge_items: ToolDefinition<
 
     const ticket = primary.data.ticket_number;
     const ref = ticket != null ? `MASH-${ticket}` : "item";
+
+    // Phase 4 lifecycle continuity: if the duplicates had threads,
+    // absorb their messages into the primary's thread under a system
+    // separator, then orphan their thread rows. Best-effort — a
+    // partial absorb still leaves the merge itself committed.
+    try {
+      const primaryThread = await ctx.supabase
+        .from("agent_threads")
+        .select("id")
+        .eq("user_id", ctx.userId)
+        .eq("item_id", input.primary_id)
+        .maybeSingle();
+      const dupThreads = await ctx.supabase
+        .from("agent_threads")
+        .select("id, item_id")
+        .eq("user_id", ctx.userId)
+        .in("item_id", input.duplicate_ids);
+      const dupThreadRows = (dupThreads.data ?? []) as Array<{
+        id: string;
+        item_id: string;
+      }>;
+      if (dupThreadRows.length > 0 && primaryThread.data) {
+        const primaryThreadId = primaryThread.data.id as string;
+        for (const dt of dupThreadRows) {
+          await appendMessage({
+            userId: ctx.userId,
+            threadId: primaryThreadId,
+            role: "system",
+            content: `Absorbed thread from duplicate item ${dt.item_id} on ${new Date().toISOString().slice(0, 10)}.`,
+            supabase: ctx.supabase,
+          });
+          // Move the duplicate's messages onto the primary thread,
+          // preserving original timestamps so chronology survives.
+          await ctx.supabase
+            .from("agent_messages")
+            .update({ thread_id: primaryThreadId })
+            .eq("user_id", ctx.userId)
+            .eq("thread_id", dt.id);
+        }
+        // Orphan the absorbed thread rows (item_id -> null) so the
+        // unique-per-item constraint doesn't block a future thread on
+        // a re-opened duplicate. Title gets a marker so the user can
+        // recognize the row in list_recent_threads.
+        await ctx.supabase
+          .from("agent_threads")
+          .update({ item_id: null, title: `[merged into ${ref}]` })
+          .eq("user_id", ctx.userId)
+          .in(
+            "id",
+            dupThreadRows.map((r) => r.id)
+          );
+      }
+    } catch {
+      // best-effort
+    }
 
     return {
       ok: true,

@@ -105,6 +105,12 @@ function buildSystemPrompt(opts: {
   lines.push(
     "When the user says 'this' or 'that' without naming an item, infer from the cursor context below. If unsure, ask."
   );
+  lines.push(
+    "Reference resolution: if the user names an item without a ticket id (e.g. 'the brand spend thing'), call resolve_reference first. If 0 candidates come back, ask the user to be more specific. If exactly 1 candidate with confidence >= 0.8, proceed with that item. If multiple candidates or any low-confidence result, list the candidates back to the user and let them pick before acting."
+  );
+  lines.push(
+    "Orphan threads: if this conversation has no item binding yet (Spotlight chat), once the user confirms an item, call attach_thread_to_item so subsequent turns are anchored to it."
+  );
   lines.push("");
   lines.push("# Cursor context");
   lines.push(serializeCursor(opts.cursor));

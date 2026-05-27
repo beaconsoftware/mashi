@@ -170,3 +170,37 @@ export async function appendMessage(
 
   return ins.data as AgentMessageRow;
 }
+
+/**
+ * Insert a `role='system'` note into the thread bound to an item, if a
+ * thread exists. Used for lifecycle events on the item (re-pathway,
+ * merge, spawn) where the conversation should record what happened
+ * without the user having to ask. Silently no-ops if no thread exists
+ * yet — the next time the user opens Ask Mashi on this item, the
+ * thread starts fresh.
+ *
+ * Per Phase 4 contract: lifecycle changes append system messages to the
+ * *same* thread, they never branch.
+ */
+export async function insertItemThreadSystemNote(opts: {
+  userId: string;
+  itemId: string;
+  text: string;
+  supabase?: Supa;
+}): Promise<void> {
+  const supabase = opts.supabase ?? createSupabaseServiceClient();
+  const thread = await supabase
+    .from("agent_threads")
+    .select("id")
+    .eq("user_id", opts.userId)
+    .eq("item_id", opts.itemId)
+    .maybeSingle();
+  if (!thread.data) return;
+  await appendMessage({
+    userId: opts.userId,
+    threadId: thread.data.id as string,
+    role: "system",
+    content: opts.text,
+    supabase,
+  });
+}
