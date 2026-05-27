@@ -22,6 +22,25 @@ import { get_current_sprint } from "@/lib/agent/tools/get_current_sprint";
 import { list_needs_review } from "@/lib/agent/tools/list_needs_review";
 import { get_thread_summary } from "@/lib/agent/tools/get_thread_summary";
 import { get_spawn_chain } from "@/lib/agent/tools/get_spawn_chain";
+// Ring 2 (write_mashi) — Phase 3.
+import { update_item } from "@/lib/agent/tools/update_item";
+import { complete_item } from "@/lib/agent/tools/complete_item";
+import { snooze_item } from "@/lib/agent/tools/snooze_item";
+import { set_pathway } from "@/lib/agent/tools/set_pathway";
+import { set_planned_for } from "@/lib/agent/tools/set_planned_for";
+import { create_item } from "@/lib/agent/tools/create_item";
+import { approve_review_item } from "@/lib/agent/tools/approve_review_item";
+import { reject_review_item } from "@/lib/agent/tools/reject_review_item";
+import { spawn_follow_up } from "@/lib/agent/tools/spawn_follow_up";
+import { merge_items } from "@/lib/agent/tools/merge_items";
+import { log_decision } from "@/lib/agent/tools/log_decision";
+import { record_watch_check_in } from "@/lib/agent/tools/record_watch_check_in";
+import { set_watch_target } from "@/lib/agent/tools/set_watch_target";
+import { set_success_statement } from "@/lib/agent/tools/set_success_statement";
+import { start_sprint } from "@/lib/agent/tools/start_sprint";
+import { add_to_sprint } from "@/lib/agent/tools/add_to_sprint";
+import { complete_block } from "@/lib/agent/tools/complete_block";
+import { exit_sprint } from "@/lib/agent/tools/exit_sprint";
 
 /**
  * Canonical catalogue of every agent-callable tool. One source of
@@ -31,8 +50,17 @@ import { get_spawn_chain } from "@/lib/agent/tools/get_spawn_chain";
  *   - the optional `sessionTool` wrapper for session-authed one-shot
  *     endpoints
  *
- * As of Phase 1 every tool here is ring=`read`. Phase 3 will add the
- * ring 2 (`write_mashi`) set; Phase 5 the ring 3 (`write_world`) set.
+ * Phase 1 shipped ring=`read` reads only. Phase 3 (this commit) adds
+ * the ring=`write_mashi` set: every write tool persists an
+ * agent_actions audit row with a 30s undo_payload; the agent loop
+ * surfaces an undo token via SSE delta when toolRings includes
+ * "write_mashi". Phase 5 adds ring=`write_world` (Gmail / Slack /
+ * Calendar / Linear) behind a per-call approval gate.
+ *
+ * pause_sprint / resume_sprint are intentionally not registered:
+ * sprint pause is client-only Zustand state with no server-side
+ * representation. The agent can chat about pause/resume but the user
+ * drives them from the sprint UI.
  */
 export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [get_item.name]: get_item,
@@ -58,6 +86,25 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [list_needs_review.name]: list_needs_review,
   [get_thread_summary.name]: get_thread_summary,
   [get_spawn_chain.name]: get_spawn_chain,
+  // Ring 2 (write_mashi) — Phase 3.
+  [update_item.name]: update_item,
+  [complete_item.name]: complete_item,
+  [snooze_item.name]: snooze_item,
+  [set_pathway.name]: set_pathway,
+  [set_planned_for.name]: set_planned_for,
+  [create_item.name]: create_item,
+  [approve_review_item.name]: approve_review_item,
+  [reject_review_item.name]: reject_review_item,
+  [spawn_follow_up.name]: spawn_follow_up,
+  [merge_items.name]: merge_items,
+  [log_decision.name]: log_decision,
+  [record_watch_check_in.name]: record_watch_check_in,
+  [set_watch_target.name]: set_watch_target,
+  [set_success_statement.name]: set_success_statement,
+  [start_sprint.name]: start_sprint,
+  [add_to_sprint.name]: add_to_sprint,
+  [complete_block.name]: complete_block,
+  [exit_sprint.name]: exit_sprint,
 };
 
 export const TOOL_REGISTRY_LIST: AnyToolDefinition[] =

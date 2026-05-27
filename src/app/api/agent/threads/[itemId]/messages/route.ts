@@ -101,6 +101,10 @@ export async function POST(
           userId,
           userMessage: parsed.data.message,
           cursor: parsed.data.cursor as CursorContext,
+          // Phase 3 expands the in-app agent to ring-2 writes. Ring 3
+          // (write_world) stays off until Phase 5's approval gate
+          // ships.
+          toolRings: ["read", "write_mashi"],
           onDelta: enqueue,
         });
       } catch (err) {

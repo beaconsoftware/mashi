@@ -31,6 +31,20 @@ export type AgentDelta =
   | { kind: "tool_call_start"; id: string; name: string }
   | { kind: "tool_call_args"; id: string; args: unknown }
   | { kind: "tool_call_result"; id: string; ok: boolean; result?: unknown; error?: string }
+  /**
+   * Emitted when a ring-2 (write_mashi) tool fires successfully and
+   * persisted an agent_actions row with an undo_payload. The UI uses
+   * `action_id` to call POST /api/agent/undo within the 30s window and
+   * `summary` as the strip's label. `expires_at` is when the strip
+   * should auto-confirm.
+   */
+  | {
+      kind: "undoable";
+      id: string;
+      action_id: string;
+      summary: string;
+      expires_at: string | null;
+    }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
@@ -91,6 +105,12 @@ function buildSystemPrompt(opts: {
   );
   lines.push(
     "When the user says 'this' or 'that' without naming an item, infer from the cursor context below. If unsure, ask."
+  );
+  lines.push(
+    "You have write tools that change board state (update_item, snooze_item, complete_item, log_decision, etc). Fire them when the user gives a clear instruction (e.g. 'snooze this until Monday'). Each ring-2 write is reversible for 30 seconds; the user sees an undo strip and can revert. Do not narrate the undo affordance; just do the action and confirm briefly."
+  );
+  lines.push(
+    "Do not invent uuids or ticket numbers. If you need to act on an item you can't see in the cursor context, call a read tool (get_item, search_board) first."
   );
   lines.push("");
   lines.push("# Cursor context");
@@ -387,6 +407,27 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
           ok: true,
           result,
         });
+        // Ring-2 write tools embed an action id + summary + expiry in
+        // their result so the loop can surface an undo strip without
+        // knowing tool internals. The convention is the `_agent_action_id`
+        // field — see src/lib/agent/tools/_s2d_write_helper.ts.
+        if (def.ring === "write_mashi" && result && typeof result === "object") {
+          const r = result as Record<string, unknown>;
+          const actionId = typeof r._agent_action_id === "string" ? r._agent_action_id : null;
+          if (actionId) {
+            opts.onDelta({
+              kind: "undoable",
+              id: call.id,
+              action_id: actionId,
+              summary:
+                typeof r._undo_summary === "string"
+                  ? r._undo_summary
+                  : `${def.name} succeeded`,
+              expires_at:
+                typeof r._undo_expires_at === "string" ? r._undo_expires_at : null,
+            });
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "tool failed";
         toolResults.push({

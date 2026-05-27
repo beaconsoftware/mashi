@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCursorContext } from "@/lib/agent/cursor-context";
 import { AgentComposer } from "@/components/agent/composer";
+import { UndoStrip, useUndoStripQueue } from "@/components/agent/undo-strip";
 import { cn } from "@/lib/utils";
 import type { AgentDelta } from "@/lib/agent/loop";
 
@@ -67,6 +68,7 @@ export function ThreadView({ itemId }: { itemId: string }) {
   const [liveToolCalls, setLiveToolCalls] = useState<InFlightToolCall[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const undoQueue = useUndoStripQueue();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef(data?.messages ?? []);
   messagesRef.current = data?.messages ?? [];
@@ -132,6 +134,13 @@ export function ThreadView({ itemId }: { itemId: string }) {
       setLiveText("");
       setLiveToolCalls([]);
       queryClient.invalidateQueries({ queryKey: ["agent-thread", itemId] });
+      // Ring 2 writes flow through the agent's tool layer, not the
+      // usual mutation hooks, so the board / sprint caches won't notice
+      // unless we kick them. Cheap to invalidate even for read-only
+      // turns. Canonical keys live in src/hooks/use-s2d.ts.
+      queryClient.invalidateQueries({ queryKey: ["s2d_items"] });
+      queryClient.invalidateQueries({ queryKey: ["s2d_context", itemId] });
+      queryClient.invalidateQueries({ queryKey: ["sprint"] });
     }
   }
 
@@ -155,6 +164,13 @@ export function ThreadView({ itemId }: { itemId: string }) {
             : c
         )
       );
+    } else if (d.kind === "undoable") {
+      undoQueue.push({
+        id: d.id,
+        action_id: d.action_id,
+        summary: d.summary,
+        expires_at: d.expires_at,
+      });
     } else if (d.kind === "error") {
       setError(d.message);
     }
@@ -197,6 +213,10 @@ export function ThreadView({ itemId }: { itemId: string }) {
               {error}
             </div>
           )}
+          <UndoStrip
+            pending={undoQueue.pending}
+            onResolved={undoQueue.remove}
+          />
         </div>
       </ScrollArea>
       <AgentComposer disabled={streaming} onSend={send} />
