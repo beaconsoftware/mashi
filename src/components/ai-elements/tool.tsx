@@ -123,7 +123,7 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
     <h4 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
       Parameters
     </h4>
-    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted/50 px-2 py-1.5 font-mono text-[10px] text-foreground/80">
+    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted/60 px-2 py-1.5 font-mono text-[10px] text-foreground/80">
       {JSON.stringify(input ?? null, null, 2)}
     </pre>
   </div>
@@ -159,7 +159,7 @@ export const ToolOutput = ({
           "max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md px-2 py-1.5 font-mono text-[10px]",
           errorText
             ? "bg-destructive/15 text-destructive"
-            : "bg-muted/50 text-foreground/80"
+            : "bg-muted/60 text-foreground/80"
         )}
       >
         {renderOutput()}
