@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Loader2, ListChecks, MessagesSquare, Layers } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ListChecks, MessagesSquare, Layers } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CanvasShell, type CanvasBaseProps } from "./_shared/canvas-shell";
 import { PlanTab } from "./focus-card/plan-tab";
@@ -16,9 +15,10 @@ import { ContextTab } from "./focus-card/context-tab";
  * conversation is the first thing the user lands in; the user-owned
  * checklist and read-only sources sit one click away.
  *
- * The Refine chip in the canvas footer is hidden — the Chat tab IS the
- * refine surface, so the chip would just summon a redundant bottom
- * sheet on top of the inline thread.
+ * The canvas footer is hidden entirely — the SlotCard already owns the
+ * Done/Skip/Bench/Snooze/Detail row, and the Chat tab IS the refine
+ * surface so the Ask Mashi chip would just summon a redundant bottom
+ * sheet.
  */
 
 type FocusTab = "plan" | "chat" | "context";
@@ -31,17 +31,6 @@ export function FocusCard({
   onOpenDetail,
 }: CanvasBaseProps) {
   const [tab, setTab] = useState<FocusTab>("chat");
-  const [submitting, setSubmitting] = useState(false);
-
-  async function complete() {
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      await onExit({ kind: "done" });
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   return (
     <CanvasShell
@@ -50,25 +39,7 @@ export function FocusCard({
       prewarm={prewarm}
       onExit={onExit}
       onOpenDetail={onOpenDetail}
-      footerVariant="compact"
-      hideRefine
-      primary={
-        <Button
-          type="button"
-          size="sm"
-          onClick={complete}
-          disabled={submitting}
-          className="mashi-press h-7 gap-1.5 px-3 text-[11px]"
-          title="Mark this focus block done"
-        >
-          {submitting ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Check className="h-3 w-3" />
-          )}
-          {submitting ? "Closing" : "Done"}
-        </Button>
-      }
+      hideFooter
     >
       <Tabs
         value={tab}

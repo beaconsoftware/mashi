@@ -94,6 +94,13 @@ interface CanvasShellProps extends CanvasBaseProps {
    * thread inline, so the chip would just summon a redundant sheet.
    */
   hideRefine?: boolean;
+  /**
+   * When true, suppress the canvas footer entirely (no primary button,
+   * no secondary row). Use when the enclosing chrome (e.g. the
+   * `<SlotCard>` Done/Skip/Bench/Snooze row) already owns the action
+   * surface and a canvas footer would double up. Focus card sets this.
+   */
+  hideFooter?: boolean;
 }
 
 export const CanvasShell = forwardRef<HTMLDivElement, CanvasShellProps>(
@@ -107,6 +114,7 @@ export const CanvasShell = forwardRef<HTMLDivElement, CanvasShellProps>(
       primary,
       footerVariant = "full",
       hideRefine = false,
+      hideFooter = false,
     },
     ref
   ) {
@@ -124,19 +132,26 @@ export const CanvasShell = forwardRef<HTMLDivElement, CanvasShellProps>(
     return (
       <div
         ref={ref}
-        className="relative flex h-full min-h-0 flex-col overflow-hidden"
+        // `flex-1 min-h-0` (not `h-full`) so the canvas plays nice when
+        // a parent flex-col adds a sibling footer below (e.g. the
+        // `<SlotCard>` Done/Skip/Bench/Snooze row). With h-full both the
+        // canvas and the slot footer would compete for 100% of the
+        // parent height and the slot footer would clip on tall content.
+        className="relative flex flex-1 min-h-0 flex-col overflow-hidden"
         style={style}
       >
         <CanvasHeader item={item} prewarm={prewarm} />
         <div className="flex-1 min-h-0 overflow-y-auto p-3">{children}</div>
-        <CanvasFooter
-          primary={primary}
-          onExit={onExit}
-          onOpenDetail={onOpenDetail}
-          itemId={item.id}
-          variant={footerVariant}
-          hideRefine={hideRefine}
-        />
+        {!hideFooter && (
+          <CanvasFooter
+            primary={primary}
+            onExit={onExit}
+            onOpenDetail={onOpenDetail}
+            itemId={item.id}
+            variant={footerVariant}
+            hideRefine={hideRefine}
+          />
+        )}
       </div>
     );
   }
