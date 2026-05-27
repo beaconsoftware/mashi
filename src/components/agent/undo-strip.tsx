@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { UNDO_WINDOW_MS } from "@/lib/agent/undo";
+import { UNDO_WINDOW_MS } from "@/lib/agent/undo-constants";
 
 /**
  * Pinned-to-bottom undo affordance shown inside ThreadView when a

@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { UNDO_WINDOW_MS } from "@/lib/agent/undo-constants";
+
+export { UNDO_WINDOW_MS };
 
 /**
  * Audit + undo plumbing for ring-2 (write_mashi) and ring-3
@@ -55,8 +58,6 @@ export type UndoPayload =
       kind: "multi";
       ops: UndoPayload[];
     };
-
-export const UNDO_WINDOW_MS = 30_000;
 
 export interface RecordActionOpts {
   userId: string;
