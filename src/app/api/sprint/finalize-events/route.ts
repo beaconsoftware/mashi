@@ -12,9 +12,35 @@ interface FinalizeIn {
   actualMin: number;
 }
 
-interface Body {
+interface FinalizeBody {
+  mode?: "finalize";
   blocks: FinalizeIn[];
 }
+
+/**
+ * Phase 7: extend the running sprint's consolidated calendar event when
+ * a new item is added mid-sprint. Reuses the same route so we keep all
+ * sprint-invite mutation behind one auth + provider-resolution surface.
+ *
+ * Reads the sprint event id from any existing sprint item (every item
+ * in a sprint shares the same `sprint_calendar_event_id`), GETs the
+ * event, extends `end` by `durationMin` minutes, appends one line per
+ * item to the description, and stamps the same event id +
+ * sprint_start_at/end_at + sprint_calendar_account_id on the added
+ * item so finalize-mode can clean up its calendar pointer at sprint
+ * complete.
+ *
+ * If no current sprint item has a calendar event (user opted out of
+ * calendar push at planning time), no calendar mutation runs; the
+ * route still stamps sprint_start_at/end_at on the added item.
+ */
+interface ExtendBody {
+  mode: "extend-for-add";
+  s2dItemId: string;
+  durationMin: number;
+}
+
+type Body = FinalizeBody | ExtendBody;
 
 /**
  * POST /api/sprint/finalize-events
@@ -37,9 +63,6 @@ interface Body {
  */
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as Body;
-  if (!Array.isArray(body.blocks) || body.blocks.length === 0) {
-    return NextResponse.json({ error: "no blocks" }, { status: 400 });
-  }
 
   const userSb = await createSupabaseServerClient();
   const {
@@ -48,6 +71,14 @@ export async function POST(req: NextRequest) {
   if (!user) return new Response("unauthorized", { status: 401 });
 
   const sb = createSupabaseServiceClient();
+
+  if ("mode" in body && body.mode === "extend-for-add") {
+    return handleExtendForAdd(sb, user.id, body);
+  }
+
+  if (!("blocks" in body) || !Array.isArray(body.blocks) || body.blocks.length === 0) {
+    return NextResponse.json({ error: "no blocks" }, { status: 400 });
+  }
 
   const ids = body.blocks.map((b) => b.s2dItemId);
   const { data: items } = await sb
@@ -201,6 +232,155 @@ async function patchGoogleEvent(opts: {
       },
       body: JSON.stringify({
         end: { dateTime: opts.newEnd.toISOString() },
+        description,
+      }),
+    }
+  );
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`gcal PATCH ${res.status} ${t.slice(0, 200)}`);
+  }
+}
+
+/**
+ * Marker line we append per added-item to the description so a second
+ * extend pass doesn't stack duplicates for the same item.
+ */
+const ADDED_MARKER = "[mashi/added]";
+
+type ServiceClient = ReturnType<typeof createSupabaseServiceClient>;
+
+async function handleExtendForAdd(
+  sb: ServiceClient,
+  userId: string,
+  body: ExtendBody
+) {
+  // Look up the added item (title + ticket for the description) and any
+  // sibling sprint item that already has a calendar event id stamped.
+  const [{ data: addedItem }, { data: siblings }] = await Promise.all([
+    sb
+      .from("s2d_items")
+      .select("id, ticket_number, title")
+      .eq("user_id", userId)
+      .eq("id", body.s2dItemId)
+      .maybeSingle(),
+    sb
+      .from("s2d_items")
+      .select("id, sprint_calendar_event_id, sprint_calendar_account_id, sprint_end_at")
+      .eq("user_id", userId)
+      .neq("id", body.s2dItemId)
+      .not("sprint_calendar_event_id", "is", null)
+      .order("sprint_end_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  if (!addedItem) {
+    return NextResponse.json({ error: "item not found" }, { status: 404 });
+  }
+
+  const now = new Date();
+  const itemEnd = new Date(now.getTime() + body.durationMin * 60_000);
+
+  // Always stamp sprint_start_at / sprint_end_at on the added item so
+  // finalize-mode (at sprint complete) can anchor its actualMin clamp
+  // and the recap can compute "planned vs actual" later.
+  await sb
+    .from("s2d_items")
+    .update({
+      sprint_start_at: now.toISOString(),
+      sprint_end_at: itemEnd.toISOString(),
+      sprint_date: now.toISOString().slice(0, 10),
+    })
+    .eq("user_id", userId)
+    .eq("id", addedItem.id);
+
+  const sibling = (siblings ?? [])[0];
+  if (!sibling || !sibling.sprint_calendar_event_id || !sibling.sprint_calendar_account_id) {
+    // No sprint calendar event (user opted out at planning time). Local
+    // add is the only side effect; the client treats this as success.
+    return NextResponse.json({ ok: true, calendarUpdated: false });
+  }
+
+  const eventId = sibling.sprint_calendar_event_id;
+  const accountId = sibling.sprint_calendar_account_id;
+  const addedLabel = `${ADDED_MARKER} ${
+    addedItem.ticket_number != null ? `MASH-${addedItem.ticket_number} ` : ""
+  }${addedItem.title}`;
+
+  try {
+    await extendGoogleEvent({
+      accountId,
+      eventId,
+      extendMinutes: body.durationMin,
+      addedLine: addedLabel,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "calendar update failed";
+    console.warn(`[sprint/finalize-events extend] ${addedItem.id} failed:`, msg);
+    return NextResponse.json(
+      { ok: false, calendarUpdated: false, error: msg },
+      { status: 200 } // non-blocking failure: local add already happened
+    );
+  }
+
+  // Stamp the same event id + account so finalize-mode reconciles it
+  // later (delete on skip / patch end on done).
+  await sb
+    .from("s2d_items")
+    .update({
+      sprint_calendar_event_id: eventId,
+      sprint_calendar_account_id: accountId,
+    })
+    .eq("user_id", userId)
+    .eq("id", addedItem.id);
+
+  return NextResponse.json({ ok: true, calendarUpdated: true });
+}
+
+async function extendGoogleEvent(opts: {
+  accountId: string;
+  eventId: string;
+  extendMinutes: number;
+  addedLine: string;
+}): Promise<void> {
+  const token = await getActiveAccessToken(opts.accountId);
+
+  const getRes = await fetch(
+    `${GCAL_API}/calendars/primary/events/${encodeURIComponent(opts.eventId)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!getRes.ok) {
+    const t = await getRes.text();
+    throw new Error(`gcal GET ${getRes.status} ${t.slice(0, 200)}`);
+  }
+  const evt = (await getRes.json()) as {
+    description?: string;
+    end?: { dateTime?: string };
+  };
+
+  const currentEnd = evt.end?.dateTime ? new Date(evt.end.dateTime) : null;
+  if (!currentEnd) {
+    throw new Error("event missing end.dateTime");
+  }
+  const newEnd = new Date(currentEnd.getTime() + opts.extendMinutes * 60_000);
+
+  const existing = evt.description ?? "";
+  // Dedupe: if the exact addedLine already appears, skip re-appending
+  // (idempotent retries shouldn't stack duplicate lines).
+  const description = existing.includes(opts.addedLine)
+    ? existing
+    : `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${opts.addedLine}`;
+
+  const res = await fetch(
+    `${GCAL_API}/calendars/primary/events/${encodeURIComponent(opts.eventId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        end: { dateTime: newEnd.toISOString() },
         description,
       }),
     }

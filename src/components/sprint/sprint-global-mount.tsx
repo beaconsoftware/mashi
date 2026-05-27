@@ -32,6 +32,10 @@ import { SpotifyAmbientBg } from "./spotify-ambient-bg";
  * On non-/sprint routes:
  *  - phase==="active" + allSettled → SprintComplete (in portal)
  *  - phase==="active" otherwise    → SprintActiveModeMulti (own portal)
+ *  - phase==="complete"            → SprintComplete (in portal) — Phase 7
+ *    early-end path. User hit "End sprint" with pending blocks; recap
+ *    renders with disposition controls for each unfinished block plus a
+ *    "Back to sprint" button to bail without data loss.
  *  - phase==="minimized"           → handled by SprintWidget below
  */
 export function SprintGlobalMount() {
@@ -47,25 +51,27 @@ export function SprintGlobalMount() {
     blocks.length === 0 ||
     blocks.every((b) => b.status === "done" || b.status === "skipped");
 
-  const showOverlay = !onSprintRoute && phase === "active";
+  const showRecap =
+    !onSprintRoute && (phase === "complete" || (phase === "active" && allSettled));
+  const showActive = !onSprintRoute && phase === "active" && !allSettled;
 
   return (
     <>
-      {showOverlay &&
-        (allSettled ? (
-          <FocusOverlay>
-            {/* Re-mount ambient album art INSIDE the focus overlay so
-                it paints above the bg-background/95 floor and stays
-                visible to the user — matches sprint-active-mode-multi's
-                pattern. See AGENTS.md "Layout doctrine" + the comment
-                in primitives.tsx for why /95 is the sanctioned floor. */}
-            <SpotifyAmbientBg enabled />
-            <SprintComplete />
-          </FocusOverlay>
-        ) : (
-          // SprintActiveModeMulti wraps itself in FocusOverlay internally.
-          <SprintActiveModeMulti />
-        ))}
+      {showRecap && (
+        <FocusOverlay>
+          {/* Re-mount ambient album art INSIDE the focus overlay so
+              it paints above the bg-background/95 floor and stays
+              visible to the user — matches sprint-active-mode-multi's
+              pattern. See AGENTS.md "Layout doctrine" + the comment
+              in primitives.tsx for why /95 is the sanctioned floor. */}
+          <SpotifyAmbientBg enabled />
+          <SprintComplete />
+        </FocusOverlay>
+      )}
+      {showActive && (
+        // SprintActiveModeMulti wraps itself in FocusOverlay internally.
+        <SprintActiveModeMulti />
+      )}
       <SprintWidget />
     </>
   );

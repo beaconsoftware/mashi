@@ -27,7 +27,7 @@ The unified prompt reads this table to decide what to do. The next phase to run 
 | 4 | Spotlight surface + orphan threads + reference resolver | Shipped | 3 | https://github.com/beaconsoftware/mashi/pull/106 |
 | 5 | Ring 3 write tools (send/calendar/Linear) + approval gate | Shipped | 3 | https://github.com/beaconsoftware/mashi/pull/107 |
 | 6 | Thread compaction + spawn-chain inheritance | Shipped | 5 | https://github.com/beaconsoftware/mashi/pull/108 |
-| 7 | Sprint controls — Add-tasks picker + End-sprint review | Pending | — | — |
+| 7 | Sprint controls — Add-tasks picker + End-sprint review | Shipped | — | TBD |
 | 8 | Focus card — Plan / Chat / Context replaces heads-down + DELETE THIS DOC | Pending | 3 | — |
 
 **Status values**: `Pending` → `Shipped`.

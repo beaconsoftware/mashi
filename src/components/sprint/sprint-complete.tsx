@@ -36,6 +36,8 @@ import {
   MessageCircle,
   CalendarPlus,
   Music,
+  Undo2,
+  Clock,
 } from "lucide-react";
 import { useGSAP } from "@gsap/react";
 import { heroEntry, staggerEntry, gsap, EASE, withMotion } from "@/lib/animation";
@@ -61,6 +63,11 @@ export function SprintComplete() {
   const blocks = useSprintStore((s) => s.blocks);
   const sprintStartedAt = useSprintStore((s) => s.sprintStartedAt);
   const exitSprint = useSprintStore((s) => s.exitSprint);
+  // Phase 7: distinguish a natural completion (every block settled) from
+  // an early end (user clicked End sprint while blocks were still
+  // pending). Drives the "ended early" copy + "Back to sprint" button.
+  const phase = useSprintStore((s) => s.phase);
+  const goBackToActive = useSprintStore((s) => s.goBackToActive);
   const artifacts = useSpawnedRail((s) => s.artifacts);
   const clearArtifacts = useSpawnedRail((s) => s.clear);
   const { data: items } = useS2DItems();
@@ -217,9 +224,29 @@ export function SprintComplete() {
       for (const b of blocks) {
         if (b.status === "done") continue;
         const disp = dispositions[b.s2dItemId];
-        if (!disp || disp === "todo") continue;
         const it = itemMap.get(b.s2dItemId);
         const ticket = it?.ticket_number ?? null;
+
+        if (!disp || disp === "todo") {
+          // Phase 7: pending items (sprint ended early) are still in
+          // `in_progress` in s2d_items because they never received a
+          // Done/Skip PATCH. "Keep in To Do" should literally land them
+          // in todo — otherwise the board still reads them as actively
+          // worked on after the sprint exit. Skipped items were already
+          // patched to todo when skipped, so this is only a no-op for
+          // them.
+          if (b.status !== "skipped" && it?.status === "in_progress") {
+            work.push({
+              id: b.s2dItemId,
+              ticket,
+              promise: updateItem.mutateAsync({
+                id: b.s2dItemId,
+                patch: { status: "todo" },
+              }),
+            });
+          }
+          continue;
+        }
 
         if (disp === "backlog") {
           work.push({
@@ -367,12 +394,33 @@ export function SprintComplete() {
             <h1 className="text-xl font-semibold">Sprint complete</h1>
             <p className="text-sm text-muted-foreground">
               {done} done · {skipped} skipped
-              {untouched > 0 ? ` · ${untouched} untouched` : ""} · {elapsedMin}m
+              {untouched > 0 ? ` · ${untouched} not done` : ""} · {elapsedMin}m
               elapsed ·{" "}
               <span title="Sum of per-block focus time. Can exceed elapsed in parallel mode (multiple slots running at once).">
                 {totalActualMin}m focus
               </span>
             </p>
+            {phase === "complete" && untouched > 0 && (
+              <p className="mt-1 text-[12px] text-amber-300">
+                Ended early with {untouched}{" "}
+                {untouched === 1 ? "item" : "items"} unfinished. Pick a
+                disposition for each below.
+              </p>
+            )}
+            {phase === "complete" && untouched > 0 && (
+              <div className="mt-2 flex justify-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={goBackToActive}
+                  className="gap-1.5 text-muted-foreground"
+                  title="Resume the sprint with pending items intact"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  Back to sprint
+                </Button>
+              </div>
+            )}
           </div>
 
           {topTrack && (
@@ -493,6 +541,7 @@ function OutcomeRow({
   saving: boolean;
 }) {
   const isDone = status === "done";
+  const isPending = status === "pending";
   const meta = PATHWAY_META[item.pathway];
   const over = actualMin > plannedMin;
   const under = actualMin > 0 && actualMin < plannedMin;
@@ -500,7 +549,11 @@ function OutcomeRow({
     <li
       className={cn(
         "rounded-md border bg-card p-3",
-        isDone ? "border-emerald-500/30 bg-emerald-500/15" : "border-border/40"
+        isDone && "border-emerald-500/30 bg-emerald-500/15",
+        // Phase 7: pending rows = "left unfinished when sprint ended".
+        // Sanctioned /15 + /40 (per AGENTS.md design-token doctrine).
+        isPending && "border-amber-500/40 bg-amber-500/15",
+        !isDone && !isPending && "border-border/40"
       )}
     >
       <div className="flex items-start gap-2">
@@ -543,11 +596,18 @@ function OutcomeRow({
           <div className="mt-1 flex items-start gap-1.5 text-[12px]">
             {isDone ? (
               <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+            ) : isPending ? (
+              <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
             ) : (
               <SkipForward className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             )}
             <span className="text-foreground/85">
-              {outcome ?? (isDone ? "Marked done" : "Not finished")}
+              {outcome ??
+                (isDone
+                  ? "Marked done"
+                  : isPending
+                    ? "Not finished — left unsettled when sprint ended"
+                    : "Not finished")}
             </span>
           </div>
 
