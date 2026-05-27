@@ -16,16 +16,30 @@ import { create } from "zustand";
 
 interface AgentThreadState {
   open: boolean;
-  /** S2D item id the open thread is bound to. Orphan threads (Spotlight)
-   * land in Phase 4 and will set this to null. */
+  /** S2D item id the open thread is bound to. Null for Spotlight orphan
+   * threads. The thread sheet uses this to look up the item title and
+   * pass the right id into the streaming routes. */
   itemId: string | null;
+  /** Persistent thread id once the user binds an orphan thread to an
+   * item, or once the orphan thread itself is created. Set by the
+   * Spotlight surface; the item-bound thread sheet ignores it and
+   * routes purely by itemId. */
+  orphanThreadId: string | null;
   openFor: (itemId: string) => void;
+  /** Promote an orphan thread to item-bound after the agent confirms a
+   * resolve_reference candidate + attach_thread_to_item. Updates the
+   * cursor immediately so the AppShell sheet swap happens before the
+   * next render. */
+  bindOrphanToItem: (itemId: string) => void;
   close: () => void;
 }
 
 export const useAgentThread = create<AgentThreadState>((set) => ({
   open: false,
   itemId: null,
-  openFor: (itemId) => set({ open: true, itemId }),
+  orphanThreadId: null,
+  openFor: (itemId) => set({ open: true, itemId, orphanThreadId: null }),
+  bindOrphanToItem: (itemId) =>
+    set({ itemId, orphanThreadId: null }),
   close: () => set({ open: false }),
 }));

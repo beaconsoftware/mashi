@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@/lib/agent/types";
 import type { ReverseOp } from "@/lib/agent/undo";
+import { insertItemThreadSystemNote } from "@/lib/agent/threads";
 
 const args = z.object({
   id: z.string().uuid(),
@@ -58,6 +59,23 @@ export const set_pathway: ToolDefinition<
 
     const ticket = before.data.ticket_number;
     const ref = ticket != null ? `MASH-${ticket}` : "item";
+
+    // Lifecycle continuity (Phase 4) — record the pathway change on the
+    // item's persistent thread so the agent can reference it later. No
+    // branch, no new thread; the conversation is about the item, not
+    // the shape. No-ops if the item has no thread yet.
+    if (before.data.pathway !== input.pathway) {
+      try {
+        await insertItemThreadSystemNote({
+          userId: ctx.userId,
+          itemId: input.id,
+          text: `Pathway changed from ${before.data.pathway} to ${input.pathway} on ${new Date().toISOString().slice(0, 10)}.`,
+          supabase: ctx.supabase,
+        });
+      } catch {
+        // best-effort — the pathway change has already landed
+      }
+    }
 
     return {
       ok: true,

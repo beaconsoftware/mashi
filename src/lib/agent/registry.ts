@@ -37,6 +37,9 @@ import { set_success_statement } from "@/lib/agent/tools/set_success_statement";
 import { log_decision } from "@/lib/agent/tools/log_decision";
 import { record_watch_check_in } from "@/lib/agent/tools/record_watch_check_in";
 import { set_watch_target } from "@/lib/agent/tools/set_watch_target";
+import { resolve_reference } from "@/lib/agent/tools/resolve_reference";
+import { attach_thread_to_item } from "@/lib/agent/tools/attach_thread_to_item";
+import { list_recent_threads } from "@/lib/agent/tools/list_recent_threads";
 
 /**
  * Canonical catalogue of every agent-callable tool. One source of
@@ -81,6 +84,9 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [list_needs_review.name]: list_needs_review,
   [get_thread_summary.name]: get_thread_summary,
   [get_spawn_chain.name]: get_spawn_chain,
+  // Phase 4 — reference resolver + orphan thread surface
+  [resolve_reference.name]: resolve_reference,
+  [list_recent_threads.name]: list_recent_threads,
   // Ring 2 (write_mashi) — Phase 3
   [create_item.name]: create_item,
   [update_item.name]: update_item,
@@ -97,6 +103,8 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [log_decision.name]: log_decision,
   [record_watch_check_in.name]: record_watch_check_in,
   [set_watch_target.name]: set_watch_target,
+  // Phase 4 — binding orphan threads to items
+  [attach_thread_to_item.name]: attach_thread_to_item,
 };
 
 export const TOOL_REGISTRY_LIST: AnyToolDefinition[] =

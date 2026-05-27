@@ -13,7 +13,7 @@ import { SyncStatusBar } from "@/components/layout/sync-status-bar";
 import { SprintGlobalMount } from "@/components/sprint/sprint-global-mount";
 import { SpotifyGlobalMount } from "@/components/sprint/spotify-global-mount";
 import { SpotlightProvider } from "@/components/spotlight/spotlight-context";
-import { SpotlightModal } from "@/components/spotlight/spotlight-modal";
+import { SpotlightAgent } from "@/components/agent/spotlight-agent";
 import { CursorContextProvider } from "@/lib/agent/cursor-context";
 import { AgentThreadSheet } from "@/components/agent/thread-sheet";
 
@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <ChatPanel />
         </div>
         <SprintGlobalMount />
-        <SpotlightModal />
+        <SpotlightAgent />
         <AgentThreadSheet />
         {/* Single anchor for FocusOverlay portals. Sprint focus mode +
             future focus surfaces mount their content here via

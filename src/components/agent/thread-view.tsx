@@ -38,26 +38,47 @@ interface InFlightToolCall {
 }
 
 /**
- * Renders an item's persistent agent thread plus the composer.
+ * Renders an agent thread plus the composer. Drives both:
+ *   - item-bound threads (via `itemId` — Ask Mashi sheet, Phase 2)
+ *   - orphan threads (via `threadId` — Spotlight, Phase 4). The
+ *     by-id endpoints don't auto-create; the caller is expected to
+ *     have created the orphan row already (POST /api/agent/threads/
+ *     orphan) and pass us its id.
  *
- * Loading strategy:
- *   - On mount, `GET /api/agent/threads/[itemId]` returns existing
- *     thread+messages, or {thread:null,messages:[]} when none exists.
- *   - When the user sends, we POST to /messages and stream SSE deltas.
- *     The "live" assistant text plus in-flight tool-call rows render
- *     on top of the persisted message list; once the stream ends we
- *     invalidate the query so the next render picks up the durable
- *     rows the server wrote.
+ * Loading strategy is identical in both cases: GET to load, POST to
+ * /messages to stream SSE deltas. The "live" assistant text plus
+ * in-flight tool-call rows render on top of the persisted message
+ * list; once the stream ends we invalidate the query so the next
+ * render picks up the durable rows the server wrote.
  */
-export function ThreadView({ itemId }: { itemId: string }) {
+export function ThreadView({
+  itemId,
+  threadId,
+  onItemBound,
+}: {
+  itemId?: string;
+  threadId?: string;
+  /** Fired when an orphan thread becomes item-bound mid-conversation
+   * (attach_thread_to_item). The Spotlight surface uses this to swap
+   * over to the item-bound sheet for subsequent turns. */
+  onItemBound?: (itemId: string) => void;
+}) {
+  if (!itemId && !threadId) {
+    throw new Error("ThreadView requires either itemId or threadId");
+  }
+  const baseEndpoint = threadId
+    ? `/api/agent/threads/by-id/${threadId}`
+    : `/api/agent/threads/${itemId}`;
+  const queryKey = threadId
+    ? ["agent-thread-by-id", threadId]
+    : ["agent-thread", itemId];
+
   const cursor = useCursorContext();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery<ThreadData>({
-    queryKey: ["agent-thread", itemId],
+    queryKey,
     queryFn: async () => {
-      const res = await fetch(`/api/agent/threads/${itemId}`, {
-        credentials: "include",
-      });
+      const res = await fetch(baseEndpoint, { credentials: "include" });
       if (!res.ok) throw new Error(`thread fetch ${res.status}`);
       return res.json();
     },
@@ -76,7 +97,7 @@ export function ThreadView({ itemId }: { itemId: string }) {
   const dropUndoable = (token: string, refresh: boolean) => {
     setUndoables((prev) => prev.filter((u) => u.token !== token));
     if (refresh) {
-      queryClient.invalidateQueries({ queryKey: ["agent-thread", itemId] });
+      queryClient.invalidateQueries({ queryKey });
       queryClient.invalidateQueries({ queryKey: ["s2d_items"] });
       queryClient.invalidateQueries({ queryKey: ["s2d-items"] });
     }
@@ -102,7 +123,7 @@ export function ThreadView({ itemId }: { itemId: string }) {
     setError(null);
 
     try {
-      const res = await fetch(`/api/agent/threads/${itemId}/messages`, {
+      const res = await fetch(`${baseEndpoint}/messages`, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -145,7 +166,7 @@ export function ThreadView({ itemId }: { itemId: string }) {
       setStreaming(false);
       setLiveText("");
       setLiveToolCalls([]);
-      queryClient.invalidateQueries({ queryKey: ["agent-thread", itemId] });
+      queryClient.invalidateQueries({ queryKey });
     }
   }
 
@@ -162,13 +183,34 @@ export function ThreadView({ itemId }: { itemId: string }) {
         prev.map((c) => (c.id === d.id ? { ...c, args: d.args } : c))
       );
     } else if (d.kind === "tool_call_result") {
-      setLiveToolCalls((prev) =>
-        prev.map((c) =>
+      setLiveToolCalls((prev) => {
+        const next = prev.map((c) =>
           c.id === d.id
             ? { ...c, ok: d.ok, result: d.result, error: d.error }
             : c
-        )
-      );
+        );
+        // Detect orphan->bound transition. When attach_thread_to_item
+        // succeeds, swap the Spotlight surface to its item-bound twin
+        // so the next turn uses the existing item-keyed routes.
+        if (onItemBound && d.ok) {
+          const finished = next.find((c) => c.id === d.id);
+          if (
+            finished?.name === "attach_thread_to_item" &&
+            typeof finished.args === "object" &&
+            finished.args != null &&
+            "item_id" in finished.args
+          ) {
+            const result = d.result as { ok?: boolean } | undefined;
+            if (result?.ok) {
+              const newItemId = (finished.args as { item_id: string }).item_id;
+              if (typeof newItemId === "string" && newItemId.length > 0) {
+                onItemBound(newItemId);
+              }
+            }
+          }
+        }
+        return next;
+      });
     } else if (d.kind === "undoable") {
       // Ring 2 write landed. Surface the strip and refresh any board
       // queries so the optimistic mutation paints through immediately.
