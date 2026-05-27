@@ -248,6 +248,24 @@ export function SprintComplete() {
           continue;
         }
 
+        if (disp === "in_progress") {
+          // "Keep in Progress" — pending items already have
+          // status=in_progress, so this is a no-op for them. Skipped
+          // items were patched to todo when skipped; this restores the
+          // in_progress status so they stay actively worked on.
+          if (it?.status !== "in_progress") {
+            work.push({
+              id: b.s2dItemId,
+              ticket,
+              promise: updateItem.mutateAsync({
+                id: b.s2dItemId,
+                patch: { status: "in_progress" },
+              }),
+            });
+          }
+          continue;
+        }
+
         if (disp === "backlog") {
           work.push({
             id: b.s2dItemId,
@@ -361,13 +379,17 @@ export function SprintComplete() {
   return (
     <div
       ref={rootRef}
-      className="flex h-full flex-1 items-center justify-center p-4 md:p-6"
+      className="flex h-full min-h-0 flex-1 justify-center overflow-hidden p-4 md:p-6"
     >
       <Surface
-        className="w-full max-w-2xl overflow-hidden"
+        // flex-col + max-h-full so the Surface fits the viewport; the
+        // header + footer stay pinned and the disposition list scrolls
+        // between them. Without this the surface grew past the viewport
+        // and the last few rows + Save buttons got clipped on long lists.
+        className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden"
         shadow="md"
       >
-        <div className="space-y-4 p-5 text-center">
+        <div className="shrink-0 space-y-4 p-5 text-center">
           <div
             ref={sparkleRef}
             className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15"
@@ -456,7 +478,10 @@ export function SprintComplete() {
         </div>
 
         {/* Per-item outcome-shaped recap. */}
-        <ol ref={listRef} className="space-y-2 px-5 pb-3 text-left">
+        <ol
+          ref={listRef}
+          className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 pb-3 text-left"
+        >
           {blocks.map((b) => {
             const it = itemMap.get(b.s2dItemId);
             if (!it) return null;
@@ -482,14 +507,14 @@ export function SprintComplete() {
           })}
         </ol>
 
-        <div className="px-5 pb-3">
+        <div className="shrink-0 px-5 pb-3">
           <p className="text-[10px] text-muted-foreground">
             Done items are already closed. For everything else, pick where it
             goes — defaults to staying in To Do.
           </p>
         </div>
 
-        <div className="flex justify-center gap-2 border-t border-border/40 px-5 py-3">
+        <div className="flex shrink-0 justify-center gap-2 border-t border-border/40 px-5 py-3">
           <Button
             variant="outline"
             size="sm"
@@ -515,7 +540,7 @@ export function SprintComplete() {
   );
 }
 
-type Disposition = "todo" | "backlog" | "snooze";
+type Disposition = "todo" | "in_progress" | "backlog" | "snooze";
 
 function OutcomeRow({
   item,
@@ -635,6 +660,7 @@ function OutcomeRow({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todo">Keep in To Do</SelectItem>
+              <SelectItem value="in_progress">Keep in Progress</SelectItem>
               <SelectItem value="backlog">Move to Backlog</SelectItem>
               <SelectItem value="snooze">Snooze 24h</SelectItem>
             </SelectContent>
