@@ -756,6 +756,25 @@ Two surgical UX additions to the active-sprint takeover. (A) Let the user pull m
 - [ ] Visual baselines regenerated for /sprint.
 - [ ] Progress tracker row for Phase 7 updated from `Pending` to `Shipped` with this PR's URL, in the same commit as the code.
 
+### Layout reorganization (additive)
+
+Repurpose the sprint-active-mode-multi shell into a "focal + flanks + tray" layout. Pure structural reorganization; no visual restyle of slot cards, canvas chrome, or buttons themselves. The existing card visuals are correct; this phase only changes how they're arranged on the page.
+
+- **Focal slot**: the currently-focused slot renders large and centered as the visually distinguished active workspace. Existing card chrome unchanged, just larger and center-stage. Tab / focus cycle (existing keyboard shortcut) promotes a flank to focal and demotes the prior focal back to a flank.
+- **Flank slots**: the other two active slots dock as smaller side cards flanking the focal (one left, one right) at reduced scale (~80%) so the eye reads the focal as the work surface. Clicking a flank promotes it the same way Tab does.
+- **Bench tray (bottom)**: one unified bottom tray replaces today's bench strip. Holds done blocks + pending blocks (queue + bench) in a single row in that order, with a thin vertical divider between the done set and the pending set. The "+ Add tasks" button from this phase lives inside the tray, left-aligned (not in the top header row).
+- **Background distinction**: workspace (focal + flanks region) sits on the canonical card surface; the tray sits on a darker / desaturated translucent surface so the eye reads them as separate planes. Use sanctioned `bg-card/55` for the tray (matches the `<SectionHeader>` strip token); workspace stays as today. A 1px `border-t border-border/40` separates them.
+- **Invite update on add**: when "+ Add tasks" lands a new block while the sprint has a calendar invite created at sprint start (`sprint_calendar_event_id` set on at least one block, or a sprint-session-level invite if Phase 7 introduces one), PATCH the existing calendar event to extend its `end` by the new block's duration and append the new item's title to the event description. Reuse / extend `/api/sprint/finalize-events` (already owns invite mutation) rather than wiring a parallel path. On invite-update failure the local add still succeeds; surface a non-blocking toast.
+
+### Acceptance additions (on top of the list above)
+- [ ] Focal slot is visibly larger than the flanking slots; the three together fit on a single row at standard desktop widths.
+- [ ] Bench tray shows done + pending in one strip with a clear divider.
+- [ ] "+ Add tasks" button lives inside the bench tray, not in the header row.
+- [ ] Adding a task while the sprint has a calendar invite PATCHes the invite to extend end time + append the new item's title to the description; failure surfaces a toast but does not roll back the local add.
+- [ ] Workspace and tray are visibly different surfaces; both use sanctioned translucency tokens.
+- [ ] No regression to existing slot card visuals — card chrome, buttons, and canvas content unchanged.
+- [ ] Visual baseline for /sprint updated to capture the new arrangement.
+
 ### Doctrine notes
 - shadcn-first: Sheet, Input, Button. No hand-rolls. If a primitive is missing, install via `npx shadcn@latest add <name>`.
 - Z-scale: Sheet uses `z-modal` (default); paints above the FocusOverlay's `z-focus` correctly.
