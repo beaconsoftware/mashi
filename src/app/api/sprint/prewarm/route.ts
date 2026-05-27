@@ -71,6 +71,12 @@ interface StoredEnrichedContext {
   signals_since_last?: { signals: unknown[]; at: string };
   nudge_draft?: { body: string; tone: "gentle" | "direct" | "escalate" };
   staged_meeting?: { calendarEventId: string; talkingPoints: string };
+  // Phase 6: rolling summary of the persistent agent thread for this
+  // item, snapshotted at pre-warm time. The canvas reads this to show
+  // the user a one-liner under the title (sets expectation that the
+  // agent has memory of prior turns). Null when no thread exists or
+  // the thread has no summary yet.
+  thread_summary?: { text: string; at: string } | null;
 }
 
 const SILENCE_DAYS_BY_PRIORITY: Record<Priority, number> = {
@@ -132,6 +138,29 @@ export async function POST(req: NextRequest) {
   }));
 
   const fields: string[] = [];
+
+  // Phase 6: always refresh thread_summary on pre-warm so the canvas
+  // shows the latest rolling summary the agent has produced for this
+  // item's persistent thread. Cheap (single row, no AI call). Null
+  // when no thread or no summary yet — we explicitly write null so
+  // a previously-cached value can't go stale across thread compaction
+  // events.
+  try {
+    const t = await sb
+      .from("agent_threads")
+      .select("summary")
+      .eq("user_id", user.id)
+      .eq("item_id", item.id)
+      .maybeSingle();
+    const summary = (t.data as { summary?: string | null } | null)?.summary;
+    enriched.thread_summary =
+      summary && summary.length > 0
+        ? { text: summary, at: new Date().toISOString() }
+        : null;
+    fields.push("thread_summary");
+  } catch {
+    // best-effort — never fail prewarm on this lookup
+  }
 
   try {
     if (pathway === "quick_reply" || pathway === "drafted_response") {

@@ -36,6 +36,13 @@ export interface EnrichedContext {
   pulled_sources: EnrichPulledSource[];
   thread: EnrichThreadTurn[];
   last_enriched_at: string;
+  /**
+   * Phase 6: rolling summary of the persistent agent thread for this
+   * item, snapshotted on sprint pre-warm. Null when no thread or no
+   * summary yet. The canvas reads `thread_summary?.text` to render a
+   * one-line "Last conversation: …" under the title.
+   */
+  thread_summary?: { text: string; at: string } | null;
 }
 
 interface ReadResponse {
@@ -71,17 +78,24 @@ function normalize(raw: unknown): EnrichedContext | null {
   const pulled_sources = Array.isArray(r.pulled_sources) ? r.pulled_sources : [];
   const thread = Array.isArray(r.thread) ? r.thread : [];
   const last_enriched_at = typeof r.last_enriched_at === "string" ? r.last_enriched_at : "";
+  const ts = r.thread_summary;
+  const thread_summary =
+    ts && typeof ts === "object" && typeof (ts as { text?: unknown }).text === "string"
+      ? { text: (ts as { text: string }).text, at: (ts as { at?: string }).at ?? "" }
+      : null;
   // Empty defaults across the board → no enrich has happened. Signal
-  // null so callers' `hasRun` derivation stays simple.
+  // null so callers' `hasRun` derivation stays simple. A populated
+  // thread_summary is enough to keep the row.
   if (
     plan.length === 0 &&
     pulled_sources.length === 0 &&
     thread.length === 0 &&
-    !last_enriched_at
+    !last_enriched_at &&
+    !thread_summary
   ) {
     return null;
   }
-  return { plan, pulled_sources, thread, last_enriched_at };
+  return { plan, pulled_sources, thread, last_enriched_at, thread_summary };
 }
 
 export function useEnrichedContext(

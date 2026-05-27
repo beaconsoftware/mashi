@@ -12,6 +12,7 @@ import {
   awaitApprovalDecision,
   createPendingApproval,
 } from "@/lib/agent/approval";
+import { compactThreadIfNeeded } from "@/lib/agent/compact";
 
 /**
  * Mashi Agent — read-only loop (Phase 2).
@@ -660,4 +661,22 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
   }
 
   opts.onDelta({ kind: "done" });
+
+  // Phase 6: after the turn settles, compact the thread if it has
+  // crossed the size threshold. Compaction itself is a no-op when the
+  // thread is healthy. Fire-and-forget so we don't delay the user's
+  // next interaction; we still await internally to surface errors in
+  // server logs.
+  try {
+    await compactThreadIfNeeded({
+      userId: opts.userId,
+      threadId: opts.threadId,
+      supabase,
+    });
+  } catch (err) {
+    console.warn(
+      "[agent] thread compaction failed:",
+      err instanceof Error ? err.message : err
+    );
+  }
 }
