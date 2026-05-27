@@ -25,6 +25,13 @@ interface AgentThreadState {
    * Spotlight surface; the item-bound thread sheet ignores it and
    * routes purely by itemId. */
   orphanThreadId: string | null;
+  /** Key of the thread currently rendered fullscreen via FocusOverlay,
+   * if any. Format is `item:<id>` or `thread:<id>` so the same store
+   * works for both item-bound and orphan threads. Null means the slot
+   * owns the rendering. Only one thread can be expanded at a time —
+   * setting this re-renders the slot owner as a "minimized" placeholder
+   * and mounts the overlay version (mount-toggle, never double-mount). */
+  expandedThreadKey: string | null;
   openFor: (itemId: string) => void;
   /** Promote an orphan thread to item-bound after the agent confirms a
    * resolve_reference candidate + attach_thread_to_item. Updates the
@@ -32,14 +39,19 @@ interface AgentThreadState {
    * next render. */
   bindOrphanToItem: (itemId: string) => void;
   close: () => void;
+  expandThread: (key: string) => void;
+  minimizeThread: () => void;
 }
 
 export const useAgentThread = create<AgentThreadState>((set) => ({
   open: false,
   itemId: null,
   orphanThreadId: null,
+  expandedThreadKey: null,
   openFor: (itemId) => set({ open: true, itemId, orphanThreadId: null }),
   bindOrphanToItem: (itemId) =>
     set({ itemId, orphanThreadId: null }),
-  close: () => set({ open: false }),
+  close: () => set({ open: false, expandedThreadKey: null }),
+  expandThread: (key) => set({ expandedThreadKey: key }),
+  minimizeThread: () => set({ expandedThreadKey: null }),
 }));
