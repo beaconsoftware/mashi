@@ -24,7 +24,7 @@ import { RepathwayPopover } from "@/components/sprint/repathway-popover";
 import { useSprintStore } from "@/store/sprint-store";
 import { PATHWAY_META } from "@/types";
 import { cn } from "@/lib/utils";
-import { useRefineSheet } from "@/store/refine-sheet-store";
+import { useAgentThread } from "@/store/agent-thread-store";
 import type { S2DItem, Pathway } from "@/types";
 
 /**
@@ -216,7 +216,11 @@ function CanvasFooter({
   itemId: string;
   variant: "full" | "compact";
 }) {
-  const openRefine = useRefineSheet((s) => s.openFor);
+  // Phase 2 of the agent buildout: the Refine chip now opens the
+  // persistent agent thread for the item, not the legacy
+  // per-sprint enriched_context.thread. One thread per item, across
+  // sprints, across surfaces — see AGENTS.md and the agent buildout doc.
+  const openAgent = useAgentThread((s) => s.openFor);
   return (
     <div className="flex shrink-0 items-center gap-1.5 border-t border-border/40 bg-card/55 px-3 py-2">
       <div className="flex-1">{primary}</div>
@@ -224,12 +228,12 @@ function CanvasFooter({
         type="button"
         size="sm"
         variant="ghost"
-        onClick={() => openRefine(itemId)}
+        onClick={() => openAgent(itemId)}
         className="mashi-press h-7 gap-1 px-2 text-[11px] text-muted-foreground"
-        title="Refine — chat with the agent about this item (⌥+R or /)"
+        title="Ask Mashi — open the persistent thread for this item (⌥+R or /)"
       >
         <Wand2 className="h-3 w-3" />
-        Refine
+        Ask Mashi
       </Button>
       {variant === "full" && (
         <>

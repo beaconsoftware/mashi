@@ -17,6 +17,7 @@ import { PlannedBadge } from "@/components/shared/planned-badge";
 import { useS2DStore } from "@/store/s2d-store";
 import { gsap, withMotion } from "@/lib/animation";
 import { useMagneticHover, useSelectBurst } from "@/lib/animation/interactions";
+import { AskMashiButton } from "@/components/agent/ask-mashi-button";
 
 interface Props {
   item: S2DItem;
@@ -117,6 +118,16 @@ export function S2DItemCard({ item, isOverlay, density = "compact" }: Props) {
             className="pointer-events-none absolute inset-0 -z-10 rounded-md bg-primary/30 blur-md"
           />
         )}
+      {!isOverlay && (
+        <span
+          className={cn(
+            "pointer-events-auto absolute top-1 opacity-0 transition-opacity group-hover:opacity-100",
+            showUnseen ? "right-5" : "right-1"
+          )}
+        >
+          <AskMashiButton itemId={item.id} variant="ghost" />
+        </span>
+      )}
       {showUnseen && (
         <span
           ref={dotRef}

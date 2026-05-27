@@ -16,6 +16,12 @@ import { get_linear_issue } from "@/lib/agent/tools/get_linear_issue";
 import { search_linear } from "@/lib/agent/tools/search_linear";
 import { search_everything } from "@/lib/agent/tools/search_everything";
 import { run_sync } from "@/lib/agent/tools/run_sync";
+import { get_cursor_context } from "@/lib/agent/tools/get_cursor_context";
+import { get_today } from "@/lib/agent/tools/get_today";
+import { get_current_sprint } from "@/lib/agent/tools/get_current_sprint";
+import { list_needs_review } from "@/lib/agent/tools/list_needs_review";
+import { get_thread_summary } from "@/lib/agent/tools/get_thread_summary";
+import { get_spawn_chain } from "@/lib/agent/tools/get_spawn_chain";
 
 /**
  * Canonical catalogue of every agent-callable tool. One source of
@@ -46,6 +52,12 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [search_linear.name]: search_linear,
   [search_everything.name]: search_everything,
   [run_sync.name]: run_sync,
+  [get_cursor_context.name]: get_cursor_context,
+  [get_today.name]: get_today,
+  [get_current_sprint.name]: get_current_sprint,
+  [list_needs_review.name]: list_needs_review,
+  [get_thread_summary.name]: get_thread_summary,
+  [get_spawn_chain.name]: get_spawn_chain,
 };
 
 export const TOOL_REGISTRY_LIST: AnyToolDefinition[] =
