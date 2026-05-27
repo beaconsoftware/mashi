@@ -40,6 +40,20 @@ import { set_watch_target } from "@/lib/agent/tools/set_watch_target";
 import { resolve_reference } from "@/lib/agent/tools/resolve_reference";
 import { attach_thread_to_item } from "@/lib/agent/tools/attach_thread_to_item";
 import { list_recent_threads } from "@/lib/agent/tools/list_recent_threads";
+// Phase 5 — ring 3 (write_world) catalogue + supporting reads.
+import { list_linear_teams } from "@/lib/agent/tools/list_linear_teams";
+import { send_email } from "@/lib/agent/tools/send_email";
+import { draft_email } from "@/lib/agent/tools/draft_email";
+import { mark_email_read } from "@/lib/agent/tools/mark_email_read";
+import { archive_email } from "@/lib/agent/tools/archive_email";
+import { send_slack_message } from "@/lib/agent/tools/send_slack_message";
+import { react_with_emoji } from "@/lib/agent/tools/react_with_emoji";
+import { create_calendar_event } from "@/lib/agent/tools/create_calendar_event";
+import { update_calendar_event } from "@/lib/agent/tools/update_calendar_event";
+import { staged_to_meeting } from "@/lib/agent/tools/staged_to_meeting";
+import { create_linear_issue } from "@/lib/agent/tools/create_linear_issue";
+import { update_linear_issue } from "@/lib/agent/tools/update_linear_issue";
+import { comment_on_linear_issue } from "@/lib/agent/tools/comment_on_linear_issue";
 
 /**
  * Canonical catalogue of every agent-callable tool. One source of
@@ -105,6 +119,21 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [set_watch_target.name]: set_watch_target,
   // Phase 4 — binding orphan threads to items
   [attach_thread_to_item.name]: attach_thread_to_item,
+  // Phase 5 — supporting read for Linear creates
+  [list_linear_teams.name]: list_linear_teams,
+  // Ring 3 (write_world) — Phase 5
+  [send_email.name]: send_email,
+  [draft_email.name]: draft_email,
+  [mark_email_read.name]: mark_email_read,
+  [archive_email.name]: archive_email,
+  [send_slack_message.name]: send_slack_message,
+  [react_with_emoji.name]: react_with_emoji,
+  [create_calendar_event.name]: create_calendar_event,
+  [update_calendar_event.name]: update_calendar_event,
+  [staged_to_meeting.name]: staged_to_meeting,
+  [create_linear_issue.name]: create_linear_issue,
+  [update_linear_issue.name]: update_linear_issue,
+  [comment_on_linear_issue.name]: comment_on_linear_issue,
 };
 
 export const TOOL_REGISTRY_LIST: AnyToolDefinition[] =

@@ -8,6 +8,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCursorContext } from "@/lib/agent/cursor-context";
 import { AgentComposer } from "@/components/agent/composer";
 import { UndoStrip, type UndoableAction } from "@/components/agent/undo-strip";
+import {
+  ApprovalCard,
+  type PendingApproval,
+} from "@/components/agent/approval-card";
 import { cn } from "@/lib/utils";
 import type { AgentDelta } from "@/lib/agent/loop";
 
@@ -90,6 +94,7 @@ export function ThreadView({
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [undoables, setUndoables] = useState<UndoableAction[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
 
   // After an undo (or expiry), drop the strip and refresh the s2d
   // board cache so the optimistic update / revert is reflected
@@ -120,6 +125,7 @@ export function ThreadView({
     setStreaming(true);
     setLiveText("");
     setLiveToolCalls([]);
+    setPendingApprovals([]);
     setError(null);
 
     try {
@@ -211,6 +217,21 @@ export function ThreadView({
         }
         return next;
       });
+    } else if (d.kind === "approval-needed") {
+      // Ring 3 call paused — surface an inline approval card for the
+      // user to Approve / Edit / Cancel. The loop is blocked polling
+      // agent_approvals; the card POSTs the decision to flip it.
+      setPendingApprovals((prev) => [
+        ...prev,
+        {
+          id: d.id,
+          name: d.name,
+          args: (d.args as Record<string, unknown>) ?? {},
+          expiresAt: d.expiresAt,
+        },
+      ]);
+    } else if (d.kind === "approval-resolved") {
+      setPendingApprovals((prev) => prev.filter((p) => p.id !== d.id));
     } else if (d.kind === "undoable") {
       // Ring 2 write landed. Surface the strip and refresh any board
       // queries so the optimistic mutation paints through immediately.
@@ -256,6 +277,22 @@ export function ThreadView({
             <div className="space-y-1.5">
               {liveToolCalls.map((tc) => (
                 <ToolCallRow key={tc.id} call={tc} />
+              ))}
+            </div>
+          )}
+          {pendingApprovals.length > 0 && (
+            <div className="space-y-1.5">
+              {pendingApprovals.map((p) => (
+                <ApprovalCard
+                  key={p.id}
+                  approval={p}
+                  base={baseEndpoint}
+                  onResolved={() =>
+                    setPendingApprovals((prev) =>
+                      prev.filter((x) => x.id !== p.id)
+                    )
+                  }
+                />
               ))}
             </div>
           )}
