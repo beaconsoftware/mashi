@@ -12,6 +12,7 @@ import {
   ApprovalCard,
   type PendingApproval,
 } from "@/components/agent/approval-card";
+import { ThreadSummaryCard } from "@/components/agent/thread-summary-card";
 import { cn } from "@/lib/utils";
 import type { AgentDelta } from "@/lib/agent/loop";
 
@@ -28,7 +29,12 @@ interface AgentMessageRow {
 }
 
 interface ThreadData {
-  thread: { id: string; title: string; summary: string | null } | null;
+  thread: {
+    id: string;
+    title: string;
+    summary: string | null;
+    created_at?: string | null;
+  } | null;
   messages: AgentMessageRow[];
 }
 
@@ -259,7 +265,10 @@ export function ThreadView({
       >
         <div className="space-y-2 p-3">
           {data?.thread?.summary && (
-            <ThreadSummary summary={data.thread.summary} />
+            <ThreadSummaryCard
+              summary={data.thread.summary}
+              threadCreatedAt={data.thread.created_at ?? null}
+            />
           )}
           {isLoading && (
             <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
@@ -319,34 +328,6 @@ export function ThreadView({
         </div>
       )}
       <AgentComposer disabled={streaming} onSend={send} />
-    </div>
-  );
-}
-
-function ThreadSummary({ summary }: { summary: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-md border border-primary/30 bg-primary/15 px-2.5 py-1.5 text-[11px]">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen((v) => !v)}
-        className="mashi-press h-auto w-full justify-start gap-1 rounded p-0 text-[10px] font-mono uppercase tracking-wider text-primary hover:bg-transparent hover:text-primary"
-      >
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 transition-transform",
-            open && "rotate-90"
-          )}
-        />
-        Prior conversation summary
-      </Button>
-      {open && (
-        <p className="mt-1.5 whitespace-pre-wrap text-foreground/85">
-          {summary}
-        </p>
-      )}
     </div>
   );
 }

@@ -25,6 +25,7 @@ import { useSprintStore } from "@/store/sprint-store";
 import { PATHWAY_META } from "@/types";
 import { cn } from "@/lib/utils";
 import { useAgentThread } from "@/store/agent-thread-store";
+import { useEnrichedContext } from "@/hooks/use-enriched-context";
 import type { S2DItem, Pathway } from "@/types";
 
 /**
@@ -137,6 +138,13 @@ function CanvasHeader({ item, prewarm }: { item: S2DItem; prewarm: PrewarmState 
   const block = useSprintStore((s) =>
     s.blocks.find((b) => b.s2dItemId === item.id)
   );
+  // Phase 6: surface the persistent thread's rolling summary one-liner
+  // under the title so the user knows the agent has memory of prior
+  // turns before they open Ask Mashi. Stashed at pre-warm time on
+  // enriched_context.thread_summary; null when no thread or no
+  // summary has been compacted yet.
+  const enrich = useEnrichedContext(item.id);
+  const threadSummary = enrich.data?.enriched_context?.thread_summary?.text;
   return (
     <SectionHeader as="header" className="flex-col items-stretch !py-2.5">
       <div className="flex w-full items-center gap-2">
@@ -169,8 +177,30 @@ function CanvasHeader({ item, prewarm }: { item: S2DItem; prewarm: PrewarmState 
       <h3 className="mt-1 w-full text-balance text-sm font-semibold normal-case leading-snug tracking-normal text-foreground">
         {item.title}
       </h3>
+      {threadSummary && (
+        <p
+          className="mt-0.5 line-clamp-2 w-full text-[11px] italic normal-case tracking-normal text-muted-foreground"
+          title={threadSummary}
+        >
+          Last conversation: {firstSentence(threadSummary)}
+        </p>
+      )}
     </SectionHeader>
   );
+}
+
+/** Trim a multi-bullet rolling summary down to its first meaningful
+ *  sentence (or first bullet) for the title-row one-liner. Keeps the
+ *  canvas chrome compact while still surfacing concrete content. */
+function firstSentence(s: string): string {
+  const trimmed = s.trim();
+  if (!trimmed) return "";
+  // Strip a leading "- " / "* " / "• " bullet marker.
+  const stripped = trimmed.replace(/^[\-\*•]\s+/, "");
+  const firstLine = stripped.split(/\n/)[0]?.trim() ?? stripped;
+  const sentence = firstLine.split(/(?<=[.!?])\s/)[0] ?? firstLine;
+  if (sentence.length <= 160) return sentence;
+  return `${sentence.slice(0, 157)}...`;
 }
 
 function PrewarmIndicator({ prewarm }: { prewarm: PrewarmState }) {

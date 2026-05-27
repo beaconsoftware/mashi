@@ -37,6 +37,10 @@ export interface AgentMessageRow {
   tool_calls: unknown | null;
   tool_results: unknown | null;
   cursor_context: unknown | null;
+  // Set by compactThreadIfNeeded when the row is absorbed into the
+  // thread's rolling summary; the loop ignores stamped rows on
+  // subsequent turns. NULL for any message still in active replay.
+  superseded_by_summary_at: string | null;
   created_at: string;
 }
 
@@ -103,9 +107,23 @@ export async function loadThread(opts: {
   threadId: string;
   /** Cap on messages returned — newest N. Defaults to 100. */
   limit?: number;
+  /** When true, includes messages that were absorbed into the
+   * thread's rolling summary. Defaults to false so the loop and
+   * UI never replay redundant context. */
+  includeSuperseded?: boolean;
   supabase?: Supa;
 }): Promise<{ thread: AgentThreadRow | null; messages: AgentMessageRow[] }> {
   const supabase = opts.supabase ?? createSupabaseServiceClient();
+  let query = supabase
+    .from("agent_messages")
+    .select("*")
+    .eq("user_id", opts.userId)
+    .eq("thread_id", opts.threadId)
+    .order("created_at", { ascending: true })
+    .limit(Math.min(Math.max(opts.limit ?? 100, 1), 500));
+  if (!opts.includeSuperseded) {
+    query = query.is("superseded_by_summary_at", null);
+  }
   const [t, m] = await Promise.all([
     supabase
       .from("agent_threads")
@@ -113,13 +131,7 @@ export async function loadThread(opts: {
       .eq("user_id", opts.userId)
       .eq("id", opts.threadId)
       .maybeSingle(),
-    supabase
-      .from("agent_messages")
-      .select("*")
-      .eq("user_id", opts.userId)
-      .eq("thread_id", opts.threadId)
-      .order("created_at", { ascending: true })
-      .limit(Math.min(Math.max(opts.limit ?? 100, 1), 500)),
+    query,
   ]);
   return {
     thread: (t.data as AgentThreadRow | null) ?? null,

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@/lib/agent/types";
 import type { ReverseOp } from "@/lib/agent/undo";
-import { appendMessage, getOrCreateThreadForItem } from "@/lib/agent/threads";
+import { inheritParentContext } from "@/lib/agent/inherit";
 
 const args = z.object({
   parent_id: z.string().uuid(),
@@ -53,13 +53,6 @@ export const spawn_follow_up: ToolDefinition<
     if (parent.error) throw parent.error;
     if (!parent.data) return { ok: false, error: "Parent item not found." };
 
-    const parentThread = await ctx.supabase
-      .from("agent_threads")
-      .select("summary, title")
-      .eq("user_id", ctx.userId)
-      .eq("item_id", input.parent_id)
-      .maybeSingle();
-
     const insert: Record<string, unknown> = {
       user_id: ctx.userId,
       title: input.title,
@@ -92,28 +85,17 @@ export const spawn_follow_up: ToolDefinition<
         ? `MASH-${parent.data.ticket_number}`
         : "parent";
 
-    // Phase 4 lifecycle continuity: eagerly create the child's thread
+    // Phase 6 lifecycle continuity: eagerly create the child's thread
     // and seed it with a system message that inherits the parent's
-    // summary (or title, when no summary exists yet). Best-effort —
-    // failure here doesn't roll back the spawn.
+    // rolling summary (or title, when no summary exists yet). The
+    // spawn-chain inheritance logic lives in inheritParentContext;
+    // best-effort here — failure doesn't roll back the spawn.
     try {
-      const childItemId = (data as { id: string }).id;
-      const childThread = await getOrCreateThreadForItem({
+      await inheritParentContext({
         userId: ctx.userId,
-        itemId: childItemId,
-        supabase: ctx.supabase,
-      });
-      const parentSummary =
-        (parentThread.data as { summary: string | null } | null)?.summary ??
-        null;
-      const seed = parentSummary
-        ? `This item was spawned from ${parentRef}. Reason: ${input.reason}. Prior context: ${parentSummary}`
-        : `This item was spawned from ${parentRef}. Reason: ${input.reason}.`;
-      await appendMessage({
-        userId: ctx.userId,
-        threadId: childThread.id,
-        role: "system",
-        content: seed,
+        childItemId: (data as { id: string }).id,
+        parentItemId: input.parent_id,
+        spawnReason: input.reason,
         supabase: ctx.supabase,
       });
     } catch {
