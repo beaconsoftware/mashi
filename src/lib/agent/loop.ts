@@ -6,7 +6,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { TOOL_REGISTRY_LIST } from "@/lib/agent/registry";
 import { appendMessage, loadThread } from "@/lib/agent/threads";
 import type { AnyToolDefinition, CursorContext, ToolRing } from "@/lib/agent/types";
-import { serializeCursor } from "@/lib/agent/cursor-context";
+import { serializeCursor } from "@/lib/agent/cursor-serialize";
 import { recordAction, type ReverseOp } from "@/lib/agent/undo";
 import {
   awaitApprovalDecision,
