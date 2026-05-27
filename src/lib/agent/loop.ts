@@ -7,6 +7,7 @@ import { TOOL_REGISTRY_LIST } from "@/lib/agent/registry";
 import { appendMessage, loadThread } from "@/lib/agent/threads";
 import type { AnyToolDefinition, CursorContext, ToolRing } from "@/lib/agent/types";
 import { serializeCursor } from "@/lib/agent/cursor-context";
+import { recordAction, type ReverseOp } from "@/lib/agent/undo";
 
 /**
  * Mashi Agent — read-only loop (Phase 2).
@@ -31,6 +32,18 @@ export type AgentDelta =
   | { kind: "tool_call_start"; id: string; name: string }
   | { kind: "tool_call_args"; id: string; args: unknown }
   | { kind: "tool_call_result"; id: string; ok: boolean; result?: unknown; error?: string }
+  | {
+      kind: "undoable";
+      /** Undo action id (agent_actions.id). Posted to /api/agent/undo
+       * by the in-chat undo strip. */
+      token: string;
+      summary: string;
+      /** Wall-clock expiry of the undo window (server-stamped). */
+      expiresAt: string;
+      /** Which tool emitted this, so the UI can correlate to the
+       * collapsed tool row in the timeline. */
+      toolName: string;
+    }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
@@ -376,19 +389,84 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
           origin: "session",
           threadId: opts.threadId,
         });
+
+        // Ring 2 dispatch: peel off the private `_undo` channel,
+        // persist the audit row, and emit an `undoable` delta the UI
+        // can pin to the bottom of the thread. The model-facing
+        // result excludes `_undo` so the agent never sees the
+        // reverse-op payload.
+        let modelResult: unknown = result;
+        let undoInfo:
+          | { summary: string; op: ReverseOp; ok: boolean }
+          | null = null;
+        const isObjectResult =
+          result != null && typeof result === "object" && !Array.isArray(result);
+        if (def.ring === "write_mashi" && isObjectResult) {
+          const obj = result as Record<string, unknown> & {
+            _undo?: { summary: string; op: ReverseOp };
+            ok?: boolean;
+          };
+          const ok = obj.ok !== false;
+          const { _undo, ...rest } = obj;
+          modelResult = rest;
+          if (ok && _undo) {
+            undoInfo = { summary: _undo.summary, op: _undo.op, ok };
+          }
+          // Always audit a write_mashi attempt, undoable or not.
+          const recorded = await recordAction({
+            userId: opts.userId,
+            threadId: opts.threadId,
+            toolName: def.name,
+            ring: "write_mashi",
+            args: call.input,
+            result: modelResult,
+            ok,
+            undoPayload: undoInfo?.op ?? null,
+            undoSummary: undoInfo?.summary ?? null,
+            supabase,
+          });
+          if (recorded.undoSummary && recorded.undoExpiresAt) {
+            opts.onDelta({
+              kind: "undoable",
+              token: recorded.id,
+              summary: recorded.undoSummary,
+              expiresAt: recorded.undoExpiresAt,
+              toolName: def.name,
+            });
+          }
+        }
+
         toolResults.push({
           tool_use_id: call.id,
-          content: JSON.stringify(result),
+          content: JSON.stringify(modelResult),
           is_error: false,
         });
         opts.onDelta({
           kind: "tool_call_result",
           id: call.id,
           ok: true,
-          result,
+          result: modelResult,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "tool failed";
+        // Ring 2 failures also land an audit row so the user can see
+        // what was attempted; ring 1 failures stay in-band only.
+        if (def.ring === "write_mashi") {
+          try {
+            await recordAction({
+              userId: opts.userId,
+              threadId: opts.threadId,
+              toolName: def.name,
+              ring: "write_mashi",
+              args: call.input,
+              result: { error: message },
+              ok: false,
+              supabase,
+            });
+          } catch {
+            // best-effort
+          }
+        }
         toolResults.push({
           tool_use_id: call.id,
           content: JSON.stringify({ error: message }),

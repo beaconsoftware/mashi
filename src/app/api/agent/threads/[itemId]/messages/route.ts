@@ -102,6 +102,9 @@ export async function POST(
           userMessage: parsed.data.message,
           cursor: parsed.data.cursor as CursorContext,
           onDelta: enqueue,
+          // Phase 3: surface ring 2 (write_mashi) tools. Ring 3
+          // (write_world) lands in Phase 5 with the approval gate.
+          toolRings: ["read", "write_mashi"],
         });
       } catch (err) {
         enqueue({
