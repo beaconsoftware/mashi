@@ -30,6 +30,14 @@ interface GCalEvent {
   };
   organizer?: { email?: string; displayName?: string };
   updated?: string;
+  /**
+   * Google Calendar sets this on every instance of a recurring event,
+   * pointing back to the master series. NULL/undefined for one-off
+   * events. We persist it so the triage orchestrator can spare cadence
+   * meetings (Iteration Planning, weekly 1:1s) from the meeting-only
+   * noise filter.
+   */
+  recurringEventId?: string;
 }
 
 interface EventForTriage {
@@ -120,6 +128,7 @@ export async function syncGCalConnection(connectionId: string): Promise<{
           })),
           location: e.location ?? null,
           meeting_url: pickMeetingUrl(e),
+          recurring_event_id: e.recurringEventId ?? null,
         };
       })
       .filter(<T>(v: T | null): v is T => v != null);
@@ -189,6 +198,7 @@ export async function syncGCalConnection(connectionId: string): Promise<{
             company_id: conn.company_id,
             content: triageInput,
             existing_items,
+            is_recurring: !!e.recurringEventId,
           },
         });
       } catch (err) {
