@@ -255,6 +255,7 @@ export async function runAgentTurn(opts: {
 Behavior:
 - Loads thread summary + recent N messages.
 - Prepends system: "You are Mashi's agent. Today is <date>. The user is looking at <cursor>. Prior conversation summary: <summary>."
+- **Re-entry deltas — "Since we last spoke":** When the thread is item-bound and `s2d_items.updated_at > agent_threads.last_message_at` (and `last_message_at IS NOT NULL`), the loop prepends an additional `role='system'` block with a structured diff of what changed on the item since the last assistant message. The diff covers: newly-attached or removed `enriched_context.pulled_sources`, status flips, pathway changes, and any `last_update_summary` entries newer than `last_message_at`. Assembled by a new read tool `get_item_changes_since(item_id, since)` registered in `src/lib/agent/tools/get_item_changes_since.ts`. System prompt extension: "If a Since-we-last-spoke block is present, open your first reply with a 1, 2 sentence summary of what changed before answering the user's question. If no block is present, do not invent one." `last_message_at` is updated by `appendMessage()` on every assistant turn so the diff window naturally narrows.
 - Streams an Anthropic call via `trackedStream` (from `src/lib/anthropic/tracked.ts`) with tool definitions from the registry filtered by ring + per-thread permissions.
 - For each tool call:
   - **Ring 1**: fires immediately, result back into the stream.
@@ -375,6 +376,7 @@ Add these to the registry (build on top of Phase 1):
 - `list_needs_review` — AI-triaged inbox queue.
 - `get_thread_summary(thread_id)` — agent-generated summary of the thread itself.
 - `get_spawn_chain(item_id)` — ancestors + descendants via `spawned_from_item_id`.
+- `get_item_changes_since(item_id, since)` — diffs an item + its `enriched_context` against a timestamp. Returns `{ status_changed?, pathway_changed?, sources_added, sources_removed, last_update_summaries }`. Called by the agent loop on thread re-open to power the "Since we last spoke" recap.
 
 ### Files
 
@@ -401,6 +403,7 @@ Add these to the registry (build on top of Phase 1):
 - [ ] The agent reads cursor context automatically — asking "what is this about" without naming the item works when looking at a detail sheet.
 - [ ] Tool calls render as collapsed rows in the timeline; expanding shows args + result JSON.
 - [ ] Closing and re-opening the sheet shows the prior turns persisted.
+- [ ] Re-entry recap: if the item was modified between turns (`s2d_items.updated_at > agent_threads.last_message_at`), the assistant's first reply on re-open opens with a 1, 2 sentence "Since we last spoke, X changed" summary covering sources, status, pathway, and `last_update_summary` entries. First-ever-conversation threads (`last_message_at IS NULL`) skip this. Backed by the new `get_item_changes_since` read tool.
 - [ ] Refine chip in a sprint canvas opens the SAME thread that "Ask Mashi" does (one thread per item).
 - [ ] `pnpm verify` green; `pnpm audit:layers` green; `pnpm audit:translucency` green.
 - [ ] Visual baselines updated for any dashboard route that changes.
