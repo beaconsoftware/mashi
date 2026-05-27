@@ -1,11 +1,11 @@
-# Mashi Agent — Buildout Spec
+# Mashi Buildout Spec
 
 ## Status & lifecycle
 
 - **Created**: 2026-05-26
 - **Owner**: Sidd
-- **Purpose**: source of truth for the 6 PRs that turn Mashi from "a board with AI passes" into "a board with a real agent".
-- **This document is TEMPORARY.** It exists to drive the buildout. **Phase 6's PR deletes it** (`rm MASHI_AGENT_BUILDOUT.md` is part of that commit). Do not let this doc outlive the project.
+- **Purpose**: source of truth for the sequenced PRs that turn Mashi from "a board with AI passes" into "a board with a real agent, a Focus card built around that agent, and the sprint controls to live inside it". Began life as the agent buildout (Phases 1, 6); expanded in scope to absorb the sprint-controls and Focus-card buildouts as their own phases rather than maintaining parallel spec docs.
+- **This document is TEMPORARY.** It exists to drive the buildout. **The final phase's PR deletes it** (`rm MASHI_AGENT_BUILDOUT.md` is part of that commit). Do not let this doc outlive the project.
 
 ## How to use this doc
 
@@ -13,24 +13,28 @@
 2. **Fresh agent per phase** — do not continue the same agent across phases. Each agent runs exactly one phase and stops at PR open.
 3. **Merge before spawning the next agent.** The agent refuses to start a new phase if a prior phase's PR is still open.
 4. Edit this doc liberally as decisions evolve. Phase 2's reality will likely change Phase 4's spec — capture that here, not in chat history.
-5. **Phase 6 deletes this doc as part of its commit.** The agent running Phase 6 must verify this.
+5. **The last phase deletes this doc as part of its commit.** Today that is Phase 8 (Focus card). If new phases are appended later, the deletion responsibility moves to whichever phase becomes the new last row.
 
 ## Progress tracker
 
-The unified prompt reads this table to decide what to do. The next phase to run is the first row with status `Pending`. When implementing a phase, the agent updates this row from `Pending` to `Shipped` with the PR URL **in the same commit** as the code.
+The unified prompt reads this table to decide what to do. The next phase to run is the first row with status `Pending` whose dependencies (column 4) are all `Shipped`. When implementing a phase, the agent updates this row from `Pending` to `Shipped` with the PR URL **in the same commit** as the code.
 
-| Phase | Subject | Status | PR |
-|---|---|---|---|
-| 1 | Foundations — schema + tool registry + cursor context + sessionTool | Shipped | https://github.com/beaconsoftware/mashi/pull/99 |
-| 2 | Read-only agent loop + "Ask Mashi" button + persistent threads | Pending | — |
-| 3 | Ring 2 write tools + agent_actions audit + 30s undo | Pending | — |
-| 4 | Spotlight surface + orphan threads + reference resolver | Pending | — |
-| 5 | Ring 3 write tools (send/calendar/Linear) + approval gate | Pending | — |
-| 6 | Thread compaction + spawn-chain inheritance + DELETE THIS DOC | Pending | — |
+| Phase | Subject | Status | Depends on | PR |
+|---|---|---|---|---|
+| 1 | Foundations — schema + tool registry + cursor context + sessionTool | Shipped | — | https://github.com/beaconsoftware/mashi/pull/99 |
+| 2 | Read-only agent loop + "Ask Mashi" button + persistent threads | Pending | 1 | — |
+| 3 | Ring 2 write tools + agent_actions audit + 30s undo | Pending | 2 | — |
+| 4 | Spotlight surface + orphan threads + reference resolver | Pending | 3 | — |
+| 5 | Ring 3 write tools (send/calendar/Linear) + approval gate | Pending | 3 | — |
+| 6 | Thread compaction + spawn-chain inheritance | Pending | 5 | — |
+| 7 | Sprint controls — Add-tasks picker + End-sprint review | Pending | — | — |
+| 8 | Focus card — Plan / Chat / Context replaces heads-down + DELETE THIS DOC | Pending | 3 | — |
 
 **Status values**: `Pending` → `Shipped`.
 
-**If all rows are `Shipped`**: the buildout is complete. The Phase 6 PR should have deleted this doc; if you're reading this, that PR hasn't merged yet.
+**Routing rule**: pick the first `Pending` row whose every dependency is `Shipped`. Phase 7 has no dependencies and can ship at any time, including before Phase 2. Phase 8 needs the ring-2 infrastructure from Phase 3.
+
+**If all rows are `Shipped`**: the buildout is complete. The Phase 8 PR should have deleted this doc; if you're reading this, that PR hasn't merged yet.
 
 ---
 
@@ -255,6 +259,7 @@ export async function runAgentTurn(opts: {
 Behavior:
 - Loads thread summary + recent N messages.
 - Prepends system: "You are Mashi's agent. Today is <date>. The user is looking at <cursor>. Prior conversation summary: <summary>."
+- **Re-entry deltas — "Since we last spoke":** When the thread is item-bound and `s2d_items.updated_at > agent_threads.last_message_at` (and `last_message_at IS NOT NULL`), the loop prepends an additional `role='system'` block with a structured diff of what changed on the item since the last assistant message. The diff covers: newly-attached or removed `enriched_context.pulled_sources`, status flips, pathway changes, and any `last_update_summary` entries newer than `last_message_at`. Assembled by a new read tool `get_item_changes_since(item_id, since)` registered in `src/lib/agent/tools/get_item_changes_since.ts`. System prompt extension: "If a Since-we-last-spoke block is present, open your first reply with a 1, 2 sentence summary of what changed before answering the user's question. If no block is present, do not invent one." `last_message_at` is updated by `appendMessage()` on every assistant turn so the diff window naturally narrows.
 - Streams an Anthropic call via `trackedStream` (from `src/lib/anthropic/tracked.ts`) with tool definitions from the registry filtered by ring + per-thread permissions.
 - For each tool call:
   - **Ring 1**: fires immediately, result back into the stream.
@@ -375,6 +380,7 @@ Add these to the registry (build on top of Phase 1):
 - `list_needs_review` — AI-triaged inbox queue.
 - `get_thread_summary(thread_id)` — agent-generated summary of the thread itself.
 - `get_spawn_chain(item_id)` — ancestors + descendants via `spawned_from_item_id`.
+- `get_item_changes_since(item_id, since)` — diffs an item + its `enriched_context` against a timestamp. Returns `{ status_changed?, pathway_changed?, sources_added, sources_removed, last_update_summaries }`. Called by the agent loop on thread re-open to power the "Since we last spoke" recap.
 
 ### Files
 
@@ -401,6 +407,7 @@ Add these to the registry (build on top of Phase 1):
 - [ ] The agent reads cursor context automatically — asking "what is this about" without naming the item works when looking at a detail sheet.
 - [ ] Tool calls render as collapsed rows in the timeline; expanding shows args + result JSON.
 - [ ] Closing and re-opening the sheet shows the prior turns persisted.
+- [ ] Re-entry recap: if the item was modified between turns (`s2d_items.updated_at > agent_threads.last_message_at`), the assistant's first reply on re-open opens with a 1, 2 sentence "Since we last spoke, X changed" summary covering sources, status, pathway, and `last_update_summary` entries. First-ever-conversation threads (`last_message_at IS NULL`) skip this. Backed by the new `get_item_changes_since` read tool.
 - [ ] Refine chip in a sprint canvas opens the SAME thread that "Ask Mashi" does (one thread per item).
 - [ ] `pnpm verify` green; `pnpm audit:layers` green; `pnpm audit:translucency` green.
 - [ ] Visual baselines updated for any dashboard route that changes.
@@ -648,10 +655,10 @@ Allowlist-by-recipient and "always confirm" settings live in a settings page add
 
 ---
 
-## Phase 6 — Thread compaction + spawn-chain inheritance + DELETE THIS DOC
+## Phase 6 — Thread compaction + spawn-chain inheritance
 
 ### Goal
-The agent is alive. Polish closes the gap between "works" and "feels like memory".
+The agent is alive. Polish closes the gap between "works" and "feels like memory". (Doc deletion responsibility moved to Phase 8 — the now-last phase — when Sprint controls and Focus card were folded into this spec.)
 
 ### Estimated effort
 ~2 days.
@@ -669,9 +676,6 @@ The agent is alive. Polish closes the gap between "works" and "feels like memory
 - `src/components/sprint/canvases/_shared/canvas-shell.tsx` — render the thread summary one-liner under the title when present.
 - `src/lib/agent/tools/spawn_follow_up.ts` (from Phase 3) — call `inheritParentContext` on the new child thread.
 - `src/lib/agent/tools/merge_items.ts` (from Phase 3) — concatenate absorbed thread's messages into the survivor with a `role='system'` separator.
-
-**Deleted:**
-- **`MASHI_AGENT_BUILDOUT.md`** (this file) — `rm` it as part of the commit. Confirm in PR description that the doc has served its purpose.
 
 ### Migration
 
@@ -692,21 +696,163 @@ CREATE INDEX IF NOT EXISTS idx_agent_messages_active
 - [ ] Merge concatenates absorbed thread messages chronologically into the survivor with a system separator.
 - [ ] When a sprint slot loads an item with an existing thread, the canvas pre-warm includes a 1-2 line summary visible under the title.
 - [ ] `pnpm audit:translucency` green; no new translucency values outside sanctioned scale.
-- [ ] Progress tracker row for Phase 6 updated from `Pending` to `Shipped` — **note: the tracker update lands in the same commit that deletes the doc.**
-- [ ] **`MASHI_AGENT_BUILDOUT.md` deleted from repo** (verify with `git status` showing it as deleted).
-- [ ] PR description explicitly confirms doc removal: "Removes MASHI_AGENT_BUILDOUT.md — agent buildout complete."
+- [ ] Progress tracker row for Phase 6 updated from `Pending` to `Shipped`.
 
 ### End-of-PR reminder
 
 > ✅ **Phase 6 complete — Mashi Agent SHIPPED.**
 >
+> The agent itself is now feature-complete (Phases 1-6). Phases 7-8 (sprint controls + Focus card) wrap the agent in the surfaces that use it.
+>
+> Next steps for Sidd:
+> 1. Review and merge this PR.
+> 2. **Terminate this agent session.**
+> 3. Spawn a fresh agent with the **Unified phase-runner prompt**. It will self-route to Phase 7 or 8 next (whichever is `Pending` with deps satisfied).
+
+---
+
+## Phase 7 — Sprint controls: Add-tasks picker + End-sprint review
+
+### Goal
+Two surgical UX additions to the active-sprint takeover. (A) Let the user pull more S2D items into the sprint without leaving the page. (B) Replace the "Exit" button with "End sprint" that routes to the SprintComplete recap surface even when blocks aren't all settled, so the user can decide per-item dispositions for everything unfinished.
+
+### Estimated effort
+~1 day. No schema migration. Independent of Phases 1-6; can ship at any time.
+
+### Files
+
+**New:**
+- `src/components/sprint/add-tasks-sheet.tsx` — right-side shadcn `Sheet` with a search/filter picker over `useS2DItems()` rows that aren't already in `blocks`. Each row exposes "Add to bench" (always) and "Add to slot N" (when a slot is free). Composes the existing `<S2DItemCard>` for row content. Sheet stays open across multiple adds; closes on user dismiss.
+
+**Edited:**
+- `src/components/sprint/sprint-active-mode-multi.tsx` — at [the header row near lines 987-1015](src/components/sprint/sprint-active-mode-multi.tsx:987), add a "+ Add tasks" button left of Pause; replace the "Exit" button with "End sprint" (label, icon `CheckCheck`, calls `endSprint()` from the store with no `confirm()` dialog). Mount `<AddTasksSheet>` controlled by a local `addTasksOpen` state. Also neuter Escape's exit path at [lines 898-906](src/components/sprint/sprint-active-mode-multi.tsx:898) — Escape now only closes an open detail panel; it no longer ends the sprint (too easy to fire accidentally).
+- `src/store/sprint-store.ts` — extend the `SprintPhase` union at [line 25](src/store/sprint-store.ts:25) with `"complete"`. Add three actions:
+  - `addItemMidSprint(s2dItemId, target: "bench" | "active")` — builds a new `SprintBlock` (durationMin default 30, status `"pending"`, prewarm fields default). Appends to `blocks`. If `target === "active"` and a slot is free, calls `fillEmptySlot(activeSlotIds.length, s2dItemId)`. The existing `startedSetRef` effect handles the `in_progress` PATCH.
+  - `endSprint()` — calls `tick()` to settle any in-flight timer, then `set({ phase: "complete" })`. Does NOT mutate block statuses; pending blocks stay pending.
+  - `goBackToActive()` — sets `phase: "active"`. Used by the "Back to sprint" undo button in the recap.
+- `src/components/sprint/sprint-global-mount.tsx` — extend the gate at [lines 46-50](src/components/sprint/sprint-global-mount.tsx:46) so SprintComplete also renders when `phase === "complete"`, in addition to the existing `phase === "active" && allSettled` path.
+- `src/app/sprint/page.tsx` — mirror the same gate extension.
+- `src/components/sprint/sprint-complete.tsx`:
+  - Header stat strip shows `{done} done · {skipped} skipped · {untouched} not done` when `untouched > 0`.
+  - `OutcomeRow` at [line 485](src/components/sprint/sprint-complete.tsx:485) already accepts `status: "pending" | "done" | "skipped"`. Pending rows render with `border-amber-500/40 bg-amber-500/15` (sanctioned `/15` + `/40` per AGENTS.md; verify against `pnpm audit:translucency`).
+  - Show a one-line "Ended early with {untouched} items unfinished" message near the top when `untouched > 0` and `phase === "complete"`. Skip on the natural-completion path.
+  - Add a "Back to sprint" ghost button (lucide `Undo2` icon) visible only when `phase === "complete" && !allSettled`. Clicking calls `goBackToActive()`; no data loss.
+
+### Acceptance criteria
+- [ ] "+ Add tasks" button appears in the sprint header.
+- [ ] Picker Sheet opens from the right; searchable by title + ticket number; pathway and priority chip filters work.
+- [ ] Items already in `blocks` (any status) do not appear in the picker. Done / dropped / backlog items do not appear.
+- [ ] "Add to bench" appends the item; the Bench strip updates without page reload.
+- [ ] "Add to slot N" (when a slot is free) puts the item directly into the slot and PATCHes the item to `in_progress`.
+- [ ] After adding, the row disappears from the picker; the Sheet stays open.
+- [ ] "End sprint" replaces "Exit" with a `CheckCheck` icon and outline variant.
+- [ ] Clicking End sprint immediately routes to the SprintComplete recap (no confirm dialog) when there are pending blocks.
+- [ ] Pending blocks render in the recap with amber styling and the disposition selector (Backlog / Snooze / Keep in To Do).
+- [ ] Header stat strip shows `{done} done · {skipped} skipped · {N} not done` when N > 0.
+- [ ] "Back to sprint" button appears for pending sprints and returns to active with no data loss.
+- [ ] Escape no longer ends the sprint; only closes open detail panels.
+- [ ] Auto-completion (every block done/skipped) still routes to SprintComplete (no regression of the natural completion path).
+- [ ] `pnpm verify` green; `pnpm audit:layers` green; `pnpm audit:translucency` green.
+- [ ] Visual baselines regenerated for /sprint.
+- [ ] Progress tracker row for Phase 7 updated from `Pending` to `Shipped` with this PR's URL, in the same commit as the code.
+
+### Doctrine notes
+- shadcn-first: Sheet, Input, Button. No hand-rolls. If a primitive is missing, install via `npx shadcn@latest add <name>`.
+- Z-scale: Sheet uses `z-modal` (default); paints above the FocusOverlay's `z-focus` correctly.
+- Translucency: pending-row uses sanctioned `/15` + `/40`. If `/30` is needed for any treatment, swap to `/40`.
+- Motion: Sheet open/close from shadcn defaults; no custom GSAP.
+- No em-dashes in user-facing copy.
+
+### Risks
+- The "+ Add tasks" picker pulls the full board. For large user accounts, paginate at 50 with a "Load more" footer; search + filters keep visible set small in practice.
+- `endSprint` mid-sprint feels destructive — the disposition default of "Keep in To Do" plus the "Back to sprint" undo button mitigate.
+
+### End-of-PR reminder
+
+> ✅ **Phase 7 complete.** Next steps for Sidd:
+> 1. Review and merge this PR.
+> 2. **Terminate this agent session.**
+> 3. Spawn a fresh agent with the **Unified phase-runner prompt**. It will self-route to the next `Pending` phase whose dependencies are satisfied.
+
+---
+
+## Phase 8 — Focus card: Plan / Chat / Context replaces heads-down + DELETE THIS DOC
+
+### Goal
+Replace the heads-down sprint canvas with a three-tab Focus card (Plan / Chat / Context) where the persistent per-item agent thread is the centerpiece. Kill the unreliable Build plan button + handoff prompt + outcome textarea. Wire the in-app agent chat to the unified tool registry so it can pull context, take actions, and edit the item's plan via a new `set_plan` ring-2 tool.
+
+### Estimated effort
+~2 days.
+
+### Dependencies
+Requires Phase 2 (agent loop + `<ThreadView>` + `<Composer>`) and Phase 3 (ring-2 write infra: `agent_actions`, undo strip, `recordAction`). Phase 5 (ring-3 approval gate) is recommended but not strict — without it, ring-3 tool calls in the chat will fail; soft-disable them via `process.env.ENABLE_RING_3 !== 'true'` until Phase 5 ships.
+
+### Migration
+
+**`supabase/migrations/036_s2d_plan.sql`** — additive, idempotent. (Check the current `supabase/migrations/` directory before assigning the number; today the last is `032_agent_threads.sql` but Phases 3 + 6 will land migrations 034 + 035.)
+
+```sql
+ALTER TABLE public.s2d_items
+  ADD COLUMN IF NOT EXISTS plan JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+COMMENT ON COLUMN public.s2d_items.plan IS
+  'User-owned checklist for working on this item: [{ id, text, checked, created_at }]. Editable in the Focus card Plan tab. The agent can append or replace via the set_plan ring-2 tool, with the prior value captured as undo_payload.';
+```
+
+### Files
+
+**New ring-2 tool:**
+- `src/lib/agent/tools/set_plan.ts` — args `{ item_id, steps: string[1..10], replace: boolean = true }`. Handler reads current plan, builds new `PlanStep[]` (uuid + text + `checked: false` + `created_at`), captures prior plan as `undo_payload`, writes, returns the updated plan. Ring `write_mashi`. Register in `src/lib/agent/registry.ts`.
+
+**New UI:**
+- `src/components/sprint/canvases/focus-card.tsx` — exports `<FocusCard>` matching `CanvasBaseProps`. Renders inside CanvasShell with shadcn `Tabs` containing three TabsContent panels (Plan / Chat / Context). Defaults to Chat tab.
+- `src/components/sprint/canvases/focus-card/plan-tab.tsx` — checklist editor. Empty state via `<EmptyState>` primitive. Populated state: ordered list with shadcn `Checkbox`, inline `Input` (save on blur), trash button, dnd-kit drag handle to reorder. "Add a step…" input at the bottom. Edits PATCH `s2d_items.plan` via `useUpdateS2DItem`.
+- `src/components/sprint/canvases/focus-card/chat-tab.tsx` — embeds `<ThreadView itemId={item.id} />` and `<Composer itemId={item.id} />` from Phase 2.
+- `src/components/sprint/canvases/focus-card/context-tab.tsx` — read-only sectioned view: Sources (`enriched_context.pulled_sources`), Last decision (`decision_log` head row), Last check-in (`watch_check_ins` head row), Related items (spawn chain via `spawned_from_item_id`), Source thread preview (subject + last 3 message snippets when `source_type` is `gmail` or `slack`). Each section conditionally renders only when non-empty.
+
+**Edited:**
+- `src/components/sprint/canvases/pathway-canvas.tsx` — route the `heads_down` case to `<FocusCard>` instead of `<HeadsDownCanvas>`.
+- `src/components/sprint/canvases/_shared/canvas-shell.tsx` — add a `hideRefine?: boolean` prop on CanvasShell. When true and `primary` is undefined, the footer renders no chips at all (the Chat tab IS the refine surface, so the Refine chip is redundant inside the Focus card). FocusCard passes `hideRefine`.
+
+**Deleted:**
+- `src/components/sprint/canvases/heads-down-canvas.tsx`
+- `src/app/api/s2d/[id]/heads-down/plan/route.ts`
+- `src/lib/anthropic/heads-down-plan.ts`
+- `MASHI_AGENT_BUILDOUT.md` — **this file**. `git rm` as part of the commit.
+
+Existing `enriched_context.heads_down_plan` JSONB data on legacy rows can remain (harmless); drop the field from any TypeScript interface that still references it.
+
+### Acceptance criteria
+- [ ] `s2d_items.plan` column exists with `DEFAULT '[]'::jsonb` on local DB; CI green on push.
+- [ ] `set_plan` tool registered in the registry; ring `write_mashi`; callable from the agent loop.
+- [ ] Calling `set_plan` fires the 30s undo strip; clicking Undo reverts to the prior plan; `agent_actions` row records both args and `undo_payload` correctly.
+- [ ] Old heads-down canvas, route, and generator are DELETED. No references remain.
+- [ ] `pathway-canvas.tsx` routes `heads_down` to `<FocusCard>`.
+- [ ] Focus card defaults to the Chat tab on mount.
+- [ ] Plan tab: empty state renders. Add step via Enter persists. Checkbox toggle persists. Inline edit on blur persists. Drag reorder persists. Trash deletes.
+- [ ] Chat tab: typing a question and Enter streams a response. Tool calls render as collapsible cards. Ring 2 calls produce undo strip. Ring 3 calls (when Phase 5 shipped) produce approval cards.
+- [ ] Chat + agent: asking "draft me a 3-step plan for this" triggers `set_plan`; switching to the Plan tab shows the new steps without reload.
+- [ ] Re-entry recap fires (per Phase 2 criterion): edit the item via another surface, re-open the Focus card, observe the "Since we last spoke" first reply.
+- [ ] Context tab: shows non-empty sections, hides empty ones.
+- [ ] CanvasShell footer in the Focus card shows neither a primary button nor a Refine chip.
+- [ ] SlotCard's Done/Skip/Bench/Snooze/Detail row remains the canonical action row.
+- [ ] Keyboard shortcuts unchanged: 1/2/3 for Done, q/w/e for Skip, Tab/F for focus cycle, `/` or `Alt+R` for Refine (opens the Chat tab inside the Focus card if the focused slot is heads-down; otherwise opens the existing Refine sheet).
+- [ ] Migration applied locally; CI green.
+- [ ] `pnpm verify` green; `pnpm audit:layers` green; `pnpm audit:translucency` green.
+- [ ] Visual baselines updated.
+- [ ] Progress tracker row for Phase 8 updated from `Pending` to `Shipped` — **note: the tracker update lands in the same commit that deletes this doc.**
+- [ ] **`MASHI_AGENT_BUILDOUT.md` deleted from the repo** (verify with `git status` showing it as deleted).
+- [ ] PR description explicitly confirms doc removal: "Removes MASHI_AGENT_BUILDOUT.md — buildout complete."
+
+### End-of-PR reminder
+
+> ✅ **Phase 8 complete — Mashi Buildout SHIPPED.**
+>
 > Next steps for Sidd:
 > 1. Review the diff. Confirm `MASHI_AGENT_BUILDOUT.md` is in the deleted-files list.
 > 2. Merge this PR. The buildout is complete.
 > 3. **Terminate this agent session** — there are no more phases.
-> 4. Optional: capture lessons-learned into project memory (e.g., things the spec got wrong that you fixed mid-flight).
->
-> Thank you for shipping the Mashi Agent.
+> 4. Optional: capture lessons-learned into project memory.
 
 ---
 
@@ -721,10 +867,10 @@ You are implementing one phase of the Mashi Agent buildout. The full spec is in 
 
 ═══ STEP 1: ROUTE ═══
 
-1. Read MASHI_AGENT_BUILDOUT.md in full before doing anything else.
-2. Read the Progress tracker table near the top. The next phase to implement is the FIRST row with status "Pending".
+1. Read AGENTS.md in full (project doctrine). Then read MASHI_AGENT_BUILDOUT.md in full.
+2. Read the Progress tracker table near the top. The next phase to implement is the FIRST row with status "Pending" whose every dependency (column 4) is "Shipped". Phases with no dependencies ("—") can run any time.
 3. If all rows are "Shipped", the buildout is complete. Stop and report this — there is nothing to do.
-4. Run: `gh pr list --state open --search "Mashi Agent"` (or scan for any open PR touching MASHI_AGENT_BUILDOUT.md).
+4. Run: `gh pr list --state open --search "Phase"` (or scan for any open PR touching MASHI_AGENT_BUILDOUT.md).
    If any open PR exists for a prior phase, STOP and tell Sidd to merge it before spawning the next agent. Do not start a new phase while a prior one is in review.
 
 ═══ STEP 2: IMPLEMENT ═══
@@ -736,7 +882,7 @@ Implement the chosen phase exactly as specified in its § Phase N section of the
 - Run `pnpm verify`, `pnpm audit:layers`, `pnpm audit:translucency`. All must be green before opening the PR.
 - If the phase has a migration: apply it locally first (`supabase db push` or paste into local DB), verify schema, then commit the migration with the code.
 - If the phase requires visual baselines (any phase that changes a dashboard route): run `pnpm test:visual:update` and commit the updated PNGs.
-- Update the Progress tracker row for this phase from "Pending" to "Shipped" with the PR URL — IN THE SAME COMMIT as the code. (For Phase 6: edit the tracker first, then `git rm MASHI_AGENT_BUILDOUT.md` in the same commit.)
+- Update the Progress tracker row for this phase from "Pending" to "Shipped" with the PR URL — IN THE SAME COMMIT as the code. (For Phase 8: edit the tracker first, then `git rm MASHI_AGENT_BUILDOUT.md` in the same commit.)
 
 ═══ STEP 3: OPEN PR ═══
 
@@ -747,13 +893,13 @@ Implement the chosen phase exactly as specified in its § Phase N section of the
 ═══ STEP 4: FINAL MESSAGE ═══
 
 - Include the verbatim "End-of-PR reminder" block from § Phase N in your final user-facing message. This is non-negotiable.
-- For Phase 6 only: explicitly confirm MASHI_AGENT_BUILDOUT.md is in the deletion list of the PR.
+- For Phase 8 only (the last phase): explicitly confirm MASHI_AGENT_BUILDOUT.md is in the deletion list of the PR.
 
 ═══ HARD CONSTRAINTS ═══
 
-- Implement EXACTLY ONE phase per session — the first Pending one. Do not pre-emptively start the next phase even if there's time.
-- Do NOT skip ahead to a later phase. Phases have dependencies.
-- Do NOT delete MASHI_AGENT_BUILDOUT.md unless implementing Phase 6.
+- Implement EXACTLY ONE phase per session — the first Pending one with dependencies satisfied. Do not pre-emptively start the next phase even if there's time.
+- Do NOT skip ahead to a later phase unless its dependencies are satisfied AND prior phases without those deps are also still Pending (then route by dependency order, not just sequence).
+- Do NOT delete MASHI_AGENT_BUILDOUT.md unless implementing the last phase (today: Phase 8).
 - Do NOT continue past PR open in this session. Stop, output the end-of-PR reminder, and let Sidd merge before spawning the next agent.
 ```
 
@@ -794,7 +940,17 @@ The `gh pr list` check is the safety against running a new phase while the prior
 | `lib/agent/compact.ts` | 6 | New |
 | `lib/agent/inherit.ts` | 6 | New |
 | `migrations/035_thread_compaction.sql` | 6 | New |
-| `MASHI_AGENT_BUILDOUT.md` | 6 | **Deleted** |
+| `components/sprint/add-tasks-sheet.tsx` | 7 | New |
+| `store/sprint-store.ts` (extended) | 7 | Edited |
+| `components/sprint/sprint-active-mode-multi.tsx` (header buttons) | 7 | Edited |
+| `components/sprint/sprint-complete.tsx` (pending rows + Back-to-sprint) | 7 | Edited |
+| `lib/agent/tools/set_plan.ts` | 8 | New |
+| `migrations/036_s2d_plan.sql` | 8 | New |
+| `components/sprint/canvases/focus-card.tsx` (+ tab files) | 8 | New |
+| `components/sprint/canvases/heads-down-canvas.tsx` | 8 | **Deleted** |
+| `app/api/s2d/[id]/heads-down/plan/route.ts` | 8 | **Deleted** |
+| `lib/anthropic/heads-down-plan.ts` | 8 | **Deleted** |
+| `MASHI_AGENT_BUILDOUT.md` | 8 | **Deleted** |
 
 ## Risk register
 
@@ -806,6 +962,8 @@ The `gh pr list` check is the safety against running a new phase while the prior
 | Reference resolver returns wrong item silently | 4 | Surface confidence scores; require ≥0.8 to auto-bind, else render candidate list and let the user pick |
 | Ring-3 approval card UX feels heavy for power users | 5 | Out of scope for Phase 5; ship always-confirm; per-tool/per-recipient allowlist deferred to Phase 6 or beyond |
 | Thread compaction loses information the agent later needs | 6 | Summary is in addition to, not in place of, the original messages; `superseded_by_summary_at` flag keeps the full history queryable; the loop just doesn't inject it |
+| End-sprint mid-flight feels destructive | 7 | Disposition default is "Keep in To Do" (non-destructive); "Back to sprint" undo button restores `phase: active` with no data loss |
+| Ring-3 tool calls in the Focus card chat fail before Phase 5 ships | 8 | Soft-disable ring-3 tools via `process.env.ENABLE_RING_3 !== 'true'` until Phase 5 lands; chat surfaces a "external sends require approval gate" hint |
 
 ## Deferred (intentionally not in this buildout)
 
@@ -817,4 +975,4 @@ The `gh pr list` check is the safety against running a new phase while the prior
 
 ---
 
-**End of doc.** Phase 6 deletes it. Do not let it outlive the project.
+**End of doc.** Phase 8 (the last phase) deletes it. Do not let it outlive the project.
