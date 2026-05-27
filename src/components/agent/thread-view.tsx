@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCursorContext } from "@/lib/agent/cursor-context";
 import { AgentComposer } from "@/components/agent/composer";
+import { UndoStrip, type UndoableAction } from "@/components/agent/undo-strip";
 import { cn } from "@/lib/utils";
 import type { AgentDelta } from "@/lib/agent/loop";
 
@@ -67,6 +68,19 @@ export function ThreadView({ itemId }: { itemId: string }) {
   const [liveToolCalls, setLiveToolCalls] = useState<InFlightToolCall[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [undoables, setUndoables] = useState<UndoableAction[]>([]);
+
+  // After an undo (or expiry), drop the strip and refresh the s2d
+  // board cache so the optimistic update / revert is reflected
+  // wherever the item is shown.
+  const dropUndoable = (token: string, refresh: boolean) => {
+    setUndoables((prev) => prev.filter((u) => u.token !== token));
+    if (refresh) {
+      queryClient.invalidateQueries({ queryKey: ["agent-thread", itemId] });
+      queryClient.invalidateQueries({ queryKey: ["s2d_items"] });
+      queryClient.invalidateQueries({ queryKey: ["s2d-items"] });
+    }
+  };
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef(data?.messages ?? []);
   messagesRef.current = data?.messages ?? [];
@@ -155,6 +169,20 @@ export function ThreadView({ itemId }: { itemId: string }) {
             : c
         )
       );
+    } else if (d.kind === "undoable") {
+      // Ring 2 write landed. Surface the strip and refresh any board
+      // queries so the optimistic mutation paints through immediately.
+      setUndoables((prev) => [
+        ...prev,
+        {
+          token: d.token,
+          summary: d.summary,
+          expiresAt: d.expiresAt,
+          toolName: d.toolName,
+        },
+      ]);
+      queryClient.invalidateQueries({ queryKey: ["s2d_items"] });
+      queryClient.invalidateQueries({ queryKey: ["s2d-items"] });
     } else if (d.kind === "error") {
       setError(d.message);
     }
@@ -199,6 +227,18 @@ export function ThreadView({ itemId }: { itemId: string }) {
           )}
         </div>
       </ScrollArea>
+      {undoables.length > 0 && (
+        <div className="space-y-1.5">
+          {undoables.map((u) => (
+            <UndoStrip
+              key={u.token}
+              action={u}
+              onUndone={() => dropUndoable(u.token, true)}
+              onExpired={() => dropUndoable(u.token, false)}
+            />
+          ))}
+        </div>
+      )}
       <AgentComposer disabled={streaming} onSend={send} />
     </div>
   );
