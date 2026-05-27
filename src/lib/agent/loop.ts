@@ -136,6 +136,9 @@ function buildSystemPrompt(opts: {
   lines.push(
     "External writes (send_email, draft_email, send_slack_message, create_calendar_event, create_linear_issue, etc.) pause for explicit user approval before firing. Before calling one of these, briefly tell the user what you're about to send so the approval card lands in context. If a call comes back with `edited: true` and `edited_args`, re-issue the tool with the edited arguments (do not call any other tool first). If a ring-3 call returns `user cancelled` or `approval window expired`, acknowledge it and ask what they'd like instead. Linear: call list_linear_teams first to pick the right team_id; never invent one."
   );
+  lines.push(
+    "Email + Slack bodies: when the user asks about content of a message (what someone said, what they asked for, an amount, a date), call get_message_thread and read the `full_content` field, not the `preview`. Previews are truncated at 240 chars and routinely cut off mid-sentence."
+  );
   lines.push("");
   lines.push("# Cursor context");
   lines.push(serializeCursor(opts.cursor));
