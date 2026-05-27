@@ -252,16 +252,6 @@ interface GmailListItem {
   threadId: string;
 }
 
-interface GmailMessageMeta {
-  id: string;
-  threadId: string;
-  internalDate?: string;
-  snippet: string;
-  payload?: {
-    headers?: Array<{ name: string; value: string }>;
-  };
-}
-
 interface MessageRow {
   external_id: string;
   thread_id: string;
@@ -273,6 +263,7 @@ interface MessageRow {
   sender_email: string;
   subject: string;
   preview: string;
+  full_content: string | null;
   received_at: string;
 }
 
@@ -446,6 +437,7 @@ export async function syncGmailConnection(connectionId: string): Promise<{
       sender_email: m.from_email,
       subject: m.subject,
       preview: m.snippet.slice(0, 240),
+      full_content: m.body || null,
       received_at: m.received_at,
     }));
 
@@ -590,7 +582,17 @@ interface MessageMeta {
   from_email: string;
   to_emails: string[];
   received_at: string;
+  /** Plain-text body extracted from text/plain part (or stripped HTML
+   * if no plain part exists), capped at FULL_BODY_CAP_CHARS to avoid
+   * blowing up rows for newsletter / marketing emails. Empty string
+   * when the body couldn't be extracted. */
+  body: string;
 }
+
+// Cap stored body length to avoid bloating `messages` for long marketing
+// or thread digest emails. 10k chars ~ 2.5k tokens, enough for the agent
+// to read a full reply but bounded.
+const FULL_BODY_CAP_CHARS = 10_000;
 
 async function hydrateMetadata(
   token: string,
@@ -614,16 +616,17 @@ async function fetchMessageMeta(
   token: string,
   id: string
 ): Promise<MessageMeta | null> {
+  // Fetch full message (not just metadata) so we can persist the plain-
+  // text body alongside headers — the agent's `get_message_thread` tool
+  // returns this column, and previews aren't enough when the user asks
+  // "what did <person> ask for?".
   const url = new URL(`${GMAIL_API}/users/me/messages/${id}`);
-  url.searchParams.set("format", "metadata");
-  for (const h of ["Subject", "From", "To", "Cc", "Date"]) {
-    url.searchParams.append("metadataHeaders", h);
-  }
+  url.searchParams.set("format", "full");
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return null;
-  const m = (await res.json()) as GmailMessageMeta;
+  const m = (await res.json()) as GmailFullMessage;
 
   const headers = new Map(
     (m.payload?.headers ?? []).map((h) => [h.name.toLowerCase(), h.value])
@@ -636,6 +639,7 @@ async function fetchMessageMeta(
     .map((a) => a.email.toLowerCase());
 
   const internalMs = m.internalDate ? parseInt(m.internalDate, 10) : Date.now();
+  const body = extractPlainText(m.payload).slice(0, FULL_BODY_CAP_CHARS);
 
   return {
     id: m.id,
@@ -646,6 +650,7 @@ async function fetchMessageMeta(
     from_email,
     to_emails,
     received_at: new Date(internalMs).toISOString(),
+    body,
   };
 }
 

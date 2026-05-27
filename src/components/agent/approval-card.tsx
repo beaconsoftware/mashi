@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, Loader2, Pencil, X } from "lucide-react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -120,9 +121,9 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
 
   if (resolved) {
     return (
-      <div
+      <Alert
         className={cn(
-          "rounded-md border px-2.5 py-1.5 text-[11px] text-muted-foreground",
+          "block px-2.5 py-1.5 text-[11px] text-muted-foreground",
           resolved === "approved" &&
             "border-emerald-500/40 bg-emerald-500/15",
           resolved === "edited" &&
@@ -140,12 +141,12 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
           {resolved === "cancelled" && "cancelled"}
           {resolved === "expired" && "approval window expired"}
         </span>
-      </div>
+      </Alert>
     );
   }
 
   return (
-    <div className="rounded-md border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-[12px]">
+    <Alert className="block border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs">
       <div className="mb-1.5 flex items-center gap-1.5">
         <span className="font-mono text-[10px] uppercase tracking-wider text-amber-200">
           approval needed
@@ -241,7 +242,7 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
           </>
         )}
       </div>
-    </div>
+    </Alert>
   );
 }
 
@@ -301,13 +302,13 @@ function ArgsEditor({
                 value={draft[key] ?? ""}
                 onChange={(e) => onChange(key, e.target.value)}
                 rows={Math.min(8, Math.max(3, Math.ceil((draft[key] ?? "").length / 60)))}
-                className="text-[12px]"
+                className="text-xs"
               />
             ) : (
               <Input
                 value={draft[key] ?? ""}
                 onChange={(e) => onChange(key, e.target.value)}
-                className="h-7 text-[12px]"
+                className="h-7 text-xs"
               />
             )}
           </div>

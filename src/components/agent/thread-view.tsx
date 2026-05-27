@@ -2,9 +2,35 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Loader2, Sparkles, Wrench } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2, Sparkles } from "lucide-react";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+  type ToolPartState,
+} from "@/components/ai-elements/tool";
+import {
+  Suggestion,
+  Suggestions,
+} from "@/components/ai-elements/suggestion";
 import { useCursorContext } from "@/lib/agent/cursor-context";
 import { AgentComposer } from "@/components/agent/composer";
 import { UndoStrip, type UndoableAction } from "@/components/agent/undo-strip";
@@ -13,7 +39,6 @@ import {
   type PendingApproval,
 } from "@/components/agent/approval-card";
 import { ThreadSummaryCard } from "@/components/agent/thread-summary-card";
-import { cn } from "@/lib/utils";
 import type { AgentDelta } from "@/lib/agent/loop";
 
 interface AgentMessageRow {
@@ -47,6 +72,12 @@ interface InFlightToolCall {
   ok?: boolean;
 }
 
+const EMPTY_STATE_SUGGESTIONS = [
+  "what is this about?",
+  "summarize the last reply",
+  "what should I do here?",
+];
+
 /**
  * Renders an agent thread plus the composer. Drives both:
  *   - item-bound threads (via `itemId` — Ask Mashi sheet, Phase 2)
@@ -60,6 +91,12 @@ interface InFlightToolCall {
  * in-flight tool-call rows render on top of the persisted message
  * list; once the stream ends we invalidate the query so the next
  * render picks up the durable rows the server wrote.
+ *
+ * Visual chrome is provided by AI Elements primitives (Conversation,
+ * Message, Reasoning, Tool, Suggestions) installed at src/components/
+ * ai-elements/. Pre-tool narration renders inside <Reasoning> (subtle,
+ * collapsible); the final answer renders inside <Message> (prominent).
+ * Tool cards default to collapsed via <Tool defaultOpen={false}>.
  */
 export function ThreadView({
   itemId,
@@ -113,18 +150,22 @@ export function ThreadView({
       queryClient.invalidateQueries({ queryKey: ["s2d-items"] });
     }
   };
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const messagesRef = useRef(data?.messages ?? []);
-  messagesRef.current = data?.messages ?? [];
 
-  // Scroll-to-bottom on new persisted turns + during streaming. The
-  // ScrollArea wraps a Radix viewport; we scroll the inner viewport.
-  useEffect(() => {
-    const el = scrollRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]"
-    );
-    if (el) (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight;
-  }, [data?.messages, liveText, liveToolCalls.length]);
+  // Tool results keyed by tool_use_id, indexed across all "tool" role
+  // messages so the renderer can co-locate the result with its call
+  // even when they land in different messages.
+  const resultByCallId = useMemo(() => {
+    const map = new Map<
+      string,
+      { tool_use_id: string; content: string; is_error: boolean }
+    >();
+    for (const m of data?.messages ?? []) {
+      if (m.role === "tool" && Array.isArray(m.tool_results)) {
+        for (const r of m.tool_results) map.set(r.tool_use_id, r);
+      }
+    }
+    return map;
+  }, [data?.messages]);
 
   async function send(message: string) {
     if (!message.trim() || streaming) return;
@@ -257,13 +298,20 @@ export function ThreadView({
     }
   }
 
+  // Empty UI state happens when there's no persisted history AND no
+  // live activity. Shows suggestion chips that submit through the same
+  // path as the composer.
+  const showEmpty =
+    !isLoading &&
+    (data?.messages.length ?? 0) === 0 &&
+    !streaming &&
+    !liveText &&
+    liveToolCalls.length === 0;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <ScrollArea
-        ref={scrollRef}
-        className="flex-1 rounded-md border border-border/40 bg-card/55"
-      >
-        <div className="space-y-2 p-3">
+      <Conversation className="flex-1 rounded-md border border-border/40 bg-card/55">
+        <ConversationContent className="gap-3 p-3">
           {data?.thread?.summary && (
             <ThreadSummaryCard
               summary={data.thread.summary}
@@ -271,23 +319,45 @@ export function ThreadView({
             />
           )}
           {isLoading && (
-            <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
               Loading conversation…
             </div>
           )}
-          {!isLoading && (data?.messages.length ?? 0) === 0 && !streaming && (
-            <EmptyState />
+          {showEmpty && (
+            <ConversationEmptyState
+              icon={<Sparkles className="h-5 w-5 text-primary" />}
+              title="Ask Mashi about this"
+              description="Ask, decide, snooze, send."
+            >
+              <div className="flex flex-col items-center gap-3 text-center">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <div className="space-y-1">
+                  <h3 className="text-sm font-medium">Ask Mashi about this</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Ask, decide, snooze, send.
+                  </p>
+                </div>
+                <Suggestions>
+                  {EMPTY_STATE_SUGGESTIONS.map((s) => (
+                    <Suggestion key={s} suggestion={s} onClick={send} />
+                  ))}
+                </Suggestions>
+              </div>
+            </ConversationEmptyState>
           )}
           {data?.messages.map((m) => (
-            <MessageRow key={m.id} message={m} />
+            <PersistedMessageRow
+              key={m.id}
+              message={m}
+              resultByCallId={resultByCallId}
+            />
           ))}
-          {streaming && liveToolCalls.length > 0 && (
-            <div className="space-y-1.5">
-              {liveToolCalls.map((tc) => (
-                <ToolCallRow key={tc.id} call={tc} />
-              ))}
-            </div>
+          {streaming && (
+            <LiveTurnRows
+              liveText={liveText}
+              liveToolCalls={liveToolCalls}
+            />
           )}
           {pendingApprovals.length > 0 && (
             <div className="space-y-1.5">
@@ -305,16 +375,14 @@ export function ThreadView({
               ))}
             </div>
           )}
-          {streaming && (
-            <LiveAssistantRow text={liveText} pending={liveText.length === 0} />
-          )}
           {error && (
-            <div className="rounded border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+            <div className="rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive">
               {error}
             </div>
           )}
-        </div>
-      </ScrollArea>
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
       {undoables.length > 0 && (
         <div className="space-y-1.5">
           {undoables.map((u) => (
@@ -332,180 +400,154 @@ export function ThreadView({
   );
 }
 
-function EmptyState() {
-  return (
-    <div className="rounded-md border border-dashed border-border/40 bg-card/60 p-3 text-[12px] text-muted-foreground">
-      <p className="mb-1 flex items-center gap-1 font-medium text-foreground">
-        <Sparkles className="h-3 w-3 text-primary" /> Ask Mashi about this
-      </p>
-      <p>
-        Ask, decide, snooze, send. Examples, &quot;what is this about?&quot;,
-        &quot;summarize the last reply&quot;, &quot;what should I do here?&quot;.
-      </p>
-    </div>
-  );
-}
-
-function MessageRow({ message }: { message: AgentMessageRow }) {
+/**
+ * Persisted (server-confirmed) message row. Branches on role:
+ *   - user → user-bubble Message
+ *   - assistant with tool_calls → Reasoning (narration) + Tool cards
+ *   - assistant without tool_calls → assistant Message (final answer)
+ *   - tool → suppressed (renders inline under its assistant turn via
+ *           the resultByCallId lookup; doesn't get its own row)
+ */
+function PersistedMessageRow({
+  message,
+  resultByCallId,
+}: {
+  message: AgentMessageRow;
+  resultByCallId: Map<
+    string,
+    { tool_use_id: string; content: string; is_error: boolean }
+  >;
+}) {
   if (message.role === "user") {
     return (
-      <div className="rounded-md border border-border/30 bg-secondary/40 px-2.5 py-1.5 text-[12px] leading-snug">
-        <div className="mb-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-          you
-        </div>
-        <p className="whitespace-pre-wrap text-foreground/90">
-          {message.content}
-        </p>
-      </div>
+      <Message from="user">
+        <MessageContent>
+          <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+        </MessageContent>
+      </Message>
     );
   }
   if (message.role === "assistant") {
+    const hasToolCalls =
+      Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
     return (
-      <div className="rounded-md border border-primary/30 bg-primary/15 px-2.5 py-1.5 text-[12px] leading-snug">
-        <div className="mb-0.5 font-mono text-[9px] uppercase tracking-wider text-primary/80">
-          mashi
-        </div>
-        {message.content && (
-          <p className="whitespace-pre-wrap text-foreground/90">
-            {message.content}
-          </p>
+      <div className="space-y-2">
+        {message.content && hasToolCalls && (
+          <Reasoning isStreaming={false} defaultOpen={false}>
+            <ReasoningTrigger />
+            <ReasoningContent>{message.content}</ReasoningContent>
+          </Reasoning>
         )}
-        {Array.isArray(message.tool_calls) && message.tool_calls.length > 0 && (
-          <div className="mt-1.5 space-y-1">
-            {message.tool_calls.map((tc) => (
-              <ToolCallRow
-                key={tc.id}
-                call={{ id: tc.id, name: tc.name, args: tc.input, ok: true }}
-                collapsed
-              />
-            ))}
+        {hasToolCalls && (
+          <div className="space-y-1.5">
+            {message.tool_calls!.map((tc) => {
+              const result = resultByCallId.get(tc.id);
+              const state: ToolPartState = result
+                ? result.is_error
+                  ? "output-error"
+                  : "output-available"
+                : "input-available";
+              const parsedOutput = result ? parseToolResult(result.content) : null;
+              return (
+                <Tool key={tc.id} defaultOpen={false}>
+                  <ToolHeader toolName={tc.name} state={state} />
+                  <ToolContent>
+                    <ToolInput input={tc.input} />
+                    {result && (
+                      <ToolOutput
+                        output={parsedOutput}
+                        errorText={result.is_error ? result.content : null}
+                      />
+                    )}
+                  </ToolContent>
+                </Tool>
+              );
+            })}
           </div>
         )}
+        {message.content && !hasToolCalls && (
+          <Message from="assistant">
+            <MessageContent>
+              <MessageResponse>{message.content}</MessageResponse>
+            </MessageContent>
+          </Message>
+        )}
       </div>
     );
   }
-  if (message.role === "tool") {
-    if (!Array.isArray(message.tool_results)) return null;
-    return (
-      <div className="space-y-1">
-        {message.tool_results.map((r) => (
-          <ToolResultRow key={r.tool_use_id} result={r} />
-        ))}
-      </div>
-    );
-  }
+  // role === "tool" → handled by sibling assistant via resultByCallId
   return null;
 }
 
-function ToolCallRow({
-  call,
-  collapsed = false,
+/**
+ * Live (streaming) turn. Reflects in-flight state of the current model
+ * call: pre-tool narration appears in Reasoning (streaming shimmer),
+ * tool calls render with their current state, and any post-tool answer
+ * lands in a prominent Message bubble.
+ */
+function LiveTurnRows({
+  liveText,
+  liveToolCalls,
 }: {
-  call: InFlightToolCall;
-  collapsed?: boolean;
+  liveText: string;
+  liveToolCalls: InFlightToolCall[];
 }) {
-  const [open, setOpen] = useState(!collapsed);
-  const pending = call.ok === undefined;
+  const hasToolCalls = liveToolCalls.length > 0;
   return (
-    <div className="rounded border border-border/40 bg-card/80 px-2 py-1 text-[11px] text-muted-foreground">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen((v) => !v)}
-        className="mashi-press flex h-auto w-full items-center justify-start gap-1 rounded p-0 text-[10px] font-mono uppercase tracking-wider hover:bg-transparent"
-      >
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 transition-transform",
-            open && "rotate-90"
-          )}
-        />
-        <Wrench className="h-3 w-3" />
-        <span className="normal-case tracking-normal">{call.name}</span>
-        {pending && <Loader2 className="ml-auto h-3 w-3 animate-spin" />}
-        {call.ok === true && (
-          <span className="ml-auto text-emerald-400">ok</span>
-        )}
-        {call.ok === false && (
-          <span className="ml-auto text-destructive">err</span>
-        )}
-      </Button>
-      {open && (
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] text-foreground/80">
-          {JSON.stringify(
-            { args: call.args ?? null, result: call.result, error: call.error },
-            null,
-            2
-          )}
-        </pre>
+    <div className="space-y-2">
+      {liveText && hasToolCalls && (
+        <Reasoning isStreaming defaultOpen>
+          <ReasoningTrigger />
+          <ReasoningContent>{liveText}</ReasoningContent>
+        </Reasoning>
+      )}
+      {hasToolCalls && (
+        <div className="space-y-1.5">
+          {liveToolCalls.map((tc) => {
+            const state: ToolPartState =
+              tc.ok === undefined
+                ? "input-available"
+                : tc.ok
+                  ? "output-available"
+                  : "output-error";
+            return (
+              <Tool key={tc.id} defaultOpen={false}>
+                <ToolHeader toolName={tc.name} state={state} />
+                <ToolContent>
+                  <ToolInput input={tc.args} />
+                  {tc.ok !== undefined && (
+                    <ToolOutput
+                      output={tc.result}
+                      errorText={tc.ok === false ? tc.error ?? "error" : null}
+                    />
+                  )}
+                </ToolContent>
+              </Tool>
+            );
+          })}
+        </div>
+      )}
+      {liveText && !hasToolCalls && (
+        <Message from="assistant">
+          <MessageContent>
+            <MessageResponse>{liveText}</MessageResponse>
+          </MessageContent>
+        </Message>
+      )}
+      {!liveText && !hasToolCalls && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Thinking…
+        </div>
       )}
     </div>
   );
 }
 
-function ToolResultRow({
-  result,
-}: {
-  result: { tool_use_id: string; content: string; is_error: boolean };
-}) {
-  const [open, setOpen] = useState(false);
-  const parsed = useMemo(() => {
-    try {
-      return JSON.parse(result.content);
-    } catch {
-      return result.content;
-    }
-  }, [result.content]);
-  return (
-    <div
-      className={cn(
-        "rounded border bg-card/80 px-2 py-1 text-[11px]",
-        result.is_error
-          ? "border-destructive/40 text-destructive"
-          : "border-border/40 text-muted-foreground"
-      )}
-    >
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen((v) => !v)}
-        className="mashi-press flex h-auto w-full items-center justify-start gap-1 rounded p-0 text-[10px] font-mono uppercase tracking-wider hover:bg-transparent"
-      >
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 transition-transform",
-            open && "rotate-90"
-          )}
-        />
-        result
-      </Button>
-      {open && (
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] text-foreground/80">
-          {typeof parsed === "string"
-            ? parsed
-            : JSON.stringify(parsed, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-}
-
-function LiveAssistantRow({
-  text,
-  pending,
-}: {
-  text: string;
-  pending: boolean;
-}) {
-  return (
-    <div className="rounded-md border border-primary/30 bg-primary/15 px-2.5 py-1.5 text-[12px] leading-snug">
-      <div className="mb-0.5 flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-primary/80">
-        mashi
-        {pending && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
-      </div>
-      <p className="whitespace-pre-wrap text-foreground/90">{text}</p>
-    </div>
-  );
+function parseToolResult(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    return content;
+  }
 }

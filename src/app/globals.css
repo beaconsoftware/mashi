@@ -194,6 +194,20 @@
   50%      { transform: translate3d(-140px, -40px, 0) scale(1.05); }
 }
 
+@keyframes mashi-reasoning-shimmer {
+  0%   { opacity: 0.55; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.55; }
+}
+
+.mashi-reasoning-shimmer {
+  animation: mashi-reasoning-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mashi-reasoning-shimmer { animation: none; }
+}
+
 .sign-in-aurora {
   animation: sign-in-hue-cycle 32s linear infinite;
   will-change: filter;

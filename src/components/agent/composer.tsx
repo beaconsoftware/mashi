@@ -45,7 +45,7 @@ export function AgentComposer({
         }}
         rows={2}
         placeholder="Ask, decide, snooze, send…"
-        className="min-h-0 resize-none rounded-md border-border/40 bg-card/80 px-2.5 py-1.5 text-[12px] leading-snug placeholder:text-muted-foreground/60"
+        className="min-h-0 resize-none rounded-md border-border/40 bg-card/80 px-2.5 py-1.5 text-xs leading-snug placeholder:text-muted-foreground/60"
         disabled={disabled}
       />
       <Button

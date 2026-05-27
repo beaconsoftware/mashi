@@ -61,7 +61,7 @@ function CandidateRow({
       <div className="flex w-full items-center gap-1.5 text-[11px] font-medium">
         <Sparkles className="h-3 w-3 shrink-0 text-primary" />
         <span className="truncate text-foreground/90">{candidate.title}</span>
-        <span className="ml-auto shrink-0 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+        <span className="ml-auto shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           {confidencePct}%
         </span>
       </div>
@@ -75,7 +75,7 @@ function CandidateRow({
             <span>{candidate.pathway}</span>
           </>
         )}
-        <span className="ml-auto truncate text-[9px] italic text-muted-foreground/70">
+        <span className="ml-auto truncate text-[10px] italic text-muted-foreground/70">
           {candidate.match_reason}
         </span>
       </div>

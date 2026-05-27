@@ -170,7 +170,7 @@ export function ContextTab({ item }: { item: S2DItem }) {
                 </a>
                 <span
                   className={cn(
-                    "ml-auto rounded px-1 py-0.5 font-mono text-[9px] uppercase tracking-wider",
+                    "ml-auto rounded px-1 py-0.5 font-mono text-[10px] uppercase tracking-wider",
                     r.spawned_from_item_id === item.id
                       ? "bg-secondary/60 text-muted-foreground"
                       : "bg-primary/15 text-primary"
@@ -210,7 +210,7 @@ export function ContextTab({ item }: { item: S2DItem }) {
                   key={i}
                   className="rounded border border-border/30 bg-card/60 px-1.5 py-1"
                 >
-                  <div className="mb-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                  <div className="mb-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     {m.sender ?? "unknown"} · {formatWhen(m.at)}
                   </div>
                   <p className="line-clamp-2 text-foreground/80">{m.text}</p>
@@ -268,7 +268,7 @@ function DecisionPreview({ log }: { log: Record<string, unknown> }) {
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1.5">
       {choice && (
-        <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-primary">
+        <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary">
           {choice}
         </span>
       )}
