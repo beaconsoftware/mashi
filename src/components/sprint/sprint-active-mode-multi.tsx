@@ -72,7 +72,7 @@ import {
   type SlotExit,
 } from "@/components/sprint/canvases/pathway-canvas";
 import { RefineSheet } from "@/components/sprint/refine-sheet";
-import { useRefineSheet } from "@/store/refine-sheet-store";
+import { useAgentThread } from "@/store/agent-thread-store";
 import { TimerRing } from "@/components/sprint/timer-ring";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 // Spotify ambient bg is mounted globally in AppShell. Sprint also mounts
@@ -875,8 +875,10 @@ export function SprintActiveModeMulti() {
   }
 
   // Keyboard: 1/2/3 = Done on slot N; q/w/e = Skip on slot N; space = pause;
-  // / or ⌥+R summons the global Refine sheet bound to the focused slot.
-  const openRefineFor = useRefineSheet((s) => s.openFor);
+  // / or ⌥+R summons the persistent agent thread for the focused slot
+  // (Phase 2 of the agent buildout; replaces the legacy per-sprint
+  // refine sheet on this keyboard path).
+  const openAgentFor = useAgentThread((s) => s.openFor);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement | null)?.tagName ?? "";
@@ -887,7 +889,7 @@ export function SprintActiveModeMulti() {
         const target = focusedSlotId ?? activeSlotIds[0];
         if (target) {
           e.preventDefault();
-          openRefineFor(target);
+          openAgentFor(target);
           return;
         }
       }

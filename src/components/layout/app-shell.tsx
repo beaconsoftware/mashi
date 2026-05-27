@@ -15,6 +15,7 @@ import { SpotifyGlobalMount } from "@/components/sprint/spotify-global-mount";
 import { SpotlightProvider } from "@/components/spotlight/spotlight-context";
 import { SpotlightModal } from "@/components/spotlight/spotlight-modal";
 import { CursorContextProvider } from "@/lib/agent/cursor-context";
+import { AgentThreadSheet } from "@/components/agent/thread-sheet";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -64,6 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <SprintGlobalMount />
         <SpotlightModal />
+        <AgentThreadSheet />
         {/* Single anchor for FocusOverlay portals. Sprint focus mode +
             future focus surfaces mount their content here via
             createPortal so per-page renderers and global mounts can't

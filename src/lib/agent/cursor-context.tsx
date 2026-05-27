@@ -3,7 +3,7 @@
 import { createContext, useContext, useMemo } from "react";
 import { usePathname, useParams } from "next/navigation";
 import { useSprintStore } from "@/store/sprint-store";
-import { useRefineSheet } from "@/store/refine-sheet-store";
+import { useAgentThread } from "@/store/agent-thread-store";
 import type { CursorContext } from "@/lib/agent/types";
 
 /**
@@ -32,8 +32,11 @@ export function CursorContextProvider({
   const focusedSlotId = useSprintStore((s) => s.focusedSlotId);
   const activeSlotIds = useSprintStore((s) => s.activeSlotIds);
   const blocks = useSprintStore((s) => s.blocks);
-  const refineOpen = useRefineSheet((s) => s.open);
-  const refineBoundItemId = useRefineSheet((s) => s.boundItemId);
+  // Agent thread sheet binding — the "I'm looking at this item" signal
+  // we trust most now that Refine is rewired to open the persistent
+  // thread (Phase 2 of the agent buildout).
+  const agentOpen = useAgentThread((s) => s.open);
+  const agentBoundItemId = useAgentThread((s) => s.itemId);
 
   const value = useMemo<CursorContext>(() => {
     // Route param item id — most pages expose the focused item via
@@ -42,7 +45,10 @@ export function CursorContextProvider({
     const routeItemId =
       typeof params?.id === "string" ? (params.id as string) : undefined;
     const focusedItemId =
-      routeItemId ?? (refineOpen ? refineBoundItemId ?? undefined : undefined) ?? focusedSlotId ?? undefined;
+      routeItemId ??
+      (agentOpen ? agentBoundItemId ?? undefined : undefined) ??
+      focusedSlotId ??
+      undefined;
 
     const sprintEngaged =
       phase === "active" ||
@@ -63,7 +69,7 @@ export function CursorContextProvider({
           .map((b) => b.s2dItemId)
       : [];
 
-    const openSheet: CursorContext["openSheet"] = refineOpen ? "refine" : null;
+    const openSheet: CursorContext["openSheet"] = agentOpen ? "refine" : null;
 
     return {
       route: pathname,
@@ -84,8 +90,8 @@ export function CursorContextProvider({
     focusedSlotId,
     activeSlotIds,
     blocks,
-    refineOpen,
-    refineBoundItemId,
+    agentOpen,
+    agentBoundItemId,
   ]);
 
   return (

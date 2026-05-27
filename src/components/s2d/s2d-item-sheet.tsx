@@ -49,6 +49,7 @@ import { CompanyBadge } from "@/components/shared/company-badge";
 // HeadsDownAction's Claude-prompt builder, etc.) cover the same intent
 // on-demand. File kept on disk in case we want to bring it back.
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
+import { AskMashiButton } from "@/components/agent/ask-mashi-button";
 import { fetchAndRenderClaudePrompt } from "@/lib/s2d/claude-prompt";
 import type { S2DItem } from "@/types";
 import { PRIORITY_META } from "@/types";
@@ -146,6 +147,7 @@ function ItemSheetBody({ item }: { item: S2DItem }) {
             >
               MASH-{item.ticket_number}
             </Button>
+            <AskMashiButton itemId={item.id} className="ml-auto" />
           </div>
         )}
         <SheetTitle className="text-base leading-snug pr-8">{item.title}</SheetTitle>
