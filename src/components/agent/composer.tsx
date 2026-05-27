@@ -32,7 +32,7 @@ export function AgentComposer({
   }
 
   return (
-    <div className="flex items-start gap-1.5">
+    <div className="flex items-stretch gap-1.5">
       <Textarea
         ref={ref}
         value={text}
@@ -53,7 +53,7 @@ export function AgentComposer({
         size="sm"
         onClick={submit}
         disabled={disabled || text.trim().length === 0}
-        className="mashi-press h-8 gap-1 px-2"
+        className="mashi-press h-auto gap-1 px-3"
         title="Enter to send · Shift+Enter for newline"
       >
         {disabled ? (
