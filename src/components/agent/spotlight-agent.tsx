@@ -89,7 +89,7 @@ export function SpotlightAgent() {
     >
       <DialogContent
         showCloseButton={false}
-        className="top-[10vh] translate-y-0 max-w-2xl gap-3 overflow-hidden p-0"
+        className="top-[10vh] translate-y-0 gap-3 overflow-hidden p-0 sm:max-w-2xl"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>Spotlight</DialogTitle>
@@ -270,9 +270,9 @@ function AskMashiTab({
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-1 min-h-0 flex-col gap-2 overflow-hidden">
-        <div className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-border/40 bg-card/60 p-3 text-center text-xs text-muted-foreground">
+        <div className="shrink-0 rounded-md border border-dashed border-border/40 bg-card/60 p-3 text-center text-xs text-muted-foreground">
           {creating || sending ? (
-            <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" />
               {initialMessage
                 ? "Opening a new conversation…"
@@ -293,7 +293,7 @@ function AskMashiTab({
             </div>
           ) : (
             <div className="space-y-1">
-              <p className="flex items-center justify-center gap-1 font-medium text-foreground">
+              <p className="inline-flex items-center gap-1 font-medium text-foreground">
                 <Sparkles className="h-3 w-3 text-primary" />
                 Ask Mashi anything
               </p>
