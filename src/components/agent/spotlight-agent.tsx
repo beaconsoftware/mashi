@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, MessageSquareText, Search, Sparkles } from "lucide-react";
 import {
   Dialog,
@@ -199,6 +199,7 @@ function AskMashiTab({
 }) {
   const cursor = useCursorContext();
   const openFor = useAgentThread((s) => s.openFor);
+  const queryClient = useQueryClient();
   const [sending, setSending] = useState(false);
   const [initialMessage, setInitialMessage] = useState("");
 
@@ -258,6 +259,14 @@ function AskMashiTab({
           }
         }
       });
+      // ThreadView mounted with stale (empty) data while the stream
+      // drained here. Invalidate so it refetches and surfaces the
+      // first turn — without this the conversation looks empty until
+      // the user sends a second message.
+      queryClient.invalidateQueries({
+        queryKey: ["agent-thread-by-id", newId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["agent-threads-recent"] });
     } catch {
       // ThreadView's own send/error UI takes over once it mounts.
     } finally {

@@ -43,7 +43,6 @@ export function ModeToggle({
     if (next === mode || pending) return;
     setError(null);
     setPending(true);
-    const prev = mode;
     setMode(key, next);
     const base = itemId
       ? `/api/agent/threads/${itemId}/mode`
@@ -56,12 +55,15 @@ export function ModeToggle({
         body: JSON.stringify({ mode: next }),
       });
       if (!res.ok) {
-        setMode(key, prev);
-        setError("Couldn't switch mode.");
+        // Don't roll back. The optimistic state stays — what the user
+        // toggled to is what the next /messages POST will carry in its
+        // body (mode override), so the agent loop honors intent even if
+        // the persisted PATCH doesn't land. Surfacing an error chip
+        // without bouncing the toggle keeps the UI predictable.
+        setError("Couldn't save mode. Will still apply this session.");
       }
     } catch {
-      setMode(key, prev);
-      setError("Couldn't switch mode.");
+      setError("Couldn't save mode. Will still apply this session.");
     } finally {
       setPending(false);
     }

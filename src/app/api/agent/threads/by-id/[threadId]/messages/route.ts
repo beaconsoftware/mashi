@@ -38,6 +38,10 @@ const cursorSchema = z.object({
 const bodySchema = z.object({
   message: z.string().min(1).max(8_000),
   cursor: cursorSchema,
+  // Quality Phase 3+: caller-asserted plan/act mode. See the item-bound
+  // route for the rationale. Optional — falls back to the persisted
+  // thread row in the loop.
+  mode: z.enum(["plan", "act"]).optional(),
 });
 
 export async function POST(
@@ -93,6 +97,7 @@ export async function POST(
           cursor: parsed.data.cursor as CursorContext,
           onDelta: enqueue,
           toolRings: ["read", "write_mashi", "write_world"],
+          mode: parsed.data.mode,
         });
       } catch (err) {
         enqueue({
