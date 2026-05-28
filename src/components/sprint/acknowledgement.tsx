@@ -55,6 +55,14 @@ export function Acknowledgement({
 }: AcknowledgementProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const firedRef = useRef(false);
+  // Stash onComplete in a ref so the timer effect can read the latest
+  // callback without depending on it. Without this, the parent's 1s
+  // sprint clock tick rebuilds the onComplete closure every second, the
+  // effect re-runs every second, the timer clears + restarts every
+  // second, and the 1600ms completion deadline is never reached — the
+  // ack card freezes on screen and the queued item never promotes.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   const reduced = useReducedMotion();
 
   useGSAP(
@@ -102,14 +110,14 @@ export function Acknowledgement({
     const completeTimer = setTimeout(() => {
       if (firedRef.current) return;
       firedRef.current = true;
-      onComplete();
+      onCompleteRef.current();
     }, completeAt);
 
     return () => {
       clearTimeout(fadeTimer);
       clearTimeout(completeTimer);
     };
-  }, [reduced, onComplete]);
+  }, [reduced]);
 
   const tint = tintFor(kind);
 
