@@ -2,7 +2,7 @@
 
 // translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
 
-import { useRef } from "react";
+import { useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useGSAP } from "@gsap/react";
@@ -18,6 +18,7 @@ import { useS2DStore } from "@/store/s2d-store";
 import { gsap, withMotion } from "@/lib/animation";
 import { useMagneticHover, useSelectBurst } from "@/lib/animation/interactions";
 import { AskMashiButton } from "@/components/agent/ask-mashi-button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Props {
   item: S2DItem;
@@ -30,12 +31,32 @@ interface Props {
    * across every card on the board.
    */
   density?: "compact" | "expanded";
+  /**
+   * Column key for shift-range selection. Cards from the same column
+   * share an anchor; cards in different columns fall back to a single
+   * toggle.
+   */
+  column?: string;
+  /** Ordered ids in the same column (for shift-range). */
+  columnIds?: string[];
 }
 
-export function S2DItemCard({ item, isOverlay, density = "compact" }: Props) {
-  const setSelected = useS2DStore((s) => s.setSelectedItem);
-  const selectedId = useS2DStore((s) => s.selectedItemId);
-  const isSelected = selectedId === item.id;
+export function S2DItemCard({
+  item,
+  isOverlay,
+  density = "compact",
+  column,
+  columnIds,
+}: Props) {
+  const setSheetItem = useS2DStore((s) => s.setSelectedItem);
+  const sheetId = useS2DStore((s) => s.selectedItemId);
+  const isSheetOpen = sheetId === item.id;
+  const multiSelected = useS2DStore((s) => s.selectedItemIds.has(item.id));
+  const anyMultiSelected = useS2DStore((s) => s.selectedItemIds.size > 0);
+  const toggleSelected = useS2DStore((s) => s.toggleSelected);
+  const selectRange = useS2DStore((s) => s.selectRange);
+  // For the visual select burst we reuse the existing pattern.
+  const isSelected = multiSelected;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
     data: { type: "s2d", item },
@@ -84,14 +105,40 @@ export function S2DItemCard({ item, isOverlay, density = "compact" }: Props) {
     { scope: dotRef, dependencies: [showUnseen] }
   );
 
+  function handleCardClick(e: ReactMouseEvent<HTMLDivElement>) {
+    // Cmd/Ctrl-click toggles selection without opening the sheet.
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      toggleSelected(item.id, column ?? item.status);
+      return;
+    }
+    // Shift-click range selects within the same column.
+    if (e.shiftKey && columnIds && column) {
+      e.preventDefault();
+      selectRange(columnIds, column, item.id);
+      return;
+    }
+    setSheetItem(item.id);
+  }
+
+  function handleCheckboxClick(e: ReactMouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    if (e.shiftKey && columnIds && column) {
+      selectRange(columnIds, column, item.id);
+      return;
+    }
+    toggleSelected(item.id, column ?? item.status);
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      onClick={() => setSelected(item.id)}
+      onClick={handleCardClick}
       data-s2d-card
+      data-s2d-card-id={item.id}
       className={cn(
         "group relative cursor-grab touch-none active:cursor-grabbing",
         isDragging && "opacity-40"
@@ -107,7 +154,8 @@ export function S2DItemCard({ item, isOverlay, density = "compact" }: Props) {
         className={cn(
           "relative rounded-md border border-border/60 bg-card p-2.5 text-left transition-colors hover:border-primary/40 hover:bg-accent/30",
           isOverlay && "shadow-xl ring-1 ring-primary/50 rotate-1",
-          isSelected && "border-primary/60 ring-1 ring-primary/40 shadow-[0_0_20px_-6px_hsl(var(--primary)/0.5)]",
+          isSheetOpen && !isSelected && "border-primary/40 ring-1 ring-primary/20",
+          isSelected && "border-primary/60 bg-primary/5 ring-1 ring-primary/40 shadow-[0_0_20px_-6px_hsl(var(--primary)/0.5)]",
           done && "opacity-60"
         )}
       >
@@ -118,6 +166,32 @@ export function S2DItemCard({ item, isOverlay, density = "compact" }: Props) {
             className="pointer-events-none absolute inset-0 -z-10 rounded-md bg-primary/30 blur-md"
           />
         )}
+      {!isOverlay && (
+        <span
+          className={cn(
+            "pointer-events-auto absolute -left-1 -top-1 transition-opacity",
+            // Visible on hover, focus-within, when this item is selected,
+            // or when ANY items are selected (so adding/removing from an
+            // existing selection doesn't require precise hovering).
+            isSelected || anyMultiSelected
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+          )}
+        >
+          <Checkbox
+            checked={isSelected}
+            onClick={handleCheckboxClick}
+            // Radix's Checkbox doesn't forward onClick to the inner button
+            // when also wired through Radix state — keep both so the
+            // interaction works whether the user clicks the visible box
+            // or its label area. We control selection state ourselves so
+            // onCheckedChange is a noop (the click handler does the work).
+            onCheckedChange={() => undefined}
+            aria-label={`Select ${item.title}`}
+            className="h-3.5 w-3.5 rounded border-border/60 bg-card shadow-sm"
+          />
+        </span>
+      )}
       {!isOverlay && (
         <span
           className={cn(

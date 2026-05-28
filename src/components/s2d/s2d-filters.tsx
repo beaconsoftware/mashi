@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { X, Filter, Sun, AlertCircle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Filter, X } from "lucide-react";
 import { useCompanies } from "@/hooks/use-s2d";
 import {
   PATHWAY_META,
@@ -11,41 +11,41 @@ import {
   type S2DItem,
 } from "@/types";
 import { cn } from "@/lib/utils";
-import { ChromeBar } from "@/components/layout/primitives";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import { getPlannedState } from "@/lib/planned";
 
-export type PlannedFilter = "today" | "overdue";
+export type QuickView = "today" | "overdue" | null;
 
 export interface S2DFilterState {
   companies: Set<string>;
   pathways: Set<Pathway>;
   priorities: Set<Priority>;
-  planned: Set<PlannedFilter>;
 }
 
 export const EMPTY_FILTER: S2DFilterState = {
   companies: new Set(),
   pathways: new Set(),
   priorities: new Set(),
-  planned: new Set(),
 };
 
-/**
- * URL param keys used by the filter. Exported so consumers (e.g.
- * S2DBoard's setFilters) can strip them before re-serializing.
- */
-export const FILTER_PARAM_KEYS = ["company", "pathway", "priority", "planned"] as const;
+export const FILTER_PARAM_KEYS = ["company", "pathway", "priority"] as const;
 
 const VALID_PATHWAYS = new Set(Object.keys(PATHWAY_META) as Pathway[]);
 const VALID_PRIORITIES = new Set(Object.keys(PRIORITY_META) as Priority[]);
-const VALID_PLANNED = new Set<PlannedFilter>(["today", "overdue"]);
+const VALID_QUICK_VIEW = new Set<Exclude<QuickView, null>>(["today", "overdue"]);
 
-/**
- * Read filter state from URL search params. Each dimension serialized as a
- * comma-separated list under its own key (?company=a,b&pathway=quick_reply).
- * Unknown values are silently dropped (no point in remembering invalid state).
- */
+type ReadonlyURLSearchParams = Pick<URLSearchParams, "get" | "toString">;
+
 export function parseFilterParams(
   searchParams: URLSearchParams | ReadonlyURLSearchParams
 ): S2DFilterState {
@@ -66,40 +66,30 @@ export function parseFilterParams(
         VALID_PRIORITIES.has(p as Priority)
       )
     ),
-    planned: new Set(
-      [...read("planned")].filter((p): p is PlannedFilter =>
-        VALID_PLANNED.has(p as PlannedFilter)
-      )
-    ),
   };
 }
 
-/**
- * Serialize filter state back to URL params. Returns an array of
- * [key, value] pairs so the caller can merge with existing params
- * without clobbering unrelated ones.
- */
 export function serializeFilterParams(s: S2DFilterState): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   if (s.companies.size > 0) out.push(["company", [...s.companies].join(",")]);
   if (s.pathways.size > 0) out.push(["pathway", [...s.pathways].join(",")]);
   if (s.priorities.size > 0) out.push(["priority", [...s.priorities].join(",")]);
-  if (s.planned.size > 0) out.push(["planned", [...s.planned].join(",")]);
   return out;
 }
 
-// next/navigation's ReadonlyURLSearchParams shape — declared locally so this
-// file doesn't need to import the framework just for a type.
-type ReadonlyURLSearchParams = Pick<URLSearchParams, "get" | "toString">;
+export function parseQuickView(
+  searchParams: URLSearchParams | ReadonlyURLSearchParams
+): QuickView {
+  const raw = searchParams.get("view");
+  if (!raw) return null;
+  if (VALID_QUICK_VIEW.has(raw as Exclude<QuickView, null>))
+    return raw as Exclude<QuickView, null>;
+  return null;
+}
 
-/**
- * Apply current filter state to an items array. Empty sets in a dimension
- * mean "all" — so a filter with nothing selected returns everything.
- */
-export function applyS2DFilters(
-  items: S2DItem[],
-  f: S2DFilterState
-): S2DItem[] {
+/** Apply current filter state to an items array. Empty sets in a dimension
+ * mean "all" so a filter with nothing selected returns everything. */
+export function applyS2DFilters(items: S2DItem[], f: S2DFilterState): S2DItem[] {
   return items.filter((it) => {
     if (
       f.companies.size > 0 &&
@@ -108,41 +98,41 @@ export function applyS2DFilters(
       return false;
     if (f.pathways.size > 0 && !f.pathways.has(it.pathway)) return false;
     if (f.priorities.size > 0 && !f.priorities.has(it.priority)) return false;
-    if (f.planned.size > 0) {
-      const state = getPlannedState(it);
-      // null state (not planned, or done, or older than yesterday) never matches.
-      if (!state || !f.planned.has(state)) return false;
-    }
     return true;
   });
 }
 
+/** Quick view narrows the working set further. Today/Overdue match the
+ * computed planned-state; null means no narrowing. */
+export function applyQuickView(items: S2DItem[], view: QuickView): S2DItem[] {
+  if (!view) return items;
+  return items.filter((it) => getPlannedState(it) === view);
+}
+
 /**
- * Filter bar that sits above the S2D board. All chips are multi-select
- * toggles. Active selections are highlighted; clicking again removes
- * that value. A "Clear all" chip appears when any filter is active.
- *
- * State is owned by the parent (S2DBoard) so it can be shared with the
- * filtered items pipeline + a future "save view" feature.
+ * Number of distinct dimensions with at least one active value. Used by
+ * the Filter button badge so the user can see at a glance how busy their
+ * filter is without expanding the popover.
  */
-export function S2DFilters({
+export function activeDimensionCount(f: S2DFilterState): number {
+  return (
+    (f.companies.size > 0 ? 1 : 0) +
+    (f.pathways.size > 0 ? 1 : 0) +
+    (f.priorities.size > 0 ? 1 : 0)
+  );
+}
+
+export function S2DFilterPopover({
   state,
   setState,
-  totalCount,
-  filteredCount,
 }: {
   state: S2DFilterState;
   setState: (next: S2DFilterState) => void;
-  totalCount: number;
-  filteredCount: number;
 }) {
   const { data: companies = [] } = useCompanies();
+  const [open, setOpen] = useState(false);
 
-  const anyActive =
-    state.companies.size > 0 ||
-    state.pathways.size > 0 ||
-    state.priorities.size > 0 ||
-    state.planned.size > 0;
+  const activeCount = activeDimensionCount(state);
 
   function toggleCompany(id: string) {
     const next = new Set(state.companies);
@@ -162,154 +152,146 @@ export function S2DFilters({
     else next.add(p);
     setState({ ...state, priorities: next });
   }
-  function togglePlanned(p: PlannedFilter) {
-    const next = new Set(state.planned);
-    if (next.has(p)) next.delete(p);
-    else next.add(p);
-    setState({ ...state, planned: next });
-  }
   function clearAll() {
     setState(EMPTY_FILTER);
   }
 
-  // Sort companies by name once
   const sortedCompanies = useMemo(
     () => [...companies].sort((a, b) => a.name.localeCompare(b.name)),
     [companies]
   );
 
   return (
-    <ChromeBar className="flex flex-wrap items-center gap-1.5 border-border/30 px-4 py-2 text-[11px]">
-      <Filter className="h-3 w-3 text-muted-foreground" />
-
-      {/* Planned — daily-focus filter; pairs with the TODAY / OVERDUE
-          badges on cards so the user can see "just what I committed to
-          today" in one click. */}
-      <ChipGroup label="Planned">
-        <Chip
-          active={state.planned.has("today")}
-          onClick={() => togglePlanned("today")}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-[11px]"
         >
-          <Sun aria-hidden className="h-2.5 w-2.5" />
-          Today
-        </Chip>
-        <Chip
-          active={state.planned.has("overdue")}
-          onClick={() => togglePlanned("overdue")}
-        >
-          <AlertCircle aria-hidden className="h-2.5 w-2.5" />
-          Overdue
-        </Chip>
-      </ChipGroup>
+          <Filter className="h-3 w-3" />
+          Filter
+          {activeCount > 0 && (
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+              {activeCount}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-80 max-h-[60vh] overflow-hidden p-0"
+      >
+        <div className="flex max-h-[60vh] flex-col">
+          <Command className="flex-1">
+            <div className="border-b border-border/40 px-2 pt-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Company
+              </span>
+            </div>
+            <CommandInput placeholder="Search company" className="h-9" />
+            <CommandList className="max-h-48">
+              <CommandEmpty>No companies match.</CommandEmpty>
+              <CommandGroup>
+                {sortedCompanies.map((c) => {
+                  const on = state.companies.has(c.id);
+                  return (
+                    <CommandItem
+                      key={c.id}
+                      value={c.name}
+                      onSelect={() => toggleCompany(c.id)}
+                      className="flex items-center gap-2"
+                    >
+                      <Checkbox
+                        checked={on}
+                        className="h-3.5 w-3.5"
+                        aria-label={`Filter by ${c.name}`}
+                      />
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: c.color_hex }}
+                      />
+                      <span className="flex-1 truncate text-[12px]">{c.name}</span>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
 
-      <Divider />
+          <div className="border-t border-border/40 p-2">
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Action type
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => {
+                const meta = PATHWAY_META[p];
+                const on = state.pathways.has(p);
+                return (
+                  <FilterChip key={p} active={on} onClick={() => togglePathway(p)}>
+                    <span className="text-[10px]">{meta.icon}</span>
+                    {meta.shortLabel}
+                  </FilterChip>
+                );
+              })}
+            </div>
+          </div>
 
-      {/* Companies */}
-      <ChipGroup label="Company">
-        {sortedCompanies.map((c) => {
-          const on = state.companies.has(c.id);
-          return (
-            <Chip
-              key={c.id}
-              active={on}
-              onClick={() => toggleCompany(c.id)}
-              accent={c.color_hex}
+          <div className="border-t border-border/40 p-2">
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Priority
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {(Object.keys(PRIORITY_META) as Priority[]).map((p) => {
+                const meta = PRIORITY_META[p];
+                const on = state.priorities.has(p);
+                return (
+                  <FilterChip
+                    key={p}
+                    active={on}
+                    onClick={() => togglePriority(p)}
+                    accent={meta.color}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: meta.color }}
+                    />
+                    {meta.label}
+                  </FilterChip>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border/40 px-2 py-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={clearAll}
+              disabled={activeCount === 0}
+              className="h-7 text-[11px]"
             >
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: c.color_hex }}
-              />
-              {c.name}
-            </Chip>
-          );
-        })}
-      </ChipGroup>
-
-      <Divider />
-
-      {/* Action types (internally still called pathway in the schema) */}
-      <ChipGroup label="Action type">
-        {(Object.keys(PATHWAY_META) as Pathway[]).map((p) => {
-          const meta = PATHWAY_META[p];
-          const on = state.pathways.has(p);
-          return (
-            <Chip key={p} active={on} onClick={() => togglePathway(p)}>
-              <span className="text-[10px]">{meta.icon}</span>
-              {meta.shortLabel}
-            </Chip>
-          );
-        })}
-      </ChipGroup>
-
-      <Divider />
-
-      {/* Priority */}
-      <ChipGroup label="Priority">
-        {(Object.keys(PRIORITY_META) as Priority[]).map((p) => {
-          const meta = PRIORITY_META[p];
-          const on = state.priorities.has(p);
-          return (
-            <Chip
-              key={p}
-              active={on}
-              onClick={() => togglePriority(p)}
-              accent={meta.color}
+              Clear all
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setOpen(false)}
+              className="h-7 text-[11px]"
             >
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: meta.color }}
-              />
-              {meta.label}
-            </Chip>
-          );
-        })}
-      </ChipGroup>
-
-      {anyActive && (
-        <>
-          <Divider />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={clearAll}
-            className="inline-flex h-auto items-center gap-1 rounded-full border border-border/40 px-2 py-0.5 text-[11px] font-normal text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <X className="h-2.5 w-2.5" />
-            Clear
-          </Button>
-        </>
-      )}
-
-      <span className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums">
-        {anyActive ? `${filteredCount} / ${totalCount}` : `${totalCount} items`}
-      </span>
-    </ChromeBar>
+              Done
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-function ChipGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
-function Divider() {
-  return <span className="mx-1 h-3 w-px bg-border/40" />;
-}
-
-function Chip({
+function FilterChip({
   active,
   onClick,
   children,
@@ -336,5 +318,101 @@ function Chip({
     >
       {children}
     </Button>
+  );
+}
+
+/**
+ * Thin row of removable chips, one per active filter value. Renders
+ * nothing when no filters are active. Placed below the toolbar (NOT
+ * inside the chrome bar) so toolbar height stays predictable.
+ */
+export function ActiveFilterChips({
+  state,
+  setState,
+}: {
+  state: S2DFilterState;
+  setState: (next: S2DFilterState) => void;
+}) {
+  const { data: companies = [] } = useCompanies();
+  const anyActive =
+    state.companies.size > 0 ||
+    state.pathways.size > 0 ||
+    state.priorities.size > 0;
+  if (!anyActive) return null;
+
+  const companyName = (id: string) =>
+    companies.find((c) => c.id === id)?.name ?? id.slice(0, 6);
+
+  function removeCompany(id: string) {
+    const next = new Set(state.companies);
+    next.delete(id);
+    setState({ ...state, companies: next });
+  }
+  function removePathway(p: Pathway) {
+    const next = new Set(state.pathways);
+    next.delete(p);
+    setState({ ...state, pathways: next });
+  }
+  function removePriority(p: Priority) {
+    const next = new Set(state.priorities);
+    next.delete(p);
+    setState({ ...state, priorities: next });
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 border-b border-border/30 bg-background/40 px-4 py-1.5 text-[11px]">
+      {[...state.companies].map((id) => (
+        <RemovableChip key={`c-${id}`} label="Company" value={companyName(id)} onRemove={() => removeCompany(id)} />
+      ))}
+      {[...state.pathways].map((p) => (
+        <RemovableChip
+          key={`pw-${p}`}
+          label="Type"
+          value={PATHWAY_META[p].shortLabel}
+          onRemove={() => removePathway(p)}
+        />
+      ))}
+      {[...state.priorities].map((p) => (
+        <RemovableChip
+          key={`pr-${p}`}
+          label="Priority"
+          value={PRIORITY_META[p].label}
+          accent={PRIORITY_META[p].color}
+          onRemove={() => removePriority(p)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RemovableChip({
+  label,
+  value,
+  accent,
+  onRemove,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-border/40 bg-secondary/40 py-0.5 pl-2 pr-1 text-[11px] text-foreground/85"
+      style={accent ? { boxShadow: `0 0 8px -3px ${accent}` } : undefined}
+    >
+      <span className="text-muted-foreground">{label}:</span>
+      <span className="font-medium">{value}</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onRemove}
+        aria-label={`Remove ${label} ${value}`}
+        className="mashi-icon-glow h-4 w-4 rounded-full text-muted-foreground hover:text-foreground"
+      >
+        <X className="h-2.5 w-2.5" />
+      </Button>
+    </span>
   );
 }

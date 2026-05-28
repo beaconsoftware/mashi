@@ -290,7 +290,13 @@ export function S2DColumn({ status, items, density = "compact" }: Props) {
             </div>
           ) : (
             items.map((item) => (
-              <S2DItemCard key={item.id} item={item} density={density} />
+              <S2DItemCard
+                key={item.id}
+                item={item}
+                density={density}
+                column={status}
+                columnIds={ids}
+              />
             ))
           )}
         </SortableContext>
