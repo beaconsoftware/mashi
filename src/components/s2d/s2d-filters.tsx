@@ -168,9 +168,22 @@ export function S2DFilterPopover({
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 gap-1.5 text-[11px]"
+          className={cn(
+            "mashi-magnetic h-7 gap-1.5 text-[11px] transition-colors",
+            // Filter button "carries its own state": when filters are
+            // applied, swap the entire button to a primary-tinted look
+            // rather than relying on a tiny badge to communicate it.
+            activeCount > 0
+              ? "border-primary/40 bg-primary/15 text-foreground hover:bg-primary/15 hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          )}
         >
-          <Filter className="h-3 w-3" />
+          <Filter
+            className={cn(
+              "h-3 w-3 transition-colors",
+              activeCount > 0 && "text-primary"
+            )}
+          />
           Filter
           {activeCount > 0 && (
             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
