@@ -80,6 +80,8 @@ export type AgentDelta =
   | { kind: "done" }
   | { kind: "error"; message: string };
 
+export type AgentMode = "plan" | "act";
+
 export interface RunAgentTurnOpts {
   threadId: string;
   userId: string;
@@ -92,6 +94,14 @@ export interface RunAgentTurnOpts {
   modelKey?: keyof typeof MODELS;
   /** Cap total tool round-trips per turn. Default 6. */
   maxIterations?: number;
+  /**
+   * Quality Phase 3: plan/act mode. In plan mode the toolset is filtered
+   * down to ring="read" plus ask_followup_question regardless of what
+   * toolRings the caller asked for, and the system prompt gains a
+   * directive that the agent can't write. Default is whatever the
+   * thread row says (act if not specified).
+   */
+  mode?: AgentMode;
 }
 
 interface AnthropicToolDef {
@@ -127,6 +137,7 @@ function buildSystemPrompt(opts: {
   cursor: CursorContext;
   threadTitle: string | null;
   threadSummary: string | null;
+  mode: AgentMode;
 }): string {
   const lines: string[] = [];
   lines.push(
@@ -153,6 +164,13 @@ function buildSystemPrompt(opts: {
   lines.push(
     "Email + Slack bodies: when the user asks about content of a message (what someone said, what they asked for, an amount, a date), call get_message_thread and read the `full_content` field, not the `preview`. Previews are truncated at 240 chars and routinely cut off mid-sentence."
   );
+  if (opts.mode === "plan") {
+    lines.push("");
+    lines.push("# Mode");
+    lines.push(
+      "You are in PLAN mode. You can read sources and ask follow-up questions only. You cannot send messages, write to the board, snooze, decide, or take any action. Help the user decide what to do; they will switch to ACT mode to execute."
+    );
+  }
   lines.push("");
   lines.push("# Clarification");
   lines.push(
@@ -254,10 +272,6 @@ function messagesToReplay(
 
 export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
   const supabase = createSupabaseServiceClient();
-  const rings = new Set(opts.toolRings ?? ["read"]);
-  const toolDefs = TOOL_REGISTRY_LIST.filter((d) => rings.has(d.ring));
-  const anthropicTools = toolDefs.map(defToAnthropicTool);
-  const toolMap = new Map(toolDefs.map((d) => [d.name, d]));
 
   // Persist the user message before we start streaming so a crash
   // mid-stream still leaves a recoverable thread.
@@ -277,10 +291,31 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
     supabase,
   });
 
+  // Quality Phase 3: resolve mode (caller override > thread row > 'act').
+  // The mode is persisted on agent_threads, so the loop's behavior follows
+  // the toggle even when the caller forgets to pass it in. In plan mode
+  // we filter the toolset down to read-only + ask_followup_question
+  // regardless of what toolRings the caller asked for.
+  const threadMode = ((thread as { mode?: unknown } | null)?.mode === "plan"
+    ? "plan"
+    : "act") as AgentMode;
+  const mode: AgentMode = opts.mode ?? threadMode;
+
+  const rings = new Set(opts.toolRings ?? ["read"]);
+  const toolDefs =
+    mode === "plan"
+      ? TOOL_REGISTRY_LIST.filter(
+          (d) => d.ring === "read" || d.name === "ask_followup_question"
+        )
+      : TOOL_REGISTRY_LIST.filter((d) => rings.has(d.ring));
+  const anthropicTools = toolDefs.map(defToAnthropicTool);
+  const toolMap = new Map(toolDefs.map((d) => [d.name, d]));
+
   const systemPrompt = buildSystemPrompt({
     cursor: opts.cursor,
     threadTitle: thread?.title ?? null,
     threadSummary: thread?.summary ?? null,
+    mode,
   });
 
   const replay = messagesToReplay(messages);

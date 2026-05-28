@@ -24,6 +24,8 @@ export interface AgentThreadRow {
   summary: string | null;
   last_message_at: string | null;
   created_at: string;
+  /** Quality Phase 3 plan/act mode. Default 'act' at the DB layer. */
+  mode: "plan" | "act";
 }
 
 export interface AgentMessageRow {

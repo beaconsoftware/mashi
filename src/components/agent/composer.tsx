@@ -13,9 +13,13 @@ import { Textarea } from "@/components/ui/textarea";
 export function AgentComposer({
   disabled,
   onSend,
+  mode = "act",
 }: {
   disabled: boolean;
   onSend: (text: string) => void;
+  /** Quality Phase 3 — drives placeholder copy so the user knows whether
+   * Mashi can act on the message they're about to send. */
+  mode?: "plan" | "act";
 }) {
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement | null>(null);
@@ -31,6 +35,9 @@ export function AgentComposer({
     onSend(v);
   }
 
+  const placeholder =
+    mode === "plan" ? "Plan with Mashi…" : "Ask, decide, snooze, send…";
+
   return (
     <div className="flex items-stretch gap-1.5">
       <Textarea
@@ -44,7 +51,7 @@ export function AgentComposer({
           }
         }}
         rows={2}
-        placeholder="Ask, decide, snooze, send…"
+        placeholder={placeholder}
         className="min-h-0 resize-none rounded-md border-border/40 bg-card/80 px-2.5 py-1.5 text-xs leading-snug placeholder:text-muted-foreground/60"
         disabled={disabled}
       />
