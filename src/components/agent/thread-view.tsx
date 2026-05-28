@@ -43,7 +43,13 @@ import {
   type PendingFollowUp,
 } from "@/components/agent/follow-up-card";
 import { ThreadSummaryCard } from "@/components/agent/thread-summary-card";
+import { ModeToggle } from "@/components/agent/mode-toggle";
 import type { AgentDelta } from "@/lib/agent/loop";
+import {
+  type AgentMode,
+  threadKey,
+  useAgentThread,
+} from "@/store/agent-thread-store";
 
 interface AgentMessageRow {
   id: string;
@@ -63,6 +69,7 @@ interface ThreadData {
     title: string;
     summary: string | null;
     created_at?: string | null;
+    mode?: AgentMode;
   } | null;
   messages: AgentMessageRow[];
 }
@@ -135,6 +142,16 @@ export function ThreadView({
     },
     staleTime: 1_000,
   });
+
+  // Quality Phase 3: the toggle's optimistic state lives in the store
+  // and only gets written when the user actually flips it; until then
+  // we read from the persisted thread row. activeMode is the resolved
+  // value used by every downstream surface (composer placeholder, plan
+  // banner). The store layer prevents flicker after a flip + refetch.
+  const key = threadKey({ itemId, threadId });
+  const storedMode = useAgentThread((s) => s.modeByThread[key]);
+  const persistedMode: AgentMode = data?.thread?.mode ?? "act";
+  const activeMode: AgentMode = storedMode ?? persistedMode;
 
   const [liveText, setLiveText] = useState("");
   const [liveToolCalls, setLiveToolCalls] = useState<InFlightToolCall[]>([]);
@@ -406,6 +423,13 @@ export function ThreadView({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="flex items-center justify-end">
+        <ModeToggle
+          itemId={itemId}
+          threadId={threadId}
+          initialMode={persistedMode}
+        />
+      </div>
       <Conversation className="flex-1 rounded-md border border-border/40 bg-card/55">
         <ConversationContent className="gap-3 p-3">
           {data?.thread?.summary && (
@@ -503,7 +527,12 @@ export function ThreadView({
           ))}
         </div>
       )}
-      <AgentComposer disabled={streaming} onSend={send} />
+      {activeMode === "plan" && (
+        <div className="rounded-md border border-border/40 bg-card/55 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+          Plan mode. Mashi will not write or send. Switch to Act to execute.
+        </div>
+      )}
+      <AgentComposer disabled={streaming} onSend={send} mode={activeMode} />
     </div>
   );
 }

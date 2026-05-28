@@ -14,6 +14,8 @@ import { create } from "zustand";
  * persistent `agent_threads` row.
  */
 
+export type AgentMode = "plan" | "act";
+
 interface AgentThreadState {
   open: boolean;
   /** S2D item id the open thread is bound to. Null for Spotlight orphan
@@ -32,6 +34,15 @@ interface AgentThreadState {
    * setting this re-renders the slot owner as a "minimized" placeholder
    * and mounts the overlay version (mount-toggle, never double-mount). */
   expandedThreadKey: string | null;
+  /**
+   * Quality Phase 3: per-thread plan/act mode, keyed by the same
+   * `item:<id>` / `thread:<id>` shape as expandedThreadKey so the toggle
+   * survives slot/overlay swaps. Authoritative state lives on
+   * agent_threads.mode in the DB; this is the optimistic mirror so the
+   * <ModeToggle> can flip without a round-trip and the loop hint can
+   * be passed inline on the next user turn.
+   */
+  modeByThread: Record<string, AgentMode>;
   openFor: (itemId: string) => void;
   /** Promote an orphan thread to item-bound after the agent confirms a
    * resolve_reference candidate + attach_thread_to_item. Updates the
@@ -41,6 +52,7 @@ interface AgentThreadState {
   close: () => void;
   expandThread: (key: string) => void;
   minimizeThread: () => void;
+  setMode: (key: string, mode: AgentMode) => void;
 }
 
 export const useAgentThread = create<AgentThreadState>((set) => ({
@@ -48,10 +60,19 @@ export const useAgentThread = create<AgentThreadState>((set) => ({
   itemId: null,
   orphanThreadId: null,
   expandedThreadKey: null,
+  modeByThread: {},
   openFor: (itemId) => set({ open: true, itemId, orphanThreadId: null }),
   bindOrphanToItem: (itemId) =>
     set({ itemId, orphanThreadId: null }),
   close: () => set({ open: false, expandedThreadKey: null }),
   expandThread: (key) => set({ expandedThreadKey: key }),
   minimizeThread: () => set({ expandedThreadKey: null }),
+  setMode: (key, mode) =>
+    set((s) => ({ modeByThread: { ...s.modeByThread, [key]: mode } })),
 }));
+
+export function threadKey(opts: { itemId?: string; threadId?: string }): string {
+  if (opts.itemId) return `item:${opts.itemId}`;
+  if (opts.threadId) return `thread:${opts.threadId}`;
+  return "";
+}
