@@ -157,6 +157,14 @@ export function ThreadView({
   const [liveToolCalls, setLiveToolCalls] = useState<InFlightToolCall[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Optimistic user message bubble. Rendered as soon as the user
+  // submits and cleared once the post-stream refetch lands. Without
+  // this, the user's typed text disappears from the composer and
+  // doesn't reappear in the transcript until the persisted query
+  // refetches — visible flicker after every send.
+  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(
+    null
+  );
   const [undoables, setUndoables] = useState<UndoableAction[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   // Quality Phase 1: the model can ask one focused follow-up question
@@ -270,6 +278,7 @@ export function ThreadView({
       if (!res.ok || !res.body) {
         setError(`Couldn't reach Mashi (${res.status}).`);
         setStreaming(false);
+        setPendingUserMessage(null);
         return;
       }
       const reader = res.body.getReader();
@@ -298,19 +307,32 @@ export function ThreadView({
           applyDelta(delta);
         }
       }
+      // Wait for the refetch to land BEFORE we clear live state. If we
+      // clear first, the just-streamed assistant turn disappears for
+      // the duration of the refetch and pops back in from persisted
+      // data — a very visible flicker. Awaiting refetchQueries keeps
+      // the live render up while the durable rows arrive.
+      await queryClient.refetchQueries({ queryKey });
     } catch (err) {
       setError(err instanceof Error ? err.message : "stream failed");
     } finally {
       setStreaming(false);
       setLiveText("");
       setLiveToolCalls([]);
-      queryClient.invalidateQueries({ queryKey });
+      setPendingUserMessage(null);
     }
   }
 
   async function send(message: string) {
     if (!message.trim() || streaming) return;
-    await streamAgentTurn(`${baseEndpoint}/messages`, { message, cursor });
+    // Render the user message immediately so the composer-clear ↔
+    // refetch-arrive gap doesn't blink the message out of existence.
+    setPendingUserMessage(message);
+    await streamAgentTurn(`${baseEndpoint}/messages`, {
+      message,
+      cursor,
+      mode: activeMode,
+    });
   }
 
   async function pickFollowUp(followUpId: string, option: string) {
@@ -318,6 +340,7 @@ export function ThreadView({
     await streamAgentTurn(`${baseEndpoint}/follow-up/${followUpId}`, {
       chosen: option,
       cursor,
+      mode: activeMode,
     });
   }
 
@@ -419,7 +442,8 @@ export function ThreadView({
     (data?.messages.length ?? 0) === 0 &&
     !streaming &&
     !liveText &&
-    liveToolCalls.length === 0;
+    liveToolCalls.length === 0 &&
+    !pendingUserMessage;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
@@ -473,6 +497,15 @@ export function ThreadView({
               resultByCallId={resultByCallId}
             />
           ))}
+          {pendingUserMessage && (
+            <Message from="user">
+              <MessageContent>
+                <p className="whitespace-pre-wrap text-sm">
+                  {pendingUserMessage}
+                </p>
+              </MessageContent>
+            </Message>
+          )}
           {streaming && (
             <LiveTurnRows
               liveText={liveText}

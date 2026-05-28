@@ -43,6 +43,13 @@ const cursorSchema = z.object({
 const bodySchema = z.object({
   message: z.string().min(1).max(8_000),
   cursor: cursorSchema,
+  // Quality Phase 3+: caller-asserted plan/act mode. The mode toggle
+  // PATCHes the thread row but the user's intent can be ahead of the
+  // PATCH (slow network, replica lag) when they send the next message.
+  // Passing mode in the body honors UI intent for this turn regardless
+  // of whether the row write has landed yet. Optional — falls back to
+  // the persisted thread row in the loop.
+  mode: z.enum(["plan", "act"]).optional(),
 });
 
 export async function POST(
@@ -105,6 +112,7 @@ export async function POST(
           onDelta: enqueue,
           // Phase 5: ring 3 (write_world) gated by the approval card.
           toolRings: ["read", "write_mashi", "write_world"],
+          mode: parsed.data.mode,
         });
       } catch (err) {
         enqueue({
