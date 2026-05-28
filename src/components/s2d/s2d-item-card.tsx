@@ -52,7 +52,6 @@ export function S2DItemCard({
   const sheetId = useS2DStore((s) => s.selectedItemId);
   const isSheetOpen = sheetId === item.id;
   const multiSelected = useS2DStore((s) => s.selectedItemIds.has(item.id));
-  const anyMultiSelected = useS2DStore((s) => s.selectedItemIds.size > 0);
   const toggleSelected = useS2DStore((s) => s.toggleSelected);
   const selectRange = useS2DStore((s) => s.selectRange);
   // For the visual select burst we reuse the existing pattern.
@@ -168,17 +167,7 @@ export function S2DItemCard({
         )}
       {!isOverlay && (
         <span
-          className={cn(
-            "pointer-events-auto absolute -left-1 -top-1 transition-opacity",
-            // Visible at low opacity at rest so the affordance is
-            // discoverable (the first-time user sees a checkbox), then
-            // pops to full opacity on hover / focus / selected, or
-            // whenever the user already has a selection going (so
-            // adding to it doesn't require precise hovering).
-            isSelected || anyMultiSelected
-              ? "opacity-100"
-              : "opacity-30 group-hover:opacity-100 focus-within:opacity-100"
-          )}
+          className="pointer-events-auto absolute -left-1 -top-1"
           // Modifiers listed in the title so the user can discover the
           // range / no-sheet-open shortcuts without docs.
           title={
@@ -197,7 +186,14 @@ export function S2DItemCard({
             // onCheckedChange is a noop (the click handler does the work).
             onCheckedChange={() => undefined}
             aria-label={`Select ${item.title}`}
-            className="h-3.5 w-3.5 rounded border-border/60 bg-card shadow-sm"
+            // Always visible at rest: previous opacity-30 fade combined
+            // with `border-border/60 bg-card` made the box camouflage
+            // perfectly against the card — selectability was invisible.
+            // Use border-muted-foreground/60 for visible-but-quiet at
+            // rest; Radix flips to primary fill on data-state=checked
+            // automatically. Hover ring on the card body still signals
+            // hit area.
+            className="size-4 rounded border-muted-foreground/60 bg-background/80 shadow-md"
           />
         </span>
       )}
