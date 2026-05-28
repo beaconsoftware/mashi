@@ -41,7 +41,7 @@ export const create_linear_issue: ToolDefinition<
 > = {
   name: "create_linear_issue",
   description:
-    "Create an issue in Linear. Requires team_id (call list_linear_teams first) and approval.",
+    "Create a new Linear issue via issueCreate. Pause-and-approve: the call surfaces the approval card; the create fires only after the user clicks Approve. priority is 0=none, 1=urgent, 2=high, 3=medium, 4=low.\n\nUse when: the user explicitly wants to track work in Linear ('file this as a Linear issue in the Eng team'). Call list_linear_teams first — never guess team_id; Linear rejects unknown ids. Example: { title: 'Fix billing migration', team_id: '…uuid…', priority: 2 }.\n\nDo NOT use to update an existing issue (call update_linear_issue). Do NOT use to comment (call comment_on_linear_issue). Do NOT use to fetch (call get_linear_issue / search_linear).\n\nReturns: { ok, issue_id, identifier, url } on success; { ok: false, error } when no Linear connection exists, team_id is invalid, or Linear's API rejects the mutation.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

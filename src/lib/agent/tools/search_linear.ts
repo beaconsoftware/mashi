@@ -15,7 +15,7 @@ type Args = z.infer<typeof args>;
 export const search_linear: ToolDefinition<Args, unknown> = {
   name: "search_linear",
   description:
-    "Search Linear issues by query, status, priority, assignee_email, or company. Default sort: last_synced_at DESC. Default limit 30, max 100.",
+    "Search Linear issues by free-text query, status, priority (numeric), assignee_email, or company_id. Default sort: last_synced_at DESC. Default limit 30, max 100.\n\nUse when: the user asks 'find that Linear issue about X', 'what's open in MPP's project?'. Example: { query: 'billing migration', status: 'In Progress' }.\n\nDo NOT use to fetch one issue's full body (call get_linear_issue). Do NOT use for S2D items.\n\nReturns: { issues, count }. Each row carries title, status, priority, assignee_name/email, url.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

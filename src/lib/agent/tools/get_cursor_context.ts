@@ -20,7 +20,7 @@ type Args = z.infer<typeof args>;
 export const get_cursor_context: ToolDefinition<Args, unknown> = {
   name: "get_cursor_context",
   description:
-    "Returns the latest cursor context (route, focused item, sprint state, etc.) the user has, if available. Returns null when called from MCP/PAT contexts — only the in-app agent has a live cursor.",
+    "Return the latest cursor context (route, focused item, multi-select, active sprint, recently viewed) the in-app agent already has from the user's session. MCP / PAT callers always get null (no live cursor outside the browser).\n\nUse when: you've already received the cursor preamble but want to re-introspect it mid-turn (rare), or you're running via MCP and want to confirm you have no cursor. Example: {}.\n\nDo NOT use as the first call on every in-app turn — the loop already injects this into the system prompt. Don't bloat tokens with redundant retrieval.\n\nReturns: { cursor }. cursor is null for MCP / PAT origins.",
   ring: "read",
   args,
   handler: async () => {

@@ -24,7 +24,7 @@ export const comment_on_linear_issue: ToolDefinition<
 > = {
   name: "comment_on_linear_issue",
   description:
-    "Post a comment on a Linear issue. Requires user approval.",
+    "Post a comment on a Linear issue via commentCreate. Pause-and-approve: the call surfaces the approval card; the comment posts only after the user clicks Approve. id is the Linear UUID (external_id), not the human identifier.\n\nUse when: the user explicitly asks to drop a note on a Linear issue ('add a comment that we're blocked on legal'). Example: { id: '…uuid…', body: 'Blocked on legal sign-off; expected by Friday.' }.\n\nDo NOT use to update issue fields (call update_linear_issue). Do NOT use to read comments (no read tool covers individual comments yet — use get_linear_issue for the issue body).\n\nReturns: { ok, comment_id } on success; { ok: false, error } when no Linear connection exists, the id is unknown, or the mutation fails.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

@@ -18,7 +18,7 @@ type Args = z.infer<typeof args>;
 export const list_needs_review: ToolDefinition<Args, unknown> = {
   name: "list_needs_review",
   description:
-    "Items flagged by triage as needing user review (the Review column on the S2D board). Sorted newest-first. Default limit 30, max 100.",
+    "List items flagged by triage as needing user review (the Review column on the S2D board). Sorted newest-first. Default limit 30, max 100.\n\nUse when: the user asks 'what needs my attention?', 'anything triaged today?', or you want a queue of decisions to walk through. Example: { limit: 10 }.\n\nDo NOT use to fetch the rest of the board (call search_board with pathway/status filters). To clear a row from the queue use approve_review_item or reject_review_item, not this read.\n\nReturns: { items, count }. Each row includes the triage ai_suggestion so the agent can frame the decision.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

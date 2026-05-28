@@ -15,7 +15,7 @@ type Args = z.infer<typeof args>;
 export const get_item: ToolDefinition<Args, unknown> = {
   name: "get_item",
   description:
-    "Fetch a single S2D item by uuid or ticket_number (the integer part of MASH-N). Returns the item plus its company_name when set.",
+    "Fetch one S2D item by uuid or ticket number (the integer in MASH-N). Includes the joined company_name when one is set.\n\nUse when: the user names a specific item by ticket id or you already have a uuid from resolve_reference / search_board. Example: { ticket_number: 1408 }.\n\nDo NOT use to search by free text — call resolve_reference (for a single best match) or search_board (for a list) instead.\n\nReturns: { item } on success; { item: null } when no row matches. Errors are thrown.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

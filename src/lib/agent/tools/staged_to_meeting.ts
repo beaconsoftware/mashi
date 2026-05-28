@@ -34,7 +34,7 @@ export const staged_to_meeting: ToolDefinition<
 > = {
   name: "staged_to_meeting",
   description:
-    "Stage an S2D item for an upcoming meeting: persists talking points and marks the item done with resolved_via=meeting:staged. Requires user approval.",
+    "Stage a meeting-backed S2D item against a specific upcoming calendar event: persists talking points on the item, marks status=done with resolved_via='meeting:staged'. Pause-and-approve: the call surfaces the approval card before committing.\n\nUse when: the user wants to defer an item to be handled in an upcoming meeting ('I'll bring this up in the 1:1 with Maya'). Example: { item_id: '…uuid…', calendar_event_id: 'gcal_abc123', talking_points: 'Q4 brand spend discussion: revised proposal, timeline, budget' }.\n\nDo NOT use to create the meeting itself (call create_calendar_event). Do NOT use to log a decision (call log_decision). Ground the calendar_event_id with get_calendar_event / list_today first.\n\nReturns: { ok, outcome } on success; { ok: false, error } when the item is missing or the update fails.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

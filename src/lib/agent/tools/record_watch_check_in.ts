@@ -27,7 +27,7 @@ export const record_watch_check_in: ToolDefinition<
 > = {
   name: "record_watch_check_in",
   description:
-    "Record a check-in on a watching item. continued=true keeps the item in queue; continued=false marks the terminal stop-watching event. Reversible for 30 seconds.",
+    "Append a check-in entry to a watching-pathway item's trail. continued=true means 'still watching, no change'; continued=false records the terminal stop-watching event (the item should then be closed via complete_item separately).\n\nUse when: the user updates a watching item ('still nothing from them; check again in a week'; 'stop watching this, they replied'). Example: { item_id: '…uuid…', continued: true, note: 'No response yet, will re-check Monday' }.\n\nDo NOT use to set the watch target or condition (use set_watch_target). Do NOT use to complete the item itself; call complete_item.\n\nReturns: { ok, check_in, _undo } on success; { ok: false, error } when the item is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

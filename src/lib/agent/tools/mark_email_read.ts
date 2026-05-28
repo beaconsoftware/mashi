@@ -24,7 +24,7 @@ export const mark_email_read: ToolDefinition<
 > = {
   name: "mark_email_read",
   description:
-    "Mark a Gmail message as read by removing the UNREAD label. Requires user approval.",
+    "Mark a Gmail message as read by removing the UNREAD label. Pause-and-approve: the call surfaces the approval card; the label change fires only after the user clicks Approve. The change is visible in other Gmail clients (web, mobile).\n\nUse when: the user explicitly asks to clear an unread flag ('mark Maya's email as read'). Example: { message_id: 'ABC123…' } where message_id is the external_id from search_messages.\n\nDo NOT use to read a message body (call get_message_thread). Do NOT archive in the same call — call archive_email separately if needed.\n\nReturns: { ok } on success; { ok: false, error } when the message isn't found in any connected account or Gmail rejects the modify.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

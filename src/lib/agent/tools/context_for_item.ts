@@ -21,7 +21,7 @@ interface LinkedSource {
 export const context_for_item: ToolDefinition<Args, unknown> = {
   name: "context_for_item",
   description:
-    "Full source-side context for an S2D item: every linked Gmail thread, Slack conversation, Linear issue, Fireflies meeting, and calendar event hydrated.",
+    "Hydrate every linked source for one S2D item in one round-trip: Gmail / Slack threads, Linear issues, Fireflies meetings, and calendar events. Pulls the full message body of each linked thread, not just the preview.\n\nUse when: you need to answer 'what is this item really about?' or 'why is it open?' — anything that requires reading the underlying conversation, not just the item row. Example: { ticket_number: 1408 }.\n\nDo NOT use to fetch just the S2D row (call get_item). Do NOT call repeatedly for the same item in a turn — it hits multiple sources.\n\nReturns: { item, sources[] }. Each source has hydrated messages / issue / meeting / event payloads. Empty sources when no provider links were captured.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

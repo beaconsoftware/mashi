@@ -20,7 +20,7 @@ type Args = z.infer<typeof args>;
 export const get_current_sprint: ToolDefinition<Args, unknown> = {
   name: "get_current_sprint",
   description:
-    "Active sprint session if one is in progress (started_at set, completed_at null). Returns null otherwise. Includes planned_items snapshot taken at sprint start.",
+    "Return the user's active sprint session (started_at set, completed_at null) including the planned_items snapshot, theme, notes, and time totals. Returns null when no sprint is running.\n\nUse when: the user asks 'how's my sprint going?', 'what's left in this sprint?', or you need to ground a sprint-related action. Example: {}.\n\nDo NOT use to start/pause/exit a sprint — sprint lifecycle lives in the client-side store, not in tools. Do NOT use to fetch today's broader context; use get_today for that.\n\nReturns: { sprint } where sprint is the row (id, started_at, planned_items, theme, notes, totals) or null when none is active.",
   ring: "read",
   args,
   handler: async (_input, ctx) => {

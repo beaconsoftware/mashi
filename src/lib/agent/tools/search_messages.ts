@@ -14,7 +14,7 @@ type Args = z.infer<typeof args>;
 export const search_messages: ToolDefinition<Args, unknown> = {
   name: "search_messages",
   description:
-    "Search Gmail + Slack messages by query, source, sender, or since-date. Default sort: received_at DESC. Default limit 30, max 100.",
+    "Search Gmail + Slack messages by free-text query, source (gmail|slack), sender_email, or a since-date. Default sort: received_at DESC. Default limit 30, max 100.\n\nUse when: the user asks 'what did Maya send last week?', 'find that message about brand spend', or you need a thread_id before calling get_message_thread. Example: { query: 'brand spend', source: 'gmail', since: '2026-05-01' }.\n\nDo NOT use to read the full body of one thread — call get_message_thread for that. Do NOT use for Linear / meeting / S2D content; use search_linear, search_meetings, search_board.\n\nReturns: { messages, count }. Each message has preview (truncated) and full_content (≤10k chars).",
   ring: "read",
   args,
   handler: async (input, ctx) => {

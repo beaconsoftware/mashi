@@ -31,7 +31,7 @@ export const merge_items: ToolDefinition<
 > = {
   name: "merge_items",
   description:
-    "Merge duplicate items into a primary. Duplicates are soft-deleted (status=done, resolved_via=merged). Reversible for 30 seconds.",
+    "Merge duplicate S2D items into a primary. Each duplicate is soft-deleted (status=done, resolved_via=merged), and their agent threads are absorbed into the primary's thread for lifecycle continuity.\n\nUse when: the user identifies duplicates ('these are the same — merge X and Y into Z'), or you've found duplicate candidates via search_board. Example: { primary_id: '…uuid…', duplicate_ids: ['…uuid…', '…uuid…'] }.\n\nDo NOT use to close one item (call complete_item). Do NOT include the primary_id in duplicate_ids (the call rejects this). Ground each id with resolve_reference / search_board first.\n\nReturns: { ok, primary, duplicates, _undo } on success; { ok: false, error } when the primary or any duplicate is missing or primary_id is in duplicate_ids. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

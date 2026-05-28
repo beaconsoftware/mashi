@@ -20,7 +20,7 @@ export const approve_review_item: ToolDefinition<
 > = {
   name: "approve_review_item",
   description:
-    "Approve an item currently in the Review column (clears needs_review). Reversible for 30 seconds.",
+    "Approve an item currently in the Review column: clears needs_review so the item moves into the active board. The item keeps its triage-assigned pathway / priority unless the agent edits them separately.\n\nUse when: the user explicitly accepts a triaged item ('yes, keep that one', 'approve MASH-1408'). Example: { id: '…uuid…' }.\n\nDo NOT use to reject (call reject_review_item). Do NOT use on items that aren't in Review — use list_needs_review or get_item to confirm needs_review=true.\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is missing or not flagged. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

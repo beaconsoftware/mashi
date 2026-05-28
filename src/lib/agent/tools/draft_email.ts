@@ -25,7 +25,7 @@ export const draft_email: ToolDefinition<
 > = {
   name: "draft_email",
   description:
-    "Create a Gmail draft (does not send). Requires user approval. Use this when the user wants something staged for review in Gmail rather than dispatched immediately.",
+    "Create a Gmail draft (does NOT send). Pause-and-approve: the call surfaces the approval card; the draft is created only after the user clicks Approve. Lands in the user's Gmail drafts folder.\n\nUse when: the user wants something staged for review in Gmail rather than dispatched immediately, or the copy still needs iteration. Example: { to: 'maya@portco.com', subject: 'Re: Q4 brand spend', body: 'Draft…' }.\n\nDo NOT use when the user has already approved sending — call send_email. Do NOT use to read a thread (call get_message_thread). Pull the user's voice with get_style before composing.\n\nReturns: { ok, draft_id } on success; { ok: false, error } when no Gmail account is connected or Gmail rejects the draft.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

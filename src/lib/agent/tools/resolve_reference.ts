@@ -27,7 +27,7 @@ export const resolve_reference: ToolDefinition<
 > = {
   name: "resolve_reference",
   description:
-    "Find S2D items matching a free-text reference (e.g. 'the brand spend thing'). Returns ranked candidates with confidence scores. Use this whenever the user mentions an item without a ticket id. Ticket numbers like MASH-1408 or '#1408' bypass ranking and return the exact match.",
+    "Find S2D items matching a free-text reference and return ranked candidates with confidence scores (0-1). Ticket numbers like 'MASH-1408' or '#1408' bypass ranking and return the exact match at confidence ≈ 0.99.\n\nUse when: the user names an item without a ticket id ('the brand spend thing'). If exactly one candidate has confidence ≥ 0.8 the agent may proceed; if multiple low-confidence candidates come back, call ask_followup_question with them as options. Example: { text: 'the brand spend thing' }.\n\nDo NOT use for non-S2D references (people → who_is, messages → search_messages). Do NOT use as a substitute for search_board — this returns ranked candidates, not a filtered list.\n\nReturns: { candidates, count }. Each candidate carries id, ticket_number, title, status, pathway, confidence, match_reason.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

@@ -16,7 +16,7 @@ interface Attendee {
 export const who_is: ToolDefinition<Args, unknown> = {
   name: "who_is",
   description:
-    "Cross-source person lookup. Returns recent meetings they attended, messages from/to them (Gmail + Slack), Linear issues they own, and S2D items mentioning them.",
+    "Cross-source person lookup by name or email. Returns recent Gmail + Slack messages from/to them, Linear issues they own, S2D items mentioning them, and meetings they attended.\n\nUse when: the user asks 'who is Maya?', 'what does X have on their plate?', or you need to ground a name before talking about it. Example: { identifier: 'maya@portco.com' }.\n\nDo NOT use to fetch the agent caller's own profile — call whoami instead. For a single S2D item search rather than person search, use resolve_reference / search_board.\n\nReturns: { identifier, gmail, slack, linear, s2d_items, meetings, counts }. Every list is capped at limit_per_source (default 5, max 25).",
   ring: "read",
   args,
   handler: async (input, ctx) => {

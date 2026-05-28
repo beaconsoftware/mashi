@@ -8,7 +8,7 @@ type Args = z.infer<typeof args>;
 export const whoami: ToolDefinition<Args, unknown> = {
   name: "whoami",
   description:
-    "Self-introspection: profile, connected providers, company + open-item counts. Useful as the first call so the agent orients to the user.",
+    "Return the current user's profile (name, email, communication style), connected providers with sync status, and basic counts (companies, open S2D items). Useful as a first call to orient before doing anything else.\n\nUse when: starting a fresh conversation and the cursor context is thin, or the user asks 'what are my connections?', 'do I have Gmail synced?'. Example: {}.\n\nDo NOT use to fetch a different user's profile — this tool is always self-scoped. Use who_is to look up other people across the user's sources.\n\nReturns: { user_id, profile, connections[], counts }. Fields are null / empty when not populated; the call does not error on partial data.",
   ring: "read",
   args,
   handler: async (_input, ctx) => {

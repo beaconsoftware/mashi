@@ -27,7 +27,7 @@ export const snooze_item: ToolDefinition<
 > = {
   name: "snooze_item",
   description:
-    "Snooze an item until a given datetime. Sets status=in_queue and snoozed_until. Pass an ISO datetime (2026-06-01T09:00:00Z) or a YYYY-MM-DD date.",
+    "Snooze an S2D item: sets status=in_queue and snoozed_until in one shot, so the item disappears from the active board and resurfaces at the wake time. Accepts an ISO datetime ('2026-06-01T09:00:00Z') or YYYY-MM-DD date.\n\nUse when: the user explicitly defers an item ('snooze MASH-1408 until next Monday', 'come back to this in a week'). Example: { id: '…uuid…', until: '2026-06-08' }.\n\nDo NOT use to set only the snoozed_until field without changing status (use set_item_snoozed_until). Do NOT use as a substitute for resolve_reference / search_board when picking the target; ground the id first.\n\nReturns: { ok, item, _undo } on success; { ok: false, error } for an invalid date or missing item. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

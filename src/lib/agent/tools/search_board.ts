@@ -27,7 +27,7 @@ type Args = z.infer<typeof args>;
 export const search_board: ToolDefinition<Args, unknown> = {
   name: "search_board",
   description:
-    "Search S2D items by query, pathway, priority, status, or company. Default sort: updated_at DESC. Default limit 30, max 100.",
+    "Search the user's S2D board with optional free-text query plus structured filters (pathway, priority, status, company_id). Default sort: updated_at DESC. Default limit 30, max 100.\n\nUse when: the user asks 'what's in my queue?', 'what decision gates are urgent?', or wants a filtered slice of the board. Example: { pathway: 'decision_gate', priority: ['urgent', 'high'], status: 'todo' }.\n\nDo NOT use to resolve a single ambiguous reference (call resolve_reference) or to search non-S2D sources like messages / meetings / Linear (use search_messages / search_meetings / search_linear, or search_everything for a mixed sweep).\n\nReturns: { items, count }. Empty list when nothing matches.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

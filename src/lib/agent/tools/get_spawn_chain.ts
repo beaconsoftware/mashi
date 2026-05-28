@@ -34,7 +34,7 @@ interface ChainNode {
 export const get_spawn_chain: ToolDefinition<Args, unknown> = {
   name: "get_spawn_chain",
   description:
-    "Walks the spawn chain (ancestors via spawned_from_item_id + descendants) for a given item. Caps traversal depth at max_depth (default 10, max 20).",
+    "Walk the spawn chain (ancestors via spawned_from_item_id + descendants) for a given S2D item. Caps traversal depth at max_depth (default 10, max 20).\n\nUse when: the user asks 'what spawned this?', 'what came out of this?', 'show me the whole chain' — anything that needs the family tree of a follow-up item. Example: { item_id: '…uuid…', max_depth: 5 }.\n\nDo NOT use for unrelated items (resolve_reference / search_board first). Do NOT use to mutate the chain — call spawn_follow_up to add a new descendant.\n\nReturns: { root, ancestors[], descendants[] }. root is null when the item doesn't exist.",
   ring: "read",
   args,
   handler: async (input, ctx) => {
