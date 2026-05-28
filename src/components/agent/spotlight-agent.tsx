@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, MessageSquareText, Search, Sparkles } from "lucide-react";
 import {
   Dialog,
@@ -35,7 +35,6 @@ import { SpotlightSearchPanel } from "@/components/spotlight/spotlight-modal";
 import { ThreadView } from "@/components/agent/thread-view";
 import { useAgentThread } from "@/store/agent-thread-store";
 import { AgentComposer } from "@/components/agent/composer";
-import { useCursorContext } from "@/lib/agent/cursor-context";
 import { Button } from "@/components/ui/button";
 
 type SpotlightTab = "ask" | "search";
@@ -197,11 +196,20 @@ function AskMashiTab({
   onItemBound: (itemId: string) => void;
   onResumeOrphan: (threadId: string) => void;
 }) {
-  const cursor = useCursorContext();
   const openFor = useAgentThread((s) => s.openFor);
-  const queryClient = useQueryClient();
   const [sending, setSending] = useState(false);
-  const [initialMessage, setInitialMessage] = useState("");
+  // First message the user typed on this empty Spotlight session.
+  // Once the orphan row is created we hand this down to ThreadView,
+  // which fires the actual send (optimistic bubble + streaming) so the
+  // user sees their message land instead of staring at an empty thread
+  // while a parallel POST drains in the background. The previous
+  // implementation POSTed here AND mounted ThreadView in parallel —
+  // ThreadView had no awareness of the in-flight message, rendered an
+  // empty conversation with the default "Act" mode toggle, and the
+  // user reasonably concluded the message had been eaten.
+  const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(
+    null
+  );
 
   const recents = useQuery<{ threads: RecentThread[] }>({
     queryKey: ["agent-threads-recent"],
@@ -222,6 +230,7 @@ function AskMashiTab({
         threadId={threadId}
         key={threadId}
         onItemBound={onItemBound}
+        initialMessage={pendingFirstMessage ?? undefined}
       />
     );
   }
@@ -233,45 +242,17 @@ function AskMashiTab({
   async function send(message: string) {
     if (sending || !message.trim()) return;
     setSending(true);
-    setInitialMessage(message);
+    setPendingFirstMessage(message);
     const newId = await onCreate();
     if (!newId) {
       setSending(false);
+      setPendingFirstMessage(null);
       return;
     }
-    // Persist + stream the very first message immediately. The fresh
-    // ThreadView mounts on the next render; we POST to the by-id
-    // /messages endpoint directly so the user doesn't have to retype.
-    try {
-      await fetch(`/api/agent/threads/by-id/${newId}/messages`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message, cursor }),
-      }).then(async (res) => {
-        // Drain the body so the stream completes server-side and the
-        // ThreadView's GET on mount picks up the persisted turn.
-        if (res.body) {
-          const reader = res.body.getReader();
-          while (true) {
-            const { done } = await reader.read();
-            if (done) break;
-          }
-        }
-      });
-      // ThreadView mounted with stale (empty) data while the stream
-      // drained here. Invalidate so it refetches and surfaces the
-      // first turn — without this the conversation looks empty until
-      // the user sends a second message.
-      queryClient.invalidateQueries({
-        queryKey: ["agent-thread-by-id", newId],
-      });
-      queryClient.invalidateQueries({ queryKey: ["agent-threads-recent"] });
-    } catch {
-      // ThreadView's own send/error UI takes over once it mounts.
-    } finally {
-      setSending(false);
-    }
+    // No-op: setOrphanThreadId in the parent triggers the early-return
+    // branch above, mounting <ThreadView initialMessage={message} />.
+    // ThreadView owns the POST + stream + optimistic bubble from here.
+    setSending(false);
   }
 
   const threads = recents.data?.threads ?? [];
@@ -283,7 +264,7 @@ function AskMashiTab({
           {creating || sending ? (
             <div className="inline-flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" />
-              {initialMessage
+              {pendingFirstMessage
                 ? "Opening a new conversation…"
                 : "Loading…"}
             </div>

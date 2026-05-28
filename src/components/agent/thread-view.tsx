@@ -113,6 +113,7 @@ export function ThreadView({
   itemId,
   threadId,
   onItemBound,
+  initialMessage,
 }: {
   itemId?: string;
   threadId?: string;
@@ -120,6 +121,13 @@ export function ThreadView({
    * (attach_thread_to_item). The Spotlight surface uses this to swap
    * over to the item-bound sheet for subsequent turns. */
   onItemBound?: (itemId: string) => void;
+  /** First message to send the moment this thread mounts. Used by the
+   * Spotlight Ask Mashi flow: the user types in the dialog composer,
+   * we create the orphan row, then hand the message to ThreadView so
+   * it owns the send (optimistic bubble + streaming) instead of
+   * AskMashiTab racing the mount with a parallel POST. Fires once per
+   * thread; guarded by a per-thread ref so re-renders don't re-send. */
+  initialMessage?: string;
 }) {
   if (!itemId && !threadId) {
     throw new Error("ThreadView requires either itemId or threadId");
@@ -334,6 +342,25 @@ export function ThreadView({
       mode: activeMode,
     });
   }
+
+  // Auto-fire the first message when ThreadView is handed one. Used by
+  // the Spotlight Ask Mashi flow: AskMashiTab creates the orphan row,
+  // then mounts us with the user's typed text — we own the send from
+  // here so the optimistic bubble + streaming render in this view.
+  // Per-thread ref guard: if React re-runs the effect (StrictMode, key
+  // change without unmount, etc.) we don't double-send.
+  const firedInitialRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialMessage || !initialMessage.trim()) return;
+    const k = threadId ?? itemId ?? "";
+    if (!k || firedInitialRef.current === k) return;
+    firedInitialRef.current = k;
+    void send(initialMessage);
+    // `send` closes over streaming + activeMode + cursor by design — we
+    // only want this to fire once per thread when the initial message
+    // first arrives, so we don't include it in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMessage, threadId, itemId]);
 
   async function pickFollowUp(followUpId: string, option: string) {
     if (streaming) return;
