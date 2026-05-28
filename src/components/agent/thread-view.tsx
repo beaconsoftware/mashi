@@ -38,6 +38,10 @@ import {
   ApprovalCard,
   type PendingApproval,
 } from "@/components/agent/approval-card";
+import {
+  FollowUpCard,
+  type PendingFollowUp,
+} from "@/components/agent/follow-up-card";
 import { ThreadSummaryCard } from "@/components/agent/thread-summary-card";
 import type { AgentDelta } from "@/lib/agent/loop";
 
@@ -138,6 +142,14 @@ export function ThreadView({
   const [error, setError] = useState<string | null>(null);
   const [undoables, setUndoables] = useState<UndoableAction[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
+  // Quality Phase 1: the model can ask one focused follow-up question
+  // via the ask_followup_question tool. We track the unanswered one (at
+  // most one is in flight at a time — the loop short-circuits after
+  // emitting it) and render a chip-list card. Cleared when an option is
+  // picked or a free-text turn lands.
+  const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>(
+    []
+  );
 
   // After an undo (or expiry), drop the strip and refresh the s2d
   // board cache so the optimistic update / revert is reflected
@@ -167,20 +179,76 @@ export function ThreadView({
     return map;
   }, [data?.messages]);
 
-  async function send(message: string) {
-    if (!message.trim() || streaming) return;
+  // Derive any pending follow-up from persisted messages. A follow-up is
+  // "pending" if the latest assistant turn called ask_followup_question
+  // and no subsequent user message has landed. Walking newest-first: a
+  // user message before any assistant tool_use means the prior question
+  // was answered, so we stop. This is what keeps the card alive across
+  // page reloads even though no live SSE delta is replayed.
+  const persistedFollowUps = useMemo<PendingFollowUp[]>(() => {
+    const msgs = data?.messages ?? [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.role === "user") return [];
+      if (m.role === "assistant" && Array.isArray(m.tool_calls)) {
+        const followUps: PendingFollowUp[] = [];
+        for (const tc of m.tool_calls) {
+          if (tc.name !== "ask_followup_question") continue;
+          const input = tc.input as
+            | { question?: unknown; options?: unknown }
+            | null;
+          const question =
+            input && typeof input.question === "string" ? input.question : null;
+          if (!question) continue;
+          const options =
+            input && Array.isArray(input.options)
+              ? input.options.filter(
+                  (o): o is string => typeof o === "string"
+                )
+              : undefined;
+          followUps.push({ id: tc.id, question, options });
+        }
+        if (followUps.length > 0) return followUps;
+      }
+    }
+    return [];
+  }, [data?.messages]);
+
+  // Live (just-streamed) follow-ups merged with persisted ones, deduped
+  // by tool_use_id. The live ones fill the gap before the persisted
+  // query refetches; once it does, both refer to the same call id and
+  // the persisted state takes over.
+  const followUpsToRender = useMemo<PendingFollowUp[]>(() => {
+    const seen = new Set<string>();
+    const all: PendingFollowUp[] = [];
+    for (const fu of pendingFollowUps) {
+      if (seen.has(fu.id)) continue;
+      seen.add(fu.id);
+      all.push(fu);
+    }
+    for (const fu of persistedFollowUps) {
+      if (seen.has(fu.id)) continue;
+      seen.add(fu.id);
+      all.push(fu);
+    }
+    return all;
+  }, [pendingFollowUps, persistedFollowUps]);
+
+  async function streamAgentTurn(url: string, body: unknown) {
+    if (streaming) return;
     setStreaming(true);
     setLiveText("");
     setLiveToolCalls([]);
     setPendingApprovals([]);
+    setPendingFollowUps([]);
     setError(null);
 
     try {
-      const res = await fetch(`${baseEndpoint}/messages`, {
+      const res = await fetch(url, {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message, cursor }),
+        body: JSON.stringify(body),
       });
       if (!res.ok || !res.body) {
         setError(`Couldn't reach Mashi (${res.status}).`);
@@ -221,6 +289,19 @@ export function ThreadView({
       setLiveToolCalls([]);
       queryClient.invalidateQueries({ queryKey });
     }
+  }
+
+  async function send(message: string) {
+    if (!message.trim() || streaming) return;
+    await streamAgentTurn(`${baseEndpoint}/messages`, { message, cursor });
+  }
+
+  async function pickFollowUp(followUpId: string, option: string) {
+    if (streaming) return;
+    await streamAgentTurn(`${baseEndpoint}/follow-up/${followUpId}`, {
+      chosen: option,
+      cursor,
+    });
   }
 
   function applyDelta(d: AgentDelta) {
@@ -264,6 +345,21 @@ export function ThreadView({
         }
         return next;
       });
+    } else if (d.kind === "follow-up-question") {
+      // Model asked a focused clarification. Surface the card; the loop
+      // has already short-circuited and is waiting on the user.
+      setPendingFollowUps((prev) =>
+        prev.some((p) => p.id === d.id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: d.id,
+                question: d.question,
+                options: d.options,
+              },
+            ]
+      );
     } else if (d.kind === "approval-needed") {
       // Ring 3 call paused — surface an inline approval card for the
       // user to Approve / Edit / Cancel. The loop is blocked polling
@@ -358,6 +454,18 @@ export function ThreadView({
               liveText={liveText}
               liveToolCalls={liveToolCalls}
             />
+          )}
+          {followUpsToRender.length > 0 && (
+            <div className="space-y-1.5">
+              {followUpsToRender.map((fu) => (
+                <FollowUpCard
+                  key={fu.id}
+                  followUp={fu}
+                  busy={streaming}
+                  onPick={pickFollowUp}
+                />
+              ))}
+            </div>
           )}
           {pendingApprovals.length > 0 && (
             <div className="space-y-1.5">

@@ -66,6 +66,17 @@ export type AgentDelta =
       id: string;
       outcome: "approve" | "edit" | "cancel" | "expired";
     }
+  | {
+      kind: "follow-up-question";
+      /** Anthropic tool_use_id for ask_followup_question. The UI uses
+       * this when POSTing the option click to the follow-up route, and
+       * to dedupe a re-rendered card against a stream-emitted one. */
+      id: string;
+      question: string;
+      /** 2-5 short option strings. Absent when the model asked an
+       * open-ended question. */
+      options?: string[];
+    }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
@@ -131,6 +142,9 @@ function buildSystemPrompt(opts: {
     "Reference resolution: if the user names an item without a ticket id (e.g. 'the brand spend thing'), call resolve_reference first. If 0 candidates come back, ask the user to be more specific. If exactly 1 candidate with confidence >= 0.8, proceed with that item. If multiple candidates or any low-confidence result, list the candidates back to the user and let them pick before acting."
   );
   lines.push(
+    "Before any write tool, you MUST be able to name (a) the exact target entity by its ID, (b) the user's intent in one sentence, (c) the success criterion. If any is uncertain, call ask_followup_question with 2-5 specific options. Do not call any tool to find out what the user meant — ask."
+  );
+  lines.push(
     "Orphan threads: if this conversation has no item binding yet (Spotlight chat), once the user confirms an item, call attach_thread_to_item so subsequent turns are anchored to it."
   );
   lines.push(
@@ -138,6 +152,11 @@ function buildSystemPrompt(opts: {
   );
   lines.push(
     "Email + Slack bodies: when the user asks about content of a message (what someone said, what they asked for, an amount, a date), call get_message_thread and read the `full_content` field, not the `preview`. Previews are truncated at 240 chars and routinely cut off mid-sentence."
+  );
+  lines.push("");
+  lines.push("# Clarification");
+  lines.push(
+    "If the user references an entity ambiguously (e.g., 'the brand spend thing' matching multiple items), call resolve_reference first; if multiple candidates come back with confidence < 0.9, call ask_followup_question with the candidates as options. Never guess. Never run a write tool on a guess."
   );
   lines.push("");
   lines.push("# Cursor context");
@@ -390,6 +409,12 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
       content: string;
       is_error: boolean;
     }> = [];
+    // Quality Phase 1: when ask_followup_question fires we break out of
+    // the loop after this iteration so the model can't keep tool-calling
+    // before the user replies. The follow-up card stays in the timeline;
+    // the user's reply lands as the next user turn (either by clicking
+    // an option or typing in the composer).
+    let askedFollowUp = false;
     for (const call of assistantToolCalls) {
       const def = toolMap.get(call.name);
       if (!def) {
@@ -610,6 +635,19 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
           ok: true,
           result: modelResult,
         });
+        if (def.name === "ask_followup_question") {
+          const followUpArgs = parsed.data as {
+            question: string;
+            options?: string[];
+          };
+          opts.onDelta({
+            kind: "follow-up-question",
+            id: call.id,
+            question: followUpArgs.question,
+            options: followUpArgs.options,
+          });
+          askedFollowUp = true;
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "tool failed";
         // Ring 2/3 failures land an audit row so the user can see what
@@ -661,6 +699,8 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
         is_error: r.is_error,
       })) as unknown as Anthropic.Messages.MessageParam["content"],
     });
+
+    if (askedFollowUp) break;
   }
 
   opts.onDelta({ kind: "done" });
