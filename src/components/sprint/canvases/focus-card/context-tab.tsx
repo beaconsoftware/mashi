@@ -7,15 +7,19 @@ import {
   GitBranch,
   Inbox,
   KanbanSquare,
+  Loader2,
   MessageSquare,
   CornerDownRight,
   Gavel,
   ListChecks,
   ScrollText,
+  Sparkles,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   useEnrichedContext,
+  useRunEnrich,
   type EnrichSourceKind,
   type EnrichPulledSource,
 } from "@/hooks/use-enriched-context";
@@ -35,6 +39,9 @@ export function ContextTab({ item }: { item: S2DItem }) {
   const sources = enriched.data?.enriched_context?.pulled_sources ?? [];
   const visibleSources = sources.slice(0, 8);
   const deepLinks = useSourceDeepLinks(visibleSources);
+
+  const runEnrich = useRunEnrich(item.id);
+  const enriching = runEnrich.isPending;
 
   const checkIns = useWatchCheckIns(item.id);
   const lastCheckIn = checkIns.data?.history?.[0] ?? null;
@@ -57,17 +64,45 @@ export function ContextTab({ item }: { item: S2DItem }) {
     related.length > 0 ||
     !!sourceThread.data;
 
+  const enrichButton = (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      onClick={() => runEnrich.mutate(undefined)}
+      disabled={enriching}
+      className="mashi-press h-7 gap-1.5 px-2 text-[11px]"
+      title="Pull related sources (Gmail / Slack / Linear / Fireflies) into this item's context"
+    >
+      {enriching ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <Sparkles className="h-3 w-3" />
+      )}
+      {enriching
+        ? "Pulling…"
+        : sources.length > 0
+          ? "Refresh sources"
+          : "Pull context"}
+    </Button>
+  );
+
   if (!anyContent) {
     return (
-      <div className="rounded-md border border-dashed border-border/40 bg-card/60 p-3 text-[11px] text-muted-foreground">
-        No cached context yet. Try Ask Mashi in the Chat tab to pull
-        sources, log a decision, or check in.
+      <div className="space-y-3">
+        <div className="flex items-center justify-end">{enrichButton}</div>
+        <div className="rounded-md border border-dashed border-border/40 bg-card/60 p-3 text-[11px] text-muted-foreground">
+          No cached context yet. Hit Pull context to surface related
+          Gmail / Slack / Linear / Fireflies sources, or Ask Mashi in
+          the Chat tab.
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center justify-end">{enrichButton}</div>
       {visibleSources.length > 0 && (
         <Section title="Sources" icon={<Layers />}>
           <ul className="space-y-1.5">

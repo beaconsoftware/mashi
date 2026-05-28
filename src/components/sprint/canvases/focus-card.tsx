@@ -46,17 +46,24 @@ export function FocusCard({
         onValueChange={(v) => setTab(v as FocusTab)}
         className="flex h-full min-h-0 flex-col gap-2"
       >
-        <TabsList className="self-start">
-          <TabsTrigger value="plan" className="text-[11px]">
-            <ListChecks className="h-3 w-3" />
+        {/* `variant="line"` reads as proper tabs (underline under the
+            active one) — the default pill variant was visually too
+            close to a button row and didn't telegraph "switch between
+            views". */}
+        <TabsList
+          variant="line"
+          className="self-start border-b border-border/40"
+        >
+          <TabsTrigger value="plan" className="text-xs">
+            <ListChecks className="h-3.5 w-3.5" />
             Plan
           </TabsTrigger>
-          <TabsTrigger value="chat" className="text-[11px]">
-            <MessagesSquare className="h-3 w-3" />
+          <TabsTrigger value="chat" className="text-xs">
+            <MessagesSquare className="h-3.5 w-3.5" />
             Chat
           </TabsTrigger>
-          <TabsTrigger value="context" className="text-[11px]">
-            <Layers className="h-3 w-3" />
+          <TabsTrigger value="context" className="text-xs">
+            <Layers className="h-3.5 w-3.5" />
             Context
           </TabsTrigger>
         </TabsList>
