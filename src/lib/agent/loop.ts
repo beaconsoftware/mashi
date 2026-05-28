@@ -3,7 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { anthropic, MODELS } from "@/lib/anthropic/client";
 import { sanitizeForAITells } from "@/lib/anthropic/sanitize";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
-import { TOOL_REGISTRY, TOOL_REGISTRY_LIST } from "@/lib/agent/registry";
+import { TOOL_REGISTRY } from "@/lib/agent/registry";
 import { appendMessage, loadThread } from "@/lib/agent/threads";
 import type { AnyToolDefinition, CursorContext, ToolRing } from "@/lib/agent/types";
 import { serializeCursor } from "@/lib/agent/cursor-serialize";
@@ -11,6 +11,10 @@ import type { ReverseOp } from "@/lib/agent/undo";
 import { compactThreadIfNeeded } from "@/lib/agent/compact";
 import { HOOKS } from "@/lib/agent/hooks/registry";
 import { runPostToolHooks, runPreToolHooks } from "@/lib/agent/hooks/runner";
+import {
+  calledToolNamesFromMessages,
+  retrieveTools,
+} from "@/lib/agent/retrieve";
 
 /**
  * Mashi Agent — read-only loop (Phase 2).
@@ -307,13 +311,20 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
     : "act") as AgentMode;
   const mode: AgentMode = opts.mode ?? threadMode;
 
-  const rings = new Set(opts.toolRings ?? ["read"]);
-  const toolDefs =
-    mode === "plan"
-      ? TOOL_REGISTRY_LIST.filter(
-          (d) => d.ring === "read" || d.name === "ask_followup_question"
-        )
-      : TOOL_REGISTRY_LIST.filter((d) => rings.has(d.ring));
+  // Quality Phase 6: per-turn tool retrieval. The candidate pool is
+  // still bounded by mode (plan = read+ask) and the caller's rings, but
+  // we then narrow further: always-on CORE_TOOLS ∪ sticky (tools
+  // already called in this thread) ∪ top-K cosine-similar by user
+  // message. Falls back to the full candidate pool on any embed
+  // failure, so the agent never breaks if the local model can't load.
+  const rings: ToolRing[] = opts.toolRings ?? ["read"];
+  const calledThisThread = calledToolNamesFromMessages(messages);
+  const toolDefs = await retrieveTools({
+    userMessage: opts.userMessage,
+    mode,
+    rings,
+    calledThisThread,
+  });
   const anthropicTools = toolDefs.map(defToAnthropicTool);
   const toolMap = new Map(toolDefs.map((d) => [d.name, d]));
 
