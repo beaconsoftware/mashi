@@ -170,13 +170,22 @@ export function S2DItemCard({
         <span
           className={cn(
             "pointer-events-auto absolute -left-1 -top-1 transition-opacity",
-            // Visible on hover, focus-within, when this item is selected,
-            // or when ANY items are selected (so adding/removing from an
-            // existing selection doesn't require precise hovering).
+            // Visible at low opacity at rest so the affordance is
+            // discoverable (the first-time user sees a checkbox), then
+            // pops to full opacity on hover / focus / selected, or
+            // whenever the user already has a selection going (so
+            // adding to it doesn't require precise hovering).
             isSelected || anyMultiSelected
               ? "opacity-100"
-              : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+              : "opacity-30 group-hover:opacity-100 focus-within:opacity-100"
           )}
+          // Modifiers listed in the title so the user can discover the
+          // range / no-sheet-open shortcuts without docs.
+          title={
+            isSelected
+              ? "Deselect. Shift-click for range."
+              : "Select. Shift-click for range. Cmd-click anywhere on the card to select without opening it."
+          }
         >
           <Checkbox
             checked={isSelected}
