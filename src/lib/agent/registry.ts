@@ -41,6 +41,7 @@ import { set_plan } from "@/lib/agent/tools/set_plan";
 import { resolve_reference } from "@/lib/agent/tools/resolve_reference";
 import { attach_thread_to_item } from "@/lib/agent/tools/attach_thread_to_item";
 import { list_recent_threads } from "@/lib/agent/tools/list_recent_threads";
+import { ask_followup_question } from "@/lib/agent/tools/ask_followup_question";
 // Phase 5 — ring 3 (write_world) catalogue + supporting reads.
 import { list_linear_teams } from "@/lib/agent/tools/list_linear_teams";
 import { send_email } from "@/lib/agent/tools/send_email";
@@ -102,6 +103,8 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   // Phase 4 — reference resolver + orphan thread surface
   [resolve_reference.name]: resolve_reference,
   [list_recent_threads.name]: list_recent_threads,
+  // Quality Phase 1 — structured clarification escape valve.
+  [ask_followup_question.name]: ask_followup_question,
   // Ring 2 (write_mashi) — Phase 3
   [create_item.name]: create_item,
   [update_item.name]: update_item,
