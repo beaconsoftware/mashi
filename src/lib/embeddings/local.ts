@@ -15,20 +15,59 @@
  *   - `scripts/embed-tools.ts` — offline pass over TOOL_REGISTRY_LIST.
  *   - `src/lib/agent/retrieve.ts` — per-turn query embedding.
  *
- * If model load fails (network down, disk full, ONNX runtime issue),
- * the caller's try/catch is expected to fall back to a safe default
- * (e.g. ship the full tool pool) — we never want a runtime crash here
- * to take down the agent loop.
+ * Runtime caveat: on Vercel serverless `@huggingface/transformers`
+ * cannot load — it depends on `libonnxruntime.so.1`, a native shared
+ * library that isn't present in the Node runtime image. The static
+ * import alone is enough to blow the function up with a 500 before any
+ * caller's try/catch can fire. So:
+ *
+ *   1. The import is dynamic + try/wrapped so failures are catchable.
+ *   2. We refuse to even attempt loading on Vercel (`VERCEL=1`) —
+ *      `retrieveTools()` then falls back to shipping the full ring-
+ *      filtered tool pool. Less token-efficient, but the agent works.
+ *
+ * Offline scripts (`pnpm embed-tools`) still get the full local path
+ * because Node CLI doesn't set `VERCEL`. That keeps the precomputed
+ * `_embeddings.json` build pipeline intact.
  */
-import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+
+// Loosely typed because we lazy-load the module — pulling the real
+// FeatureExtractionPipeline type would force a static import of
+// @huggingface/transformers and reintroduce the cold-start crash.
+type FeatureExtractionPipeline = (
+  texts: string[],
+  opts: { pooling: "mean"; normalize: true }
+) => Promise<{ tolist(): number[][] }>;
 
 const MODEL = "Xenova/all-MiniLM-L6-v2";
 
 let pipelinePromise: Promise<FeatureExtractionPipeline> | null = null;
 
-function getPipeline(): Promise<FeatureExtractionPipeline> {
+function isUnsupportedRuntime(): boolean {
+  // Vercel sets VERCEL=1 in every serverless invocation. The onnxruntime
+  // native binary doesn't ship in Vercel's Node runtime, so loading the
+  // pipeline there throws "libonnxruntime.so.1: cannot open shared
+  // object file". Detect once, short-circuit forever.
+  return process.env.VERCEL === "1";
+}
+
+async function getPipeline(): Promise<FeatureExtractionPipeline> {
+  if (isUnsupportedRuntime()) {
+    throw new Error(
+      "embedLocal unsupported on this runtime (onnxruntime native binary unavailable)"
+    );
+  }
   if (!pipelinePromise) {
-    pipelinePromise = pipeline("feature-extraction", MODEL) as Promise<FeatureExtractionPipeline>;
+    pipelinePromise = (async () => {
+      // Dynamic import so module-load failure (missing native bin,
+      // missing optional dep) raises an awaitable Promise rejection
+      // instead of a synchronous, uncatchable top-level throw.
+      const mod = await import("@huggingface/transformers");
+      return (await mod.pipeline(
+        "feature-extraction",
+        MODEL
+      )) as unknown as FeatureExtractionPipeline;
+    })();
   }
   return pipelinePromise;
 }
