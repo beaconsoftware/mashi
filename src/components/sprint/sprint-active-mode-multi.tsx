@@ -75,6 +75,7 @@ import {
 import { RefineSheet } from "@/components/sprint/refine-sheet";
 import { useAgentThread } from "@/store/agent-thread-store";
 import { TimerRing } from "@/components/sprint/timer-ring";
+import { useTick } from "@/lib/use-tick";
 import { ItemContextPanel } from "@/components/s2d/item-context-panel";
 // Spotify ambient bg is mounted globally in AppShell. Sprint also mounts
 // the player IN its header (z-100 overlay would cover the global TopBar
@@ -149,8 +150,12 @@ export function SprintActiveModeMulti() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
 
-  // Tick once per second to drive the live timers.
-  const [, force] = useState(0);
+  // Per-leaf-component ticks now drive the live timers (each SlotCard /
+  // RailCard / DragGhost / ElapsedClock subscribes via `useTick(1000)`
+  // and rerenders itself). The global 1s force-rerender was eating CPU +
+  // making typing in the Focus card chat composer sluggish because it
+  // re-rendered the entire sprint tree every second.
+
   // Inline error banner — surfaces failed Done/Skip/Snooze PATCHes so the
   // user can retry rather than silently watching the cache roll back.
   const [banner, setBanner] = useState<{ kind: "err"; msg: string } | null>(null);
@@ -159,13 +164,6 @@ export function SprintActiveModeMulti() {
     const id = setTimeout(() => setBanner(null), 8000);
     return () => clearTimeout(id);
   }, [banner]);
-  // Local force tick for the 1s clock display (cheap re-render only).
-  useEffect(() => {
-    if (paused) return;
-    const id = setInterval(() => force((x) => x + 1), 1000);
-    return () => clearInterval(id);
-  }, [paused]);
-
   // Persist tick: every 5s, fold the in-flight delta of each active
   // slot into accumulatedMs via the store action. The persist
   // middleware's partialize captures the settled state on every
@@ -954,9 +952,9 @@ export function SprintActiveModeMulti() {
   const total = blocks.length;
   const done = completedBlocks.filter((b) => b.status === "done").length;
   const skippedCount = completedBlocks.filter((b) => b.status === "skipped").length;
-  const elapsedMin = sprintStartedAt
-    ? Math.round((Date.now() - new Date(sprintStartedAt).getTime()) / 60_000)
-    : 0;
+  // elapsedMin is now computed inside <SprintElapsedLabel> so its 1s
+  // re-render is local to that tiny label instead of cascading through
+  // the whole sprint tree.
 
   return (
     <FocusOverlay>
@@ -980,7 +978,10 @@ export function SprintActiveModeMulti() {
           <span className="text-sm font-semibold">Sprint · multi-active</span>
           <span className="rounded-md bg-secondary/50 px-2 py-0.5 text-[11px] text-muted-foreground">
             {done} done · {skippedCount} skipped · {total - done - skippedCount} left ·{" "}
-            {elapsedMin}m elapsed
+            <SprintElapsedLabel
+              sprintStartedAt={sprintStartedAt}
+              paused={paused}
+            />
           </span>
           {paused && (
             <span className="rounded-md border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
@@ -1472,6 +1473,7 @@ function RailCard({
   onDone: () => void;
   onSkip: () => void;
 }) {
+  useTick(1000, !paused);
   const elapsedMs = blockLiveElapsedMs(block, paused);
   const totalMs = block.durationMin * 60_000;
   const remainingMs = Math.max(0, totalMs - elapsedMs);
@@ -1662,6 +1664,7 @@ function SlotCard({
     onComplete: () => void;
   } | null;
 }) {
+  useTick(1000, !paused);
   const elapsedMs = blockLiveElapsedMs(block, paused);
   const totalMs = block.durationMin * 60_000;
   const overrunMs = elapsedMs > totalMs ? elapsedMs - totalMs : 0;
@@ -2268,6 +2271,7 @@ function DragGhost({
   item: S2DItem;
   paused: boolean;
 }) {
+  useTick(1000, !paused);
   const elapsedMs = blockLiveElapsedMs(block, paused);
   const totalMs = block.durationMin * 60_000;
   const remainingMs = Math.max(0, totalMs - elapsedMs);
@@ -2480,4 +2484,26 @@ function fmtMs(ms: number): string {
   const m = Math.floor(s / 60);
   const ss = s % 60;
   return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
+/**
+ * Tiny leaf component for the header "Xm elapsed" label. Ticks itself
+ * every second so the surrounding sprint tree doesn't have to re-render
+ * for the clock to update. Bails out when paused so we don't waste
+ * cycles ticking a frozen clock.
+ */
+function SprintElapsedLabel({
+  sprintStartedAt,
+  paused,
+}: {
+  sprintStartedAt: string | null;
+  paused: boolean;
+}) {
+  useTick(1000, !paused && !!sprintStartedAt);
+  const elapsedMin = sprintStartedAt
+    ? Math.round(
+        (Date.now() - new Date(sprintStartedAt).getTime()) / 60_000
+      )
+    : 0;
+  return <>{elapsedMin}m elapsed</>;
 }
