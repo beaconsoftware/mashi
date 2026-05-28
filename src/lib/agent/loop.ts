@@ -330,6 +330,31 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
     content: r.content,
   }));
 
+  // Quality Phase 5: MASHI.md per-user memory. Free-text the user
+  // maintains in /settings/style. Injected as a user-role message after
+  // the system prompt so directives ("call me Sidd", "I manage MPP")
+  // persist across threads. Not persisted in agent_messages, so the
+  // compaction summarizer never folds it away — it's re-read fresh
+  // every turn. Cached as ephemeral so token cost only hits on change.
+  const { data: profileRow } = await supabase
+    .from("user_profile")
+    .select("mashi_md")
+    .eq("user_id", opts.userId)
+    .maybeSingle();
+  const mashiMd = ((profileRow as { mashi_md?: string } | null)?.mashi_md ?? "").trim();
+  if (mashiMd.length > 0) {
+    messageList.unshift({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `# My MASHI.md\n\n${mashiMd}`,
+          cache_control: { type: "ephemeral" },
+        },
+      ] as unknown as Anthropic.Messages.MessageParam["content"],
+    });
+  }
+
   const maxIters = Math.min(Math.max(opts.maxIterations ?? 6, 1), 12);
   const model = MODELS[opts.modelKey ?? "primary"];
 

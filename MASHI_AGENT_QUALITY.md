@@ -31,7 +31,7 @@ The unified prompt reads this table to decide what to do. The next phase to run 
 | 2 | Tool registry audit: descriptions, boundaries, split mega-tools | Shipped | — | [#122](https://github.com/beaconsoftware/mashi/pull/122) |
 | 3 | Plan/Act mode — ring-2/3 filtered out in plan mode, "Act" toggle in UI | Shipped | 1, 2 | [#123](https://github.com/beaconsoftware/mashi/pull/123) |
 | 4 | PreToolUse hook layer: ring-3 approval, dedup, audit, undo as hooks | Shipped | 2 | [#124](https://github.com/beaconsoftware/mashi/pull/124) |
-| 5 | `MASHI.md` per-user memory file + injection-after-system-prompt | Pending | 4 | — |
+| 5 | `MASHI.md` per-user memory file + injection-after-system-prompt | Shipped | 4 | [#125](https://github.com/beaconsoftware/mashi/pull/125) |
 | 6 | Tool-search retrieval over registry + DELETE THIS DOC | Pending | 2, 4 | — |
 
 **Status values**: `Pending` → `Shipped`.
