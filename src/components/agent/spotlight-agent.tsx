@@ -103,7 +103,7 @@ export function SpotlightAgent() {
           className="gap-0"
         >
           <div className="flex items-center justify-between border-b border-border/40 bg-card/95 px-3 py-2">
-            <TabsList variant="line" className="h-7 gap-2">
+            <TabsList variant="animated" className="h-7 gap-2">
               <TabsTrigger value="ask" className="px-2 text-xs">
                 <Sparkles className="h-3 w-3 text-primary" />
                 Ask Mashi
