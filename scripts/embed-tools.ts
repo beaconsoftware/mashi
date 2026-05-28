@@ -1,10 +1,9 @@
 /**
  * Offline embedder for the agent tool registry.
  *
- * Reads TOOL_REGISTRY_LIST, embeds each tool's `description` with the
- * local `@huggingface/transformers` embedder, writes
- * `src/lib/agent/tools/_embeddings.json` as the runtime cache. No
- * external API or key — the model runs in-process via ONNX.
+ * Reads TOOL_REGISTRY_LIST, embeds each tool's `description` via the
+ * OpenAI embeddings API, writes `src/lib/agent/tools/_embeddings.json`
+ * as the runtime cache. Requires OPENAI_API_KEY in the environment.
  *
  * The embeddings ride into `retrieveTools()` (src/lib/agent/retrieve.ts)
  * which embeds the user's message at request time and returns the top-K
@@ -18,13 +17,13 @@
  *                                     description rewritten). Does NOT
  *                                     hit the model — purely a hash
  *                                     check, so CI can run it without
- *                                     downloading ONNX weights.
+ *                                     hitting the OpenAI API.
  *
  * Output schema (versioned so a future model swap can invalidate):
  *
  *   {
- *     "model": "Xenova/all-MiniLM-L6-v2",
- *     "dimensions": 384,
+ *     "model": "text-embedding-3-small",
+ *     "dimensions": 1536,
  *     "generatedAt": "2026-05-28T...",
  *     "tools": {
  *       "<tool_name>": {
@@ -45,7 +44,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 
 import { TOOL_REGISTRY_LIST } from "../src/lib/agent/registry";
-import { EMBEDDING_MODEL, embedLocalBatch } from "../src/lib/embeddings/local";
+import { EMBEDDING_MODEL, embedRemoteBatch } from "../src/lib/embeddings/openai";
 
 const EMBEDDINGS_PATH = resolve(
   process.cwd(),
@@ -127,7 +126,7 @@ async function regenerate(): Promise<void> {
     `[embed-tools] embedding ${TOOL_REGISTRY_LIST.length} tools with ${EMBEDDING_MODEL}...`
   );
   const texts = TOOL_REGISTRY_LIST.map((d) => d.description);
-  const vectors = await embedLocalBatch(texts);
+  const vectors = await embedRemoteBatch(texts);
   if (vectors.length !== TOOL_REGISTRY_LIST.length) {
     throw new Error(
       `embedder returned ${vectors.length} vectors for ${TOOL_REGISTRY_LIST.length} tools`

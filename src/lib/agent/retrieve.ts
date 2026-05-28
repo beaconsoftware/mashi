@@ -16,13 +16,13 @@
  * `src/lib/agent/tools/_embeddings.json`. Freshness is checked by
  * `pnpm check:embeddings` (purely hash-based — no API key needed in CI).
  *
- * If the runtime embed call fails (Voyage outage, missing key, network),
+ * If the runtime embed call fails (OpenAI outage, missing key, network),
  * we fall back to the full mode-and-ring-filtered pool. Better to spend
  * tokens than break the agent.
  */
 import { TOOL_REGISTRY_LIST } from "@/lib/agent/registry";
 import type { AnyToolDefinition, ToolRing } from "@/lib/agent/types";
-import { cosineSimilarity, embedLocal } from "@/lib/embeddings/local";
+import { cosineSimilarity, embedRemote } from "@/lib/embeddings/openai";
 import embeddingsData from "@/lib/agent/tools/_embeddings.json";
 
 interface EmbeddingEntry {
@@ -154,7 +154,7 @@ export async function retrieveTools(
       // Empty turn (e.g. re-entry after a follow-up) — just core + sticky.
       return candidates.filter((d) => finalNames.has(d.name));
     }
-    const queryEmbedding = await embedLocal(trimmed);
+    const queryEmbedding = await embedRemote(trimmed);
     if (!queryEmbedding || queryEmbedding.length === 0) {
       throw new Error("empty embedding response");
     }
