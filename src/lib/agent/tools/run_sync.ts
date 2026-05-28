@@ -18,7 +18,7 @@ type Args = z.infer<typeof args>;
 export const run_sync: ToolDefinition<Args, unknown> = {
   name: "run_sync",
   description:
-    "Trigger a fresh sync for one or more of the caller's connections. Always user-scoped — a caller can't sync someone else's connection by guessing a connection_id.",
+    "Trigger a fresh sync of the user's connected providers (linear, gmail, gcal, slack, fireflies). With no args, syncs every connection. With provider or connection_id, scopes to that subset. Always user-scoped.\n\nUse when: the user says 'I just sent that email, can you check?' or 'is my Linear up to date?' — anything that suggests upstream data has changed since the last sync. Example: { provider: 'gmail' }.\n\nDo NOT use as a default at turn start (sync runs nightly + on demand from /settings/connections). Do NOT use to fetch synced data — read tools (search_*, get_*) hit the DB directly.\n\nReturns: { ok, summary, results }. results[] has per-connection ok + detail; ok=false on any failure.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

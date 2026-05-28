@@ -23,8 +23,12 @@ type Args = z.infer<typeof args>;
  * the client-side sprint store will detect the pathway change on its
  * next poll and re-warm the canvas — the server-side prewarm scheduler
  * lives in client code, so we leave that handoff to the UI.
+ *
+ * Also records the change as a system note on the item's thread so the
+ * agent can reference it later. No new thread is spawned; the lifecycle
+ * change rides along on the existing conversation about the item.
  */
-export const set_pathway: ToolDefinition<
+export const set_item_pathway: ToolDefinition<
   Args,
   {
     ok: boolean;
@@ -33,9 +37,9 @@ export const set_pathway: ToolDefinition<
     _undo?: { summary: string; op: ReverseOp };
   }
 > = {
-  name: "set_pathway",
+  name: "set_item_pathway",
   description:
-    "Re-pathway an item. One of: quick_reply, drafted_response, meeting_backed, heads_down, decision_gate, delegated, watching. Reversible for 30 seconds.",
+    "Set the pathway on a single S2D item (one of: quick_reply, drafted_response, meeting_backed, heads_down, decision_gate, delegated, watching). Also drops a system note on the item's thread when the pathway actually changes.\n\nUse when: the user explicitly asks to re-pathway, or you've inferred the wrong pathway was assigned at triage time. Example: { id: '…uuid…', pathway: 'decision_gate' }.\n\nDo NOT use to update multiple fields at once. Use update_item for atomic multi-field edits.\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is not found. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {
@@ -60,10 +64,6 @@ export const set_pathway: ToolDefinition<
     const ticket = before.data.ticket_number;
     const ref = ticket != null ? `MASH-${ticket}` : "item";
 
-    // Lifecycle continuity (Phase 4) — record the pathway change on the
-    // item's persistent thread so the agent can reference it later. No
-    // branch, no new thread; the conversation is about the item, not
-    // the shape. No-ops if the item has no thread yet.
     if (before.data.pathway !== input.pathway) {
       try {
         await insertItemThreadSystemNote({

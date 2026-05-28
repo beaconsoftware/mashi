@@ -30,7 +30,7 @@ export const attach_thread_to_item: ToolDefinition<
 > = {
   name: "attach_thread_to_item",
   description:
-    "Bind the current Spotlight (orphan) thread to an S2D item. Call this once the user picks a candidate from resolve_reference. Errors if the item already has a different thread.",
+    "Bind the current Spotlight (orphan) thread to an S2D item: sets agent_threads.item_id and rewrites the title to 'MASH-N, …'. Enforced one-thread-per-item by a partial unique index.\n\nUse when: the user picked a candidate from resolve_reference (or ask_followup_question) and the conversation is anchored to that item from here on. Example: { item_id: '…uuid…' }.\n\nDo NOT use to merge two existing item-bound threads — there is no such operation, and the unique index will reject the attach. Do NOT call before resolving the reference; ground the id first.\n\nReturns: { ok, thread } on success; { ok: false, error, existing_thread_id? } when the item already has a different thread. Intentionally NOT reversible.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

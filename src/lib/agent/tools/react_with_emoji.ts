@@ -26,7 +26,7 @@ export const react_with_emoji: ToolDefinition<
 > = {
   name: "react_with_emoji",
   description:
-    "Add an emoji reaction to a Slack message. Pass the emoji shortname without colons. Requires approval.",
+    "Add an emoji reaction to a Slack message. Pass the emoji shortname without colons (e.g. 'eyes', 'white_check_mark'). Pause-and-approve: the call surfaces the approval card; the reaction fires only after the user clicks Approve. Visible to everyone in the channel.\n\nUse when: the user explicitly wants to acknowledge a message lightly without typing a reply ('react with 👀 to Maya's post'). Example: { channel: 'C0123456', ts: '1716000000.123456', emoji: 'eyes' }.\n\nDo NOT use to send an actual reply (call send_slack_message). Do NOT use to read a Slack thread (call get_message_thread with source='slack').\n\nReturns: { ok } on success; { ok: false, error } when no Slack account is connected or Slack rejects the reaction.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

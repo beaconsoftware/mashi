@@ -15,7 +15,7 @@ type Args = z.infer<typeof args>;
 export const get_meeting: ToolDefinition<Args, unknown> = {
   name: "get_meeting",
   description:
-    "Fetch a single Fireflies meeting (by db id or Fireflies external_id) plus its action items.",
+    "Fetch one Fireflies meeting (by db id or Fireflies external_id) plus its extracted action items. Includes the meeting summary and attendee list.\n\nUse when: the user asks 'what was decided in the X meeting?', 'who attended?', or you have a meeting id from search_meetings and want its details. Example: { external_id: 'ff_abc123' }.\n\nDo NOT use to search for meetings (call search_meetings). Do NOT use to fetch calendar events — those are separate (use get_calendar_event).\n\nReturns: { meeting, action_items }. meeting is null when no row matches.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

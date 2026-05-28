@@ -30,7 +30,7 @@ export const send_slack_message: ToolDefinition<
 > = {
   name: "send_slack_message",
   description:
-    "Post a message to Slack as the connected user. Requires approval. Pass in_reply_to_ts to thread the message under an existing post.",
+    "Post a message to Slack as the connected user (xoxp- user token, so the post appears under the user's name). Pause-and-approve: the call surfaces the approval card; the send fires only after the user clicks Approve. Pass in_reply_to_ts (parent message ts) to thread under a post.\n\nUse when: the user has signed off on the actual send ('send that on Slack', 'reply in #channel'). Brief them on the channel + first line before calling. Example: { channel: 'C0123456', body: 'Hey team…', in_reply_to_ts: '1716000000.123456' }.\n\nDo NOT use to read a Slack thread (call get_message_thread with source='slack'). Do NOT use to add a reaction (call react_with_emoji). Pull the user's voice with get_style before composing.\n\nReturns: { ok, ts, channel } on success; { ok: false, error } when no Slack account is connected or Slack rejects the post.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

@@ -38,7 +38,7 @@ export const send_email: ToolDefinition<
 > = {
   name: "send_email",
   description:
-    "Send an email through the user's connected Gmail account. Requires user approval before the actual send. Pass in_reply_to (message external_id) when replying to an existing thread for clean threading.",
+    "Send an email through the user's connected Gmail account. Pause-and-approve: the call surfaces the approval card; the actual send fires only after the user clicks Approve. Pass in_reply_to (message external_id from search_messages / get_message_thread) for clean threading.\n\nUse when: the user has signed off on the actual send ('send it', 'reply to Maya with this'). Brief the user on the recipient + subject + first line before calling. Example: { to: 'maya@portco.com', subject: 'Re: Q4 brand spend', body: 'Hi Maya, here\\u0027s the revised proposal…', in_reply_to: 'ABC123…' }.\n\nDo NOT use to draft something for later review — call draft_email so it lands as a Gmail draft instead. Do NOT use to read a thread (call get_message_thread). Pull the user's voice with get_style before composing.\n\nReturns: { ok, message_id, thread_id, sent_to } on success; { ok: false, error } when no Gmail account is connected or Gmail rejects the send.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

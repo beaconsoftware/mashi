@@ -40,7 +40,7 @@ export const spawn_follow_up: ToolDefinition<
 > = {
   name: "spawn_follow_up",
   description:
-    "Spawn a follow-up item linked to a parent. Optionally snoozes the new item for N hours via queue_hours. Reversible for 30 seconds.",
+    "Spawn a follow-up S2D item linked to a parent. The child carries spawned_from_item_id + spawn_reason for provenance, inherits the parent's company, and (when queue_hours is set) snoozes for N hours so it resurfaces later.\n\nUse when: the user wants to log an action that emerges from finishing another item ('after this meeting, follow up with Maya in 24 hours'). Example: { parent_id: '…uuid…', pathway: 'quick_reply', title: 'Follow up with Maya re: brand spend', queue_hours: 24, reason: 'Confirmed at standup' }.\n\nDo NOT use to create a standalone item (call create_item). Do NOT use to mark the parent done — call complete_item separately.\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the parent is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

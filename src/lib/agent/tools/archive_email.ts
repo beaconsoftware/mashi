@@ -20,7 +20,7 @@ export const archive_email: ToolDefinition<
 > = {
   name: "archive_email",
   description:
-    "Archive a Gmail message by removing the INBOX label. Requires user approval.",
+    "Archive a Gmail message by removing the INBOX label. Pause-and-approve: the call surfaces the approval card; the archive fires only after the user clicks Approve. Visible in all Gmail clients.\n\nUse when: the user explicitly asks to archive ('archive that one', 'get rid of this from my inbox'). Example: { message_id: 'ABC123…' } where message_id is the external_id from search_messages.\n\nDo NOT use to mark a message read (call mark_email_read). Do NOT use to read a message body (call get_message_thread). Do NOT bulk-archive in one call — call once per message so the user can approve each.\n\nReturns: { ok } on success; { ok: false, error } when the message isn't found in any connected account or Gmail rejects the modify.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

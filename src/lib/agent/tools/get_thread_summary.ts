@@ -19,7 +19,7 @@ type Args = z.infer<typeof args>;
 export const get_thread_summary: ToolDefinition<Args, unknown> = {
   name: "get_thread_summary",
   description:
-    "Returns the rolling agent-written summary of an agent_threads row. Null when the thread doesn't exist or no summary has been generated yet.",
+    "Return the rolling agent-written summary stored on an agent_threads row. Null when the thread has not yet crossed the compaction threshold or doesn't exist.\n\nUse when: the user references an item with a long prior conversation and you want the gist without replaying every message. Example: { thread_id: '…uuid…' }.\n\nDo NOT use for the current thread's history — the loop already injects it. Do NOT use to read agent_messages directly; that's not exposed as a tool.\n\nReturns: { thread } where thread carries id, item_id, title, summary, last_message_at. thread is null when no row matches.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

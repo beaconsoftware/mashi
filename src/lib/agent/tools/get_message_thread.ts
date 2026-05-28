@@ -11,7 +11,7 @@ type Args = z.infer<typeof args>;
 export const get_message_thread: ToolDefinition<Args, unknown> = {
   name: "get_message_thread",
   description:
-    "Fetch every message in one Gmail or Slack thread, oldest first. Each row includes `full_content` (the plain-text body, capped at ~10k chars) alongside `preview` — read full_content when the preview cuts off mid-sentence or when the user asks for specifics from the body (asks, dates, dollar amounts, links).",
+    "Fetch every message in one Gmail or Slack thread, oldest first. Each row includes `full_content` (plain-text body, capped at ~10k chars) plus `preview` (≤240 chars).\n\nUse when: the user asks about message content — what someone said, what they asked for, an amount, a date, a link — read `full_content`, not `preview` (the preview routinely cuts off mid-sentence). Example: { source: 'gmail', thread_id: '198a3c…' }.\n\nDo NOT use to search across threads (call search_messages). Do NOT use to fetch a single message in isolation when the surrounding thread context matters.\n\nReturns: { messages, count }. Empty when no thread matches.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

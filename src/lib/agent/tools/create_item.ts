@@ -51,7 +51,7 @@ export const create_item: ToolDefinition<
 > = {
   name: "create_item",
   description:
-    "Create a new s2d board item. Defaults: pathway=heads_down, priority=medium, status=todo. needs_review is always false (the user asked for it). Reversible for 30 seconds.",
+    "Create a new S2D board item. Defaults: pathway=heads_down, priority=medium, status=todo, source_type=manual. needs_review is always false (the user is creating it, no triage gate needed).\n\nUse when: the user explicitly asks for a new item ('add a todo to follow up with Maya', 'create a decision-gate item for the budget question'). Example: { title: 'Follow up with Maya re: brand spend', pathway: 'quick_reply', priority: 'high' }.\n\nDo NOT use to spawn a child item off an existing one — call spawn_follow_up. Do NOT use to log a one-off decision (use log_decision). Before creating, sanity-check with resolve_reference + search_board that the item doesn't already exist; the dedup hook (Phase 4) will catch some duplicates but not all.\n\nReturns: { ok, item, _undo }. Undo deletes the row. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

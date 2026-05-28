@@ -38,7 +38,7 @@ export const create_calendar_event: ToolDefinition<
 > = {
   name: "create_calendar_event",
   description:
-    "Create a calendar event on the user's primary connected calendar (Google Calendar). Requires user approval. Pass ISO datetimes for start/end.",
+    "Create a calendar event on the user's primary connected Google Calendar. Pause-and-approve: the call surfaces the approval card; the event is created only after the user clicks Approve. start / end are ISO datetimes with timezone offsets.\n\nUse when: the user asks to schedule a meeting or block time ('book 30 min with Maya tomorrow at 2pm'). Example: { title: '1:1 with Maya', start: '2026-06-03T14:00:00-04:00', end: '2026-06-03T14:30:00-04:00', attendees: ['maya@portco.com'] }.\n\nDo NOT use to edit an existing event (call update_calendar_event). Do NOT use to fetch an event (call get_calendar_event). Verify the time slot with list_today / get_today first if the user wasn't explicit.\n\nReturns: { ok, event_id, html_link } on success; { ok: false, error } when no GCal account is connected, the datetimes are invalid, or Google rejects the create.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

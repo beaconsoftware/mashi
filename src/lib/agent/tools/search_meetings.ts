@@ -13,7 +13,7 @@ type Args = z.infer<typeof args>;
 export const search_meetings: ToolDefinition<Args, unknown> = {
   name: "search_meetings",
   description:
-    "Search Fireflies meetings by query, company, or since-date. Default sort: date DESC. Default limit 20, max 100.",
+    "Search Fireflies meetings by free-text query, company_id, or a since-date. Default sort: date DESC. Default limit 20, max 100.\n\nUse when: the user asks 'find that meeting with X', 'what meetings did I have with MPP last month?'. Example: { query: 'brand spend', since: '2026-05-01' }.\n\nDo NOT use to fetch a single meeting's details / summary / action items — call get_meeting once you have an id. Do NOT use for calendar events (use get_calendar_event for those).\n\nReturns: { meetings, count }. Each row carries title, date, duration, summary, attendees.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

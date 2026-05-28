@@ -28,7 +28,7 @@ The unified prompt reads this table to decide what to do. The next phase to run 
 | Phase | Subject | Status | Depends on | PR |
 |---|---|---|---|---|
 | 1 | `ask_followup_question` ring-1 tool + clarification directive in system prompt | Shipped | — | [#121](https://github.com/beaconsoftware/mashi/pull/121) |
-| 2 | Tool registry audit: descriptions, boundaries, split mega-tools | Pending | — | — |
+| 2 | Tool registry audit: descriptions, boundaries, split mega-tools | Shipped | — | [#122](https://github.com/beaconsoftware/mashi/pull/122) |
 | 3 | Plan/Act mode — ring-2/3 filtered out in plan mode, "Act" toggle in UI | Pending | 1, 2 |  — |
 | 4 | PreToolUse hook layer: ring-3 approval, dedup, audit, undo as hooks | Pending | 2 | — |
 | 5 | `MASHI.md` per-user memory file + injection-after-system-prompt | Pending | 4 | — |

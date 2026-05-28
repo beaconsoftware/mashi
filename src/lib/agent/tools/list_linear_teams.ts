@@ -25,7 +25,7 @@ export const list_linear_teams: ToolDefinition<
 > = {
   name: "list_linear_teams",
   description:
-    "List Linear teams the user has access to. Call this before create_linear_issue to choose the right team_id.",
+    "List Linear teams the user has access to in their connected Linear workspace. Each row carries id, key, and name.\n\nUse when: you are about to call create_linear_issue and need a valid team_id — Linear rejects creates with a guessed id. Example: {}.\n\nDo NOT use to list Linear issues (call search_linear). Do NOT skip this and guess a team_id; the create will fail.\n\nReturns: { teams } on success; { teams: [], error } when there is no Linear connection or the Linear API rejects the call.",
   ring: "read",
   args,
   handler: async (_input, ctx) => {

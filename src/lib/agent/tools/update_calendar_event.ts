@@ -38,7 +38,7 @@ export const update_calendar_event: ToolDefinition<
 > = {
   name: "update_calendar_event",
   description:
-    "Update fields on an existing calendar event (title, start, end, description, attendees). Requires user approval.",
+    "PATCH fields on an existing Google Calendar event (title, start, end, description, attendees). Pause-and-approve: the call surfaces the approval card; the change fires only after the user clicks Approve. id accepts either the calendar_events.id (UUID) or the provider external_id.\n\nUse when: the user asks to move / rename / re-attendee an event ('push the Maya meeting to Friday', 'add Mihir to the 2pm'). Example: { id: 'gcal_abc123', patch: { start: '2026-06-04T14:00:00-04:00', end: '2026-06-04T14:30:00-04:00' } }.\n\nDo NOT use to create a new event (call create_calendar_event). Do NOT use to fetch an event (call get_calendar_event first to confirm details).\n\nReturns: { ok, event_id } on success; { ok: false, error } when no GCal is connected, the datetimes are invalid, or Google rejects the patch.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

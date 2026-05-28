@@ -25,7 +25,7 @@ export const set_watch_target: ToolDefinition<
 > = {
   name: "set_watch_target",
   description:
-    "Set the watch target (what signal should end the watch) on a watching-pathway item. Stored on enriched_context.watch_target. Reversible for 30 seconds.",
+    "Set the watch target on a watching-pathway S2D item: a short prose description of the signal that should end the watch. Stored on enriched_context.watch_target.\n\nUse when: the user defines exit criteria for a watching item ('stop watching once they reply', 'watch until the contract is signed'). Example: { item_id: '…uuid…', watch_for: 'Reply from Maya confirming the revised proposal' }.\n\nDo NOT use to log a check-in (call record_watch_check_in). Do NOT use to set general description / notes (use set_item_description).\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

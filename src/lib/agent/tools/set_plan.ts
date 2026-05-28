@@ -43,7 +43,7 @@ export const set_plan: ToolDefinition<
 > = {
   name: "set_plan",
   description:
-    "Set the Focus card plan for an item: an ordered checklist of 1-10 concrete steps. Replaces the existing plan by default; pass replace:false to append. Use when the user asks for a plan, or volunteers one based on what they're trying to accomplish.",
+    "Set the Focus card plan for an S2D item: an ordered checklist of 1-10 concrete steps, each ≤280 chars. Replaces the existing plan by default; pass replace:false to append after the current steps.\n\nUse when: the user asks for a plan ('break this down', 'what are the steps?') or volunteers one. Example: { item_id: '…uuid…', steps: ['Draft revised proposal', 'Loop in legal', 'Send by Friday'] }.\n\nDo NOT use for a single-line statement (use set_success_statement). Do NOT use to log a decision (use log_decision). Steps are checkable — they're for sequencing, not for narrative.\n\nReturns: { ok, plan, _undo } on success; { ok: false, error } when the item is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

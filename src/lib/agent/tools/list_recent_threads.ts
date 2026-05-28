@@ -34,7 +34,7 @@ export const list_recent_threads: ToolDefinition<
 > = {
   name: "list_recent_threads",
   description:
-    "List the user's recent agent threads, newest first. Each entry has the thread id, item binding (or null for orphan Spotlight chats), title, and last activity timestamp.",
+    "List the user's recent agent threads (Ask Mashi conversations) newest first. Each row has the thread id, optional item_id binding (null for orphan Spotlight chats), title, and last_message_at.\n\nUse when: the user asks 'what have we been talking about?', 'show me my recent Mashi chats', or you want to surface a relevant prior conversation. Example: { limit: 10, include_orphan: false }.\n\nDo NOT use to fetch a single thread's messages — that's not exposed as a tool, only the rolling summary via get_thread_summary.\n\nReturns: { threads, count }. Empty when the user has no threads yet.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

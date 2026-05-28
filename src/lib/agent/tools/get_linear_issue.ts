@@ -17,7 +17,7 @@ type Args = z.infer<typeof args>;
 export const get_linear_issue: ToolDefinition<Args, unknown> = {
   name: "get_linear_issue",
   description:
-    "Fetch a single Linear issue by db id, Linear UUID (external_id), or Linear URL.",
+    "Fetch one Linear issue by db id, Linear UUID (external_id), or Linear URL. Returns the full issue row (title, description, status, priority, assignee, project, url).\n\nUse when: the user pastes a Linear URL or names an issue you can resolve by external_id, and you need the full payload before comment_on_linear_issue / update_linear_issue. Example: { url: 'https://linear.app/foo/issue/BAR-123' }.\n\nDo NOT use to search Linear (call search_linear). Do NOT use for S2D items even if the user calls them 'tickets' — that's get_item.\n\nReturns: { issue } on success; { issue: null } when no row matches.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

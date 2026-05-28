@@ -11,7 +11,7 @@ type Args = z.infer<typeof args>;
 export const search_everything: ToolDefinition<Args, unknown> = {
   name: "search_everything",
   description:
-    "Single-call search across S2D items, meetings, messages, and Linear issues. Returns a mixed list discriminated by `kind`.",
+    "Broad fuzzy search across every source in one call: S2D items, Fireflies meetings, Gmail + Slack messages, and Linear issues. Returns a mixed list discriminated by `kind` ('s2d_item' | 'meeting' | 'message' | 'linear_issue').\n\nUse when: the user gives a vague reference and you don't know which surface it lives on — e.g. 'find anything about Project Atlas'. Example: { query: 'Project Atlas' }.\n\nDo NOT use when you already know the source — use the targeted tool (search_board, search_messages, search_meetings, search_linear) for tighter results and a cleaner shape. Do NOT use to resolve a single S2D reference; call resolve_reference.\n\nReturns: { results, counts }. Each result row is `kind`-discriminated. Empty when nothing matches.",
   ring: "read",
   args,
   handler: async (input, ctx) => {

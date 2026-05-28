@@ -28,7 +28,7 @@ export const complete_item: ToolDefinition<
 > = {
   name: "complete_item",
   description:
-    "Mark an item done. Sets status=done plus an optional outcome blurb and resolved_via tag. Reversible for 30 seconds.",
+    "Mark an S2D item done: sets status=done, stamps done_at, and optionally records an outcome blurb plus a resolved_via tag (done | deferred | delegated | abandoned | merged).\n\nUse when: the user confirms an item is finished ('mark MASH-1408 done', 'I sent the reply'). Example: { id: '…uuid…', outcome: 'Sent revised proposal', resolved_via: 'done' }.\n\nDo NOT use to soft-delete from the Review column (use reject_review_item). Do NOT use to merge duplicates (use merge_items). Ground the id with resolve_reference / search_board if it isn't already known.\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

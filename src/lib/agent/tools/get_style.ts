@@ -34,7 +34,7 @@ interface Result {
 export const get_style: ToolDefinition<Args, Result> = {
   name: "get_style",
   description:
-    "Voice profile for drafting in the user's tone. Returns the cached StyleProfile extracted via /settings/style — summary, traits, greeting / sign-off, recurring phrases, and few-shot examples. If voice has drifted, the user re-extracts from settings; this tool does not pull live samples.",
+    "Return the cached StyleProfile (summary, voice traits, greeting / sign-off, recurring phrases, few-shot examples) the user extracted at /settings/style. The cached profile is the single source of truth; this tool does not pull live samples.\n\nUse when: drafting an email or Slack message the user will sign, so the output matches their voice. Example: {}.\n\nDo NOT use as a pre-write boilerplate check on every turn — only call before drafting external messages. Call before draft_email / send_email / send_slack_message; skip for internal board edits.\n\nReturns: { profile, meta }. profile is null when extraction hasn't been run; meta.notes flags stale / missing profiles so the agent can prompt the user to re-extract.",
   ring: "read",
   args,
   handler: async (_input, ctx) => {

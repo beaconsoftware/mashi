@@ -41,7 +41,7 @@ export const update_linear_issue: ToolDefinition<
 > = {
   name: "update_linear_issue",
   description:
-    "Update fields on a Linear issue (title, description, state, assignee, priority, project). Requires approval.",
+    "PATCH a Linear issue via issueUpdate (title, description, state_id, assignee_id, priority, project_id). Pause-and-approve: the call surfaces the approval card; the change fires only after the user clicks Approve. id is the Linear UUID (external_id), NOT the human identifier like 'ENG-123'.\n\nUse when: the user explicitly asks to move / reassign / re-prioritize a Linear issue. Example: { id: '…uuid…', patch: { state_id: '…uuid…', priority: 1 } }.\n\nDo NOT use to comment (call comment_on_linear_issue). Do NOT use to create (call create_linear_issue). Do NOT pass the human identifier as id — Linear's API requires the UUID. Use get_linear_issue / search_linear to ground the id and any reference UUIDs.\n\nReturns: { ok, identifier } on success; { ok: false, error } when no Linear connection exists, the id is unknown, or the mutation fails.",
   ring: "write_world",
   args,
   handler: async (input, ctx) => {

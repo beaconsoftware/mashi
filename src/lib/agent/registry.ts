@@ -26,8 +26,13 @@ import { create_item } from "@/lib/agent/tools/create_item";
 import { update_item } from "@/lib/agent/tools/update_item";
 import { complete_item } from "@/lib/agent/tools/complete_item";
 import { snooze_item } from "@/lib/agent/tools/snooze_item";
-import { set_pathway } from "@/lib/agent/tools/set_pathway";
-import { set_planned_for } from "@/lib/agent/tools/set_planned_for";
+import { set_item_pathway } from "@/lib/agent/tools/set_item_pathway";
+import { set_item_planned_for } from "@/lib/agent/tools/set_item_planned_for";
+import { set_item_title } from "@/lib/agent/tools/set_item_title";
+import { set_item_description } from "@/lib/agent/tools/set_item_description";
+import { set_item_priority } from "@/lib/agent/tools/set_item_priority";
+import { set_item_company } from "@/lib/agent/tools/set_item_company";
+import { set_item_snoozed_until } from "@/lib/agent/tools/set_item_snoozed_until";
 import { merge_items } from "@/lib/agent/tools/merge_items";
 import { spawn_follow_up } from "@/lib/agent/tools/spawn_follow_up";
 import { approve_review_item } from "@/lib/agent/tools/approve_review_item";
@@ -110,8 +115,17 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [update_item.name]: update_item,
   [complete_item.name]: complete_item,
   [snooze_item.name]: snooze_item,
-  [set_pathway.name]: set_pathway,
-  [set_planned_for.name]: set_planned_for,
+  [set_item_pathway.name]: set_item_pathway,
+  [set_item_planned_for.name]: set_item_planned_for,
+  // Quality Phase 2 — strict single-field setters carved out of
+  // update_item's patch. The mega-tool stays as an atomic-multi-field
+  // path but its description steers the model at these for the common
+  // one-field case.
+  [set_item_title.name]: set_item_title,
+  [set_item_description.name]: set_item_description,
+  [set_item_priority.name]: set_item_priority,
+  [set_item_company.name]: set_item_company,
+  [set_item_snoozed_until.name]: set_item_snoozed_until,
   [merge_items.name]: merge_items,
   [spawn_follow_up.name]: spawn_follow_up,
   [approve_review_item.name]: approve_review_item,

@@ -47,8 +47,9 @@ type Args = z.infer<typeof args>;
 
 /**
  * Generic patch on an s2d_item. The agent reaches for this when more
- * specific tools (snooze_item, set_pathway, complete_item) don't fit.
- * Captures the prior values for the 30s undo window.
+ * specific tools (snooze_item, set_item_pathway, complete_item) don't
+ * fit, or when multiple fields need to change atomically. Captures the
+ * prior values for the 30s undo window.
  */
 export const update_item: ToolDefinition<
   Args,
@@ -61,7 +62,7 @@ export const update_item: ToolDefinition<
 > = {
   name: "update_item",
   description:
-    "Update fields on an s2d item: title, description, pathway, priority, status, planned_for, company_id, snoozed_until. Pass only the fields you want to change. Reversible for 30 seconds.",
+    "Prefer the field-specific set_item_* tools (set_item_title, set_item_description, set_item_priority, set_item_pathway, set_item_company, set_item_planned_for, set_item_snoozed_until) unless you genuinely need to update multiple fields atomically.\n\nUse when: you are changing two or more fields on the same item in one shot and want a single undo entry covering all of them. Example: { id: '…uuid…', patch: { pathway: 'decision_gate', priority: 'urgent' } }.\n\nDo NOT use to set a single field — pick the matching set_item_* tool. Do NOT use to snooze (snooze_item also adjusts status). Do NOT use to complete (call complete_item).\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

@@ -21,7 +21,7 @@ export const reject_review_item: ToolDefinition<
 > = {
   name: "reject_review_item",
   description:
-    "Reject an item from Review (soft-deletes via status=done, resolved_via=abandoned). Reversible for 30 seconds.",
+    "Reject a triaged item from the Review column: soft-deletes by setting status=done, resolved_via=abandoned, done_at=now, and clearing needs_review.\n\nUse when: the user explicitly dismisses a triaged item ('no, drop that one', 'reject MASH-1408'). Example: { id: '…uuid…' }.\n\nDo NOT use to approve (call approve_review_item). Do NOT use to complete a real done item (use complete_item, which sets resolved_via='done'). Use list_needs_review or get_item to confirm needs_review=true first.\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is missing or not in Review. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

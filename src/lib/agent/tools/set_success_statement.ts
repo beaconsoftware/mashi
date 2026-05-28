@@ -24,7 +24,7 @@ export const set_success_statement: ToolDefinition<
 > = {
   name: "set_success_statement",
   description:
-    "Set the one-line success statement on an item. The sprint focus identity strip surfaces this above the title. Reversible for 30 seconds.",
+    "Set the one-line success statement on an S2D item (max 500 chars). The sprint focus identity strip surfaces this above the title during a focused work block.\n\nUse when: the user wants to commit a 'what good looks like' phrase to an item ('write down: ship the revised proposal by Friday'). Example: { item_id: '…uuid…', statement: 'Replied with full numbers + alternative timeline by EOD' }.\n\nDo NOT use for general description / notes (use set_item_description). Do NOT use to capture a decision (use log_decision).\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

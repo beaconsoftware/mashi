@@ -33,7 +33,7 @@ export const log_decision: ToolDefinition<
 > = {
   name: "log_decision",
   description:
-    "Log a decision on a decision-gate item: yes, yes_but (with condition), no, or defer (with defer_until). Mirrors the Decide canvas. Reversible for 30 seconds.",
+    "Log a structured decision on a decision-gate S2D item. choice is one of: yes, yes_but (with condition), no, defer (with defer_until). Writes decision_log (JSONB), decision_note (plain text), and decision_at.\n\nUse when: the user makes an explicit yes/no/maybe call on a decision-gate item ('go ahead but only if X', 'defer this until next quarter'). Example: { item_id: '…uuid…', choice: 'yes_but', note: 'Approved if legal signs off', condition: 'Legal sign-off' }.\n\nDo NOT use to mark an item done — call complete_item. Do NOT use for non-decision_gate items unless you have a reason; pathway mismatches confuse the Decide canvas.\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {

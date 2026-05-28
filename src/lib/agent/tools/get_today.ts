@@ -18,7 +18,7 @@ type Args = z.infer<typeof args>;
 export const get_today: ToolDefinition<Args, unknown> = {
   name: "get_today",
   description:
-    "Agent orientation: today's calendar events, items planned_for=today, items resurfacing from snooze, plus active sprint state if one is in progress.",
+    "Wide agent-orientation snapshot for today: calendar events, items with planned_for=today, items resurfacing from snooze, plus the active sprint session (if one is in progress).\n\nUse when: starting a 'what's my day look like?' or 'should I do a sprint now?' conversation. Wider than list_today because it also pulls the active sprint shape. Example: {}.\n\nDo NOT use when the user only wants the active sprint shape (call get_current_sprint). Do NOT call repeatedly per turn — one snapshot per orientation is enough.\n\nReturns: { today_iso, calendar, planned_for_today, resurfacing_items, active_sprint }. active_sprint is null when no sprint is in progress.",
   ring: "read",
   args,
   handler: async (_input, ctx) => {

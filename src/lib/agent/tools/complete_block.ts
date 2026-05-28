@@ -28,7 +28,7 @@ export const complete_block: ToolDefinition<
 > = {
   name: "complete_block",
   description:
-    "Settle a sprint slot from the agent: status=done marks the item done; status=skipped returns it to the To Do column with an optional outcome blurb. Reversible for 30 seconds.",
+    "Settle a sprint slot from inside the agent. status=done marks the item done (resolved_via='done', done_at=now). status=skipped returns the item to status=todo with an optional outcome blurb describing why.\n\nUse when: the user is mid-sprint and asks the agent to close out or skip a block ('that one's done, move on'; 'skip MASH-1408, I'll come back to it'). Example: { item_id: '…uuid…', status: 'skipped', outcome: 'Awaiting data from legal' }.\n\nDo NOT use outside an active sprint flow — call complete_item or set_item_pathway for non-sprint dispositions. Sprint lifecycle (start / pause / exit) stays in the client-side store.\n\nReturns: { ok, item, _undo } on success; { ok: false, error } when the item is missing. Reversible for 30 seconds.",
   ring: "write_mashi",
   args,
   handler: async (input, ctx) => {
