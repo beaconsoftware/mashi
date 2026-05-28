@@ -16,6 +16,7 @@ import {
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   LayoutGrid,
   List as ListIcon,
   Maximize2,
@@ -61,6 +62,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ChromeBar } from "@/components/layout/primitives";
 import { PlannedBadge } from "@/components/shared/planned-badge";
@@ -650,41 +660,14 @@ function BoardToolbar({
         </span>
       </div>
 
-      {/* Row 2: view + density + selection chip + actions */}
+      {/* Row 2: view dropdown + selection chip + actions */}
       <div className="flex w-full flex-wrap items-center gap-2">
-        <Tabs
-          value={view}
-          onValueChange={(v) => setView(v as BoardView)}
-        >
-          <TabsList variant="animated" className="h-7">
-            <TabsTrigger value="cards" className="h-6 px-3 text-[11px] font-medium">
-              <LayoutGrid className="h-3 w-3" />
-              Cards
-            </TabsTrigger>
-            <TabsTrigger value="list" className="h-6 px-3 text-[11px] font-medium">
-              <ListIcon className="h-3 w-3" />
-              List
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {view === "cards" && (
-          <Tabs
-            value={density}
-            onValueChange={(v) => setDensity(v as CardDensity)}
-          >
-            <TabsList variant="animated" className="h-7">
-              <TabsTrigger value="compact" className="h-6 px-3 text-[11px] font-medium">
-                <Minimize2 className="h-3 w-3" />
-                Compact
-              </TabsTrigger>
-              <TabsTrigger value="expanded" className="h-6 px-3 text-[11px] font-medium">
-                <Maximize2 className="h-3 w-3" />
-                Expanded
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
+        <ViewMenu
+          view={view}
+          setView={setView}
+          density={density}
+          setDensity={setDensity}
+        />
 
         <div className="ml-auto flex items-center gap-2">
           {selectedCount > 0 && (
@@ -721,6 +704,103 @@ function BoardToolbar({
         </div>
       </div>
     </ChromeBar>
+  );
+}
+
+/**
+ * Single "View" dropdown that combines the layout (Cards / List) and
+ * card density (Compact / Expanded) controls. Density is hidden when
+ * view = list — density only affects card rendering. Button label
+ * shows the current state at a glance, matching the Filter and Sort
+ * button shape.
+ */
+function ViewMenu({
+  view,
+  setView,
+  density,
+  setDensity,
+}: {
+  view: BoardView;
+  setView: (v: BoardView) => void;
+  density: CardDensity;
+  setDensity: (d: CardDensity) => void;
+}) {
+  // Custom = non-default state (anything beyond Cards + Compact). The
+  // primary-tinted look mirrors Filter / Sort so the user can scan the
+  // row and see which controls are "doing something".
+  const isCustom = view !== "cards" || density !== "compact";
+  const ViewIcon = view === "cards" ? LayoutGrid : ListIcon;
+  const label =
+    view === "list"
+      ? "List"
+      : density === "compact"
+        ? "Cards"
+        : "Cards, expanded";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "mashi-magnetic h-7 gap-1.5 text-[11px] transition-colors",
+            isCustom
+              ? "border-primary/40 bg-primary/15 text-foreground hover:bg-primary/15 hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <ViewIcon
+            className={cn(
+              "h-3 w-3 transition-colors",
+              isCustom && "text-primary"
+            )}
+          />
+          View: {label}
+          <ChevronDown className="h-3 w-3 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Layout
+        </DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={view}
+          onValueChange={(v) => setView(v as BoardView)}
+        >
+          <DropdownMenuRadioItem value="cards" className="text-[12px]">
+            <LayoutGrid className="h-3.5 w-3.5" />
+            Cards
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="list" className="text-[12px]">
+            <ListIcon className="h-3.5 w-3.5" />
+            List
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        {view === "cards" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Density
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={density}
+              onValueChange={(v) => setDensity(v as CardDensity)}
+            >
+              <DropdownMenuRadioItem value="compact" className="text-[12px]">
+                <Minimize2 className="h-3.5 w-3.5" />
+                Compact
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="expanded" className="text-[12px]">
+                <Maximize2 className="h-3.5 w-3.5" />
+                Expanded
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
