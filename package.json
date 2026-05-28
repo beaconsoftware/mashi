@@ -12,6 +12,7 @@
     "audit:translucency": "bash scripts/audit-translucency.sh",
     "test:visual": "playwright test --config=playwright.config.ts",
     "test:visual:update": "playwright test --config=playwright.config.ts --update-snapshots",
+    "test:hooks": "tsx src/lib/agent/hooks/__tests__/runner.test.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency"
   },
   "dependencies": {
@@ -68,6 +69,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
+    "tsx": "^4.22.3",
     "typescript": "^5"
   },
   "pnpm": {

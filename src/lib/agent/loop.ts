@@ -3,16 +3,14 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { anthropic, MODELS } from "@/lib/anthropic/client";
 import { sanitizeForAITells } from "@/lib/anthropic/sanitize";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
-import { TOOL_REGISTRY_LIST } from "@/lib/agent/registry";
+import { TOOL_REGISTRY, TOOL_REGISTRY_LIST } from "@/lib/agent/registry";
 import { appendMessage, loadThread } from "@/lib/agent/threads";
 import type { AnyToolDefinition, CursorContext, ToolRing } from "@/lib/agent/types";
 import { serializeCursor } from "@/lib/agent/cursor-serialize";
-import { recordAction, type ReverseOp } from "@/lib/agent/undo";
-import {
-  awaitApprovalDecision,
-  createPendingApproval,
-} from "@/lib/agent/approval";
+import type { ReverseOp } from "@/lib/agent/undo";
 import { compactThreadIfNeeded } from "@/lib/agent/compact";
+import { HOOKS } from "@/lib/agent/hooks/registry";
+import { runPostToolHooks, runPreToolHooks } from "@/lib/agent/hooks/runner";
 
 /**
  * Mashi Agent — read-only loop (Phase 2).
@@ -108,6 +106,14 @@ interface AnthropicToolDef {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+}
+
+function safeParseJson(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
 }
 
 function defToAnthropicTool(def: AnyToolDefinition): AnthropicToolDef {
@@ -468,114 +474,111 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
         continue;
       }
       opts.onDelta({ kind: "tool_call_args", id: call.id, args: call.input });
+      const toolCtx = {
+        userId: opts.userId,
+        supabase,
+        origin: "session" as const,
+        threadId: opts.threadId,
+      };
       try {
-        // Ring 3 (write_world) gate: pause before any external call and
-        // wait for the user's Approve / Edit / Cancel decision via the
-        // approval channel. Edit returns a synthetic tool result so the
-        // model re-issues the call with the edited args (intentional —
-        // gives the user a second chance to approve the revision).
-        // Cancel + Expired surface as synthetic errors so the model can
-        // gracefully recover ("got it, want me to draft a different
-        // version?"). Approve falls through to the normal arg-parse +
-        // handler dispatch path below.
-        let effectiveInput: unknown = call.input;
-        if (def.ring === "write_world") {
-          const pending = await createPendingApproval({
-            userId: opts.userId,
-            threadId: opts.threadId,
-            callId: call.id,
-            toolName: def.name,
-            args: call.input,
-            supabase,
-          });
-          opts.onDelta({
-            kind: "approval-needed",
-            id: call.id,
-            name: def.name,
-            args: call.input,
-            expiresAt: pending.expiresAt,
-          });
-          const outcome = await awaitApprovalDecision({
-            userId: opts.userId,
-            threadId: opts.threadId,
-            callId: call.id,
-            supabase,
-          });
-          if (outcome.kind === "edit") {
+        // Quality Phase 4: pre-tool hook chain. Replaces the inline
+        // ring-3 approval, dedup, and any future gates. Hooks see the
+        // call before the handler runs and can deny, ask a follow-up,
+        // synthesize a tool_result directly (respond), or rewrite the
+        // input — and optionally the tool — before dispatch.
+        const pre = await runPreToolHooks({
+          toolName: def.name,
+          input: call.input,
+          ring: def.ring,
+          ctx: toolCtx,
+          callId: call.id,
+          hooks: HOOKS.preTool,
+          emitFollowUp: (d) =>
+            opts.onDelta({
+              kind: "follow-up-question",
+              id: d.id,
+              question: d.question,
+              options: d.options,
+            }),
+          emitApprovalNeeded: (d) =>
+            opts.onDelta({
+              kind: "approval-needed",
+              id: d.id,
+              name: d.name,
+              args: d.args,
+              expiresAt: d.expiresAt,
+            }),
+          emitApprovalResolved: (d) =>
             opts.onDelta({
               kind: "approval-resolved",
-              id: call.id,
-              outcome: "edit",
-            });
-            const synth = {
-              ok: true,
-              edited: true,
-              edited_args: outcome.editedArgs,
-              note: "User edited the call. Re-issue the tool with these arguments to seek a fresh approval.",
-            };
-            toolResults.push({
-              tool_use_id: call.id,
-              content: JSON.stringify(synth),
-              is_error: false,
-            });
-            opts.onDelta({
-              kind: "tool_call_result",
-              id: call.id,
-              ok: true,
-              result: synth,
-            });
-            continue;
-          }
-          if (outcome.kind === "cancel" || outcome.kind === "expired") {
-            opts.onDelta({
-              kind: "approval-resolved",
-              id: call.id,
-              outcome: outcome.kind === "cancel" ? "cancel" : "expired",
-            });
-            const synth = {
-              ok: false,
-              error:
-                outcome.kind === "cancel"
-                  ? "user cancelled"
-                  : "approval window expired",
-            };
-            try {
-              await recordAction({
-                userId: opts.userId,
-                threadId: opts.threadId,
-                toolName: def.name,
-                ring: "write_world",
-                args: call.input,
-                result: synth,
-                ok: false,
-                supabase,
-              });
-            } catch {
-              // best-effort
-            }
-            toolResults.push({
-              tool_use_id: call.id,
-              content: JSON.stringify(synth),
-              is_error: true,
-            });
-            opts.onDelta({
-              kind: "tool_call_result",
-              id: call.id,
-              ok: false,
-              error: synth.error,
-            });
-            continue;
-          }
-          // outcome.kind === "approve" — fall through using original args.
-          opts.onDelta({
-            kind: "approval-resolved",
-            id: call.id,
-            outcome: "approve",
+              id: d.id,
+              outcome: d.outcome,
+            }),
+        });
+
+        if (
+          pre.decision.decision === "deny" ||
+          pre.decision.decision === "respond"
+        ) {
+          const isError =
+            pre.decision.decision === "deny"
+              ? true
+              : pre.decision.isError;
+          const content =
+            pre.decision.decision === "deny"
+              ? JSON.stringify({ ok: false, error: pre.decision.message })
+              : pre.decision.content;
+          toolResults.push({
+            tool_use_id: call.id,
+            content,
+            is_error: isError,
           });
-          effectiveInput = outcome.args ?? call.input;
+          opts.onDelta({
+            kind: "tool_call_result",
+            id: call.id,
+            ok: !isError,
+            result: safeParseJson(content),
+            error: isError && pre.decision.decision === "deny"
+              ? pre.decision.message
+              : undefined,
+          });
+          continue;
+        }
+        if (pre.decision.decision === "ask") {
+          opts.onDelta({
+            kind: "follow-up-question",
+            id: call.id,
+            question: pre.decision.message,
+          });
+          // Surface the message as a non-error tool_result so the loop
+          // remains shape-consistent; the model will see the question
+          // and the loop short-circuits below.
+          toolResults.push({
+            tool_use_id: call.id,
+            content: JSON.stringify({
+              ok: true,
+              follow_up_question: pre.decision.message,
+            }),
+            is_error: false,
+          });
+          opts.onDelta({
+            kind: "tool_call_result",
+            id: call.id,
+            ok: true,
+            result: { follow_up_question: pre.decision.message },
+          });
+          askedFollowUp = true;
+          continue;
         }
 
-        const parsed = def.args.safeParse(effectiveInput);
+        // Allow / transform. Resolve the (possibly redirected) tool def.
+        const effectiveDef =
+          pre.effectiveToolName === def.name
+            ? def
+            : TOOL_REGISTRY[pre.effectiveToolName] ?? def;
+        const effectiveInput = pre.effectiveInput;
+
+        const parsed = effectiveDef.args.safeParse(effectiveInput);
         if (!parsed.success) {
           throw new Error(
             `Invalid arguments: ${parsed.error.issues
@@ -583,81 +586,45 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
               .join("; ")}`
           );
         }
-        const result = await def.handler(parsed.data, {
-          userId: opts.userId,
-          supabase,
-          origin: "session",
-          threadId: opts.threadId,
-        });
+        const handlerResult = await effectiveDef.handler(parsed.data, toolCtx);
 
-        // Ring 2 dispatch: peel off the private `_undo` channel,
-        // persist the audit row, and emit an `undoable` delta the UI
-        // can pin to the bottom of the thread. The model-facing
-        // result excludes `_undo` so the agent never sees the
-        // reverse-op payload.
-        let modelResult: unknown = result;
-        let undoInfo:
-          | { summary: string; op: ReverseOp; ok: boolean }
-          | null = null;
+        // Structural: peel the private _undo channel so the model never
+        // sees the reverse-op payload. The audit hook still reads
+        // _undo from the original result via its own `result` arg.
+        let modelResult: unknown = handlerResult;
         const isObjectResult =
-          result != null && typeof result === "object" && !Array.isArray(result);
-        if (def.ring === "write_mashi" && isObjectResult) {
-          const obj = result as Record<string, unknown> & {
+          handlerResult != null &&
+          typeof handlerResult === "object" &&
+          !Array.isArray(handlerResult);
+        if (effectiveDef.ring === "write_mashi" && isObjectResult) {
+          const obj = handlerResult as Record<string, unknown> & {
             _undo?: { summary: string; op: ReverseOp };
-            ok?: boolean;
           };
-          const ok = obj.ok !== false;
-          const { _undo, ...rest } = obj;
+          const { _undo: _strippedUndo, ...rest } = obj;
+          void _strippedUndo;
           modelResult = rest;
-          if (ok && _undo) {
-            undoInfo = { summary: _undo.summary, op: _undo.op, ok };
-          }
-          // Always audit a write_mashi attempt, undoable or not.
-          const recorded = await recordAction({
-            userId: opts.userId,
-            threadId: opts.threadId,
-            toolName: def.name,
-            ring: "write_mashi",
-            args: call.input,
-            result: modelResult,
-            ok,
-            undoPayload: undoInfo?.op ?? null,
-            undoSummary: undoInfo?.summary ?? null,
-            supabase,
-          });
-          if (recorded.undoSummary && recorded.undoExpiresAt) {
+        }
+        const ok = isObjectResult
+          ? (handlerResult as { ok?: boolean }).ok !== false
+          : true;
+
+        await runPostToolHooks({
+          toolName: effectiveDef.name,
+          input: effectiveInput,
+          result: handlerResult,
+          ok,
+          ring: effectiveDef.ring,
+          ctx: toolCtx,
+          hooks: HOOKS.postTool,
+          emitUndoable: (d) =>
             opts.onDelta({
               kind: "undoable",
-              token: recorded.id,
-              summary: recorded.undoSummary,
-              expiresAt: recorded.undoExpiresAt,
-              toolName: def.name,
-            });
-          }
-        } else if (def.ring === "write_world") {
-          // Ring 3 audit: every external write lands in agent_actions
-          // with ring='write_world' and no undo_payload (irreversible
-          // by design — they're explicitly approved, not optimistic).
-          // Cancel / expired paths above already audit failures; this
-          // branch only reaches here on approve.
-          const ok =
-            isObjectResult &&
-            (result as { ok?: boolean }).ok !== false;
-          try {
-            await recordAction({
-              userId: opts.userId,
-              threadId: opts.threadId,
-              toolName: def.name,
-              ring: "write_world",
-              args: effectiveInput,
-              result: modelResult,
-              ok,
-              supabase,
-            });
-          } catch {
-            // best-effort
-          }
-        }
+              token: d.token,
+              summary: d.summary,
+              expiresAt: d.expiresAt,
+              toolName: d.toolName,
+            }),
+        });
 
         toolResults.push({
           tool_use_id: call.id,
@@ -670,7 +637,7 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
           ok: true,
           result: modelResult,
         });
-        if (def.name === "ask_followup_question") {
+        if (effectiveDef.name === "ask_followup_question") {
           const followUpArgs = parsed.data as {
             question: string;
             options?: string[];
@@ -685,23 +652,18 @@ export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : "tool failed";
-        // Ring 2/3 failures land an audit row so the user can see what
-        // was attempted; ring 1 failures stay in-band only.
+        // Audit thrown failures via the post-tool chain so the audit
+        // hook captures them regardless of which ring fired.
         if (def.ring === "write_mashi" || def.ring === "write_world") {
-          try {
-            await recordAction({
-              userId: opts.userId,
-              threadId: opts.threadId,
-              toolName: def.name,
-              ring: def.ring,
-              args: call.input,
-              result: { error: message },
-              ok: false,
-              supabase,
-            });
-          } catch {
-            // best-effort
-          }
+          await runPostToolHooks({
+            toolName: def.name,
+            input: call.input,
+            result: { error: message },
+            ok: false,
+            ring: def.ring,
+            ctx: toolCtx,
+            hooks: HOOKS.postTool,
+          });
         }
         toolResults.push({
           tool_use_id: call.id,
