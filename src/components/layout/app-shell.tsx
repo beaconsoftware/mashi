@@ -2,13 +2,7 @@
 
 import { Sidebar } from "@/components/layout/sidebar";
 import { OverlayRoot } from "@/components/layout/primitives";
-import { ChatPanel } from "@/components/chat/chat-panel";
 import { ConnectionHealthAlert } from "@/components/layout/connection-health-alert";
-// ChatSummonPill removed from the always-visible UI — the pulsing
-// bottom-right "Summon Mashi" pill kept reading like the copilot was
-// opening by default. The ChatToggleButton in the top bar is the
-// remaining (less shouty) way to open chat. ChatSummonPill is still
-// exported and can be re-mounted later if we want it back.
 import { SyncStatusBar } from "@/components/layout/sync-status-bar";
 import { SprintGlobalMount } from "@/components/sprint/sprint-global-mount";
 import { SpotifyGlobalMount } from "@/components/sprint/spotify-global-mount";
@@ -61,7 +55,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {children}
           </main>
-          <ChatPanel />
         </div>
         <SprintGlobalMount />
         <SpotlightAgent />
