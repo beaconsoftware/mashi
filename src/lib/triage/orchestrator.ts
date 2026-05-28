@@ -510,7 +510,7 @@ export async function loadExistingForUnit(
  * Returns the match info + an optional priority/pathway upgrade if the
  * new signal is more urgent than the existing item.
  */
-interface DedupMatch {
+export interface DedupMatch {
   id: string;
   title: string;
   linked_sources: unknown[];
@@ -526,7 +526,7 @@ interface DedupMatch {
   was_closed?: boolean;
 }
 
-async function findSameWorkOpenItem(args: {
+export async function findSameWorkOpenItem(args: {
   title: string;
   description: string;
   pathway: string;
