@@ -2,6 +2,7 @@
 
 import { ArrowDownUp, ArrowUpAZ, ArrowDownAZ, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -149,6 +150,10 @@ export function S2DSortDropdown({
 }) {
   const label = SORT_LABELS[state.mode];
   const OrderIcon = state.order === "asc" ? ArrowUpAZ : ArrowDownAZ;
+  // Non-default sort = "this user has customized something" — bump the
+  // chrome to match the Filter button's active treatment so the row
+  // reads as a state line at a glance.
+  const isCustom = state.mode !== "priority" || state.order !== "asc";
 
   return (
     <DropdownMenu>
@@ -157,9 +162,19 @@ export function S2DSortDropdown({
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 gap-1.5 text-[11px]"
+          className={cn(
+            "mashi-magnetic h-7 gap-1.5 text-[11px] transition-colors",
+            isCustom
+              ? "border-primary/40 bg-primary/15 text-foreground hover:bg-primary/15 hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          )}
         >
-          <ArrowDownUp className="h-3 w-3" />
+          <ArrowDownUp
+            className={cn(
+              "h-3 w-3 transition-colors",
+              isCustom && "text-primary"
+            )}
+          />
           Sort: {label}
         </Button>
       </DropdownMenuTrigger>

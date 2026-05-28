@@ -615,14 +615,14 @@ function BoardToolbar({
           value={quickView ?? "all"}
           onValueChange={(v) => setQuickView(v === "all" ? null : (v as QuickView))}
         >
-          <TabsList variant="line" className="h-7 gap-1">
-            <TabsTrigger value="all" className="h-6 px-2 text-[11px]">
+          <TabsList variant="animated" className="h-7">
+            <TabsTrigger value="all" className="h-6 px-3 text-[11px] font-medium">
               All
             </TabsTrigger>
-            <TabsTrigger value="today" className="h-6 px-2 text-[11px]">
+            <TabsTrigger value="today" className="h-6 px-3 text-[11px] font-medium">
               Today
             </TabsTrigger>
-            <TabsTrigger value="overdue" className="h-6 px-2 text-[11px]">
+            <TabsTrigger value="overdue" className="h-6 px-3 text-[11px] font-medium">
               Overdue
             </TabsTrigger>
           </TabsList>
@@ -652,36 +652,38 @@ function BoardToolbar({
 
       {/* Row 2: view + density + selection chip + actions */}
       <div className="flex w-full flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-md border border-border/40">
-          <ToolbarPill
-            active={view === "cards"}
-            onClick={() => setView("cards")}
-            icon={<LayoutGrid className="h-3 w-3" />}
-            label="Cards"
-          />
-          <ToolbarPill
-            active={view === "list"}
-            onClick={() => setView("list")}
-            icon={<ListIcon className="h-3 w-3" />}
-            label="List"
-          />
-        </div>
+        <Tabs
+          value={view}
+          onValueChange={(v) => setView(v as BoardView)}
+        >
+          <TabsList variant="animated" className="h-7">
+            <TabsTrigger value="cards" className="h-6 px-3 text-[11px] font-medium">
+              <LayoutGrid className="h-3 w-3" />
+              Cards
+            </TabsTrigger>
+            <TabsTrigger value="list" className="h-6 px-3 text-[11px] font-medium">
+              <ListIcon className="h-3 w-3" />
+              List
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {view === "cards" && (
-          <div className="flex overflow-hidden rounded-md border border-border/40">
-            <ToolbarPill
-              active={density === "compact"}
-              onClick={() => setDensity("compact")}
-              icon={<Minimize2 className="h-3 w-3" />}
-              label="Compact"
-            />
-            <ToolbarPill
-              active={density === "expanded"}
-              onClick={() => setDensity("expanded")}
-              icon={<Maximize2 className="h-3 w-3" />}
-              label="Expanded"
-            />
-          </div>
+          <Tabs
+            value={density}
+            onValueChange={(v) => setDensity(v as CardDensity)}
+          >
+            <TabsList variant="animated" className="h-7">
+              <TabsTrigger value="compact" className="h-6 px-3 text-[11px] font-medium">
+                <Minimize2 className="h-3 w-3" />
+                Compact
+              </TabsTrigger>
+              <TabsTrigger value="expanded" className="h-6 px-3 text-[11px] font-medium">
+                <Maximize2 className="h-3 w-3" />
+                Expanded
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         )}
 
         <div className="ml-auto flex items-center gap-2">
@@ -719,36 +721,6 @@ function BoardToolbar({
         </div>
       </div>
     </ChromeBar>
-  );
-}
-
-function ToolbarPill({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      onClick={onClick}
-      className={cn(
-        "h-auto rounded-none px-2 py-1 text-[11px] font-normal transition-colors",
-        active
-          ? "bg-secondary text-foreground hover:bg-secondary hover:text-foreground"
-          : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
-      )}
-    >
-      {icon}
-      {label}
-    </Button>
   );
 }
 
