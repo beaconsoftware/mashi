@@ -2,7 +2,7 @@
 
 // translucency-audit-ok: file — legacy callsites, migrate to sanctioned scale (/15, /40, /55, /60, /80, /95) case-by-case during component touch-ups.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ExternalLink,
   Copy,
@@ -10,22 +10,20 @@ import {
   ChevronDown,
   ChevronRight,
   MessageSquare,
-  Send,
   Check,
   AlertTriangle,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { SourceIcon } from "@/components/shared/source-icon";
+import { AskMashiButton } from "@/components/agent/ask-mashi-button";
 import type { S2DItem, SourceType } from "@/types";
 import { cn } from "@/lib/utils";
-import { streamPostText } from "@/lib/streaming";
 import {
   renderClaudePrompt,
   type ContextResp,
@@ -111,7 +109,40 @@ export function ItemContextPanel({ item }: { item: S2DItem }) {
     <div className="space-y-3">
       <ContextSources sources={ctx.sources} />
       <ContextActions item={item} ctx={ctx} />
-      <ItemChat item={item} />
+      <AskMashiCta itemId={item.id} />
+    </div>
+  );
+}
+
+/**
+ * Promoted Ask Mashi entry point inside the item context panel.
+ *
+ * Replaces the legacy "Ask Mashi about this" collapsible that used the
+ * dumb `/api/s2d/:id/chat` endpoint — pre-loaded source context into a
+ * system prompt, NO tool access, NO MASHI.md memory, NO plan/act, NO
+ * approvals, NO undo. It told users to their face it couldn't pull
+ * Slack/Gmail/etc. and they believed it because it was right.
+ *
+ * The proper agent has all of that and is already wired up via the
+ * top-right `[Ask Mashi]` chip on the item sheet. This CTA is the same
+ * action with promoted visual weight + clearer copy, planted where the
+ * collapsible used to live so the discovery path from the context
+ * panel isn't lost.
+ */
+function AskMashiCta({ itemId }: { itemId: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider">
+          <Sparkles className="h-3 w-3 text-primary" />
+          Ask Mashi about this work
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Full agent with tool access, memory, and approvals. Reads Slack,
+          Gmail, Linear, meetings, calendar.
+        </p>
+      </div>
+      <AskMashiButton itemId={itemId} label="Open" className="shrink-0" />
     </div>
   );
 }
@@ -349,160 +380,3 @@ function ContextActions({ item, ctx }: { item: S2DItem; ctx: ContextResp }) {
 
 // renderClaudePrompt() moved to src/lib/s2d/claude-prompt.ts so HeadsDownAction
 // and other panels can reuse it. Import is at the top of this file.
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-function ItemChat({ item }: { item: S2DItem }) {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [draft, setDraft] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  async function send() {
-    const text = draft.trim();
-    if (!text || streaming) return;
-    setDraft("");
-    const next: ChatMessage[] = [...messages, { role: "user", content: text }];
-    setMessages([...next, { role: "assistant", content: "" }]);
-
-    setStreaming(true);
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    let accumulated = "";
-    try {
-      await streamPostText(
-        `/api/s2d/${item.id}/chat`,
-        { messages: next },
-        (delta) => {
-          accumulated += delta;
-          setMessages((prev) => {
-            const copy = prev.slice();
-            copy[copy.length - 1] = { role: "assistant", content: accumulated };
-            return copy;
-          });
-        },
-        ctrl.signal
-      );
-    } catch (err) {
-      if (ctrl.signal.aborted) return;
-      setMessages((prev) => {
-        const copy = prev.slice();
-        copy[copy.length - 1] = {
-          role: "assistant",
-          content: `_Error: ${err instanceof Error ? err.message : "stream failed"}_`,
-        };
-        return copy;
-      });
-    } finally {
-      setStreaming(false);
-    }
-  }
-
-  return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      className="overflow-hidden rounded-md border border-border/50 bg-card"
-    >
-      <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          className="flex h-auto w-full items-center justify-between rounded-none border-b border-border/40 bg-secondary/40 px-3 py-2 text-left font-normal hover:bg-secondary/40"
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[11px] font-semibold uppercase tracking-wider">
-              Ask Mashi about this
-            </span>
-          </div>
-          {open ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-        </Button>
-      </CollapsibleTrigger>
-
-      <CollapsibleContent>
-        <div className="space-y-2 p-3">
-          {messages.length > 0 && (
-            <div
-              ref={scrollRef}
-              className="max-h-72 space-y-2 overflow-y-auto rounded border border-border/30 bg-secondary/20 p-2"
-            >
-              {messages.map((m, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "rounded px-2 py-1.5 text-[12px] leading-relaxed",
-                    m.role === "user"
-                      ? "bg-primary/10 text-foreground"
-                      : "bg-card text-foreground/90"
-                  )}
-                >
-                  <div className="mb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {m.role === "user" ? "You" : "Mashi"}
-                  </div>
-                  <div className="whitespace-pre-wrap">
-                    {m.content}
-                    {streaming &&
-                      m.role === "assistant" &&
-                      i === messages.length - 1 && (
-                        <span className="ml-0.5 inline-block h-3 w-1.5 translate-y-0.5 bg-primary/80 animate-pulse" />
-                      )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            rows={2}
-            placeholder="Ask anything about this work… (⌘/Ctrl + Enter to send)"
-            className="text-[12px]"
-          />
-          <div className="flex items-center gap-2">
-            <Button size="sm" onClick={send} disabled={!draft.trim() || streaming} className="gap-1.5">
-              {streaming ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Send className="h-3.5 w-3.5" />
-              )}
-              {streaming ? "Streaming…" : "Send"}
-            </Button>
-            {messages.length > 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setMessages([])}
-                disabled={streaming}
-                className="text-muted-foreground"
-              >
-                Clear
-              </Button>
-            )}
-          </div>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
