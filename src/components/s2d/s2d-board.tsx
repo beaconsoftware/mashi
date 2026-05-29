@@ -49,7 +49,14 @@ import {
   DEFAULT_SORT,
   type S2DSortState,
 } from "@/components/s2d/s2d-sort";
-import { S2DActionsDropdown, buildDonePatch, type BulkAction } from "@/components/s2d/s2d-actions";
+import {
+  S2DActionsContextMenu,
+  S2DActionsDropdown,
+  S2DActionsProvider,
+  buildDonePatch,
+  useS2DActions,
+  type BulkAction,
+} from "@/components/s2d/s2d-actions";
 import {
   STATUS_ORDER,
   type S2DItem,
@@ -263,9 +270,18 @@ export function S2DBoard() {
     return failed;
   }
 
-  async function handleBulkAction(action: BulkAction) {
-    if (selectedItems.length === 0 || busy) return;
-    const ids = selectedItems.map((it) => it.id);
+  async function handleBulkAction(
+    action: BulkAction,
+    /** When provided (right-click context menu path), the action runs
+     * against this set instead of the global multi-selection, and the
+     * multi-selection is NOT cleared afterwards. Toolbar path leaves
+     * this undefined → acts on the global selection + clears. */
+    scoped?: S2DItem[]
+  ) {
+    const targets = scoped ?? selectedItems;
+    const shouldClearSelection = !scoped;
+    if (targets.length === 0 || busy) return;
+    const ids = targets.map((it) => it.id);
     setBusy(true);
     setBanner(null);
 
@@ -296,7 +312,7 @@ export function S2DBoard() {
           const status = action.status;
           if (status === "done") {
             // Capture snapshot so the undo strip can PATCH items back.
-            const snapshots: BulkDoneSnapshot[] = selectedItems.map((it) => ({
+            const snapshots: BulkDoneSnapshot[] = targets.map((it) => ({
               id: it.id,
               prev: {
                 status: it.status,
@@ -367,8 +383,19 @@ export function S2DBoard() {
       }
     } finally {
       setBusy(false);
-      clearSelected();
+      if (shouldClearSelection) clearSelected();
     }
+  }
+
+  // Right-click scope resolver. If the user right-clicks a card that's
+  // part of the current multi-selection, the menu acts on the whole
+  // selection (Finder behavior). Otherwise it scopes to just that one
+  // card without disturbing the multi-selection at all.
+  function resolveContextMenuScope(rightClicked: S2DItem): S2DItem[] {
+    if (selectedItemIds.has(rightClicked.id) && selectedItems.length > 0) {
+      return selectedItems;
+    }
+    return [rightClicked];
   }
 
   async function applyUndo() {
@@ -551,26 +578,34 @@ export function S2DBoard() {
           />
         )}
 
-        {view === "cards" ? (
-          <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-            <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
-              <ReviewColumn items={reviewItems} />
-              {STATUS_ORDER.map((status) => (
-                <S2DColumn
-                  key={status}
-                  status={status}
-                  items={grouped[status]}
-                  density={density}
-                />
-              ))}
-            </div>
-            <DragOverlay>
-              {activeItem && <S2DItemCard item={activeItem} isOverlay density={density} />}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          <ListView items={sortItems(filteredItems, sort.mode, sort.order)} onSetSelected={setSelected} />
-        )}
+        <S2DActionsProvider
+          value={{
+            runAction: handleBulkAction,
+            clearSelection: clearSelected,
+            resolveSelection: resolveContextMenuScope,
+          }}
+        >
+          {view === "cards" ? (
+            <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+              <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
+                <ReviewColumn items={reviewItems} />
+                {STATUS_ORDER.map((status) => (
+                  <S2DColumn
+                    key={status}
+                    status={status}
+                    items={grouped[status]}
+                    density={density}
+                  />
+                ))}
+              </div>
+              <DragOverlay>
+                {activeItem && <S2DItemCard item={activeItem} isOverlay density={density} />}
+              </DragOverlay>
+            </DndContext>
+          ) : (
+            <ListView items={sortItems(filteredItems, sort.mode, sort.order)} onSetSelected={setSelected} />
+          )}
+        </S2DActionsProvider>
       </div>
       <S2DItemSheet />
     </>
@@ -888,6 +923,7 @@ function ListView({
   const selectedIds = useS2DStore((s) => s.selectedItemIds);
   const toggleSelected = useS2DStore((s) => s.toggleSelected);
   const setSheetItem = useS2DStore((s) => s.setSelectedItem);
+  const actions = useS2DActions();
 
   if (items.length === 0) {
     return (
@@ -921,7 +957,7 @@ function ListView({
           const checked = selectedIds.has(it.id);
           const pwMeta = PATHWAY_META[it.pathway];
           const prMeta = PRIORITY_META[it.priority];
-          return (
+          const row = (
             <li
               key={it.id}
               data-s2d-card-id={it.id}
@@ -988,6 +1024,22 @@ function ListView({
                 </span>
               )}
             </li>
+          );
+          // Right-click on a list row opens the same bulk-actions menu
+          // as cards. Skip wrapping if the provider isn't in scope
+          // (defensive — ListView is always inside <S2DActionsProvider>
+          // today, but the null check keeps it future-safe).
+          if (!actions) return row;
+          return (
+            <S2DActionsContextMenu
+              key={it.id}
+              item={it}
+              resolveSelection={actions.resolveSelection}
+              onAction={actions.runAction}
+              onClear={actions.clearSelection}
+            >
+              {row}
+            </S2DActionsContextMenu>
           );
         })}
       </ul>

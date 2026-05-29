@@ -19,6 +19,7 @@ import { gsap, withMotion } from "@/lib/animation";
 import { useMagneticHover, useSelectBurst } from "@/lib/animation/interactions";
 import { AskMashiButton } from "@/components/agent/ask-mashi-button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { S2DActionsContextMenu, useS2DActions } from "@/components/s2d/s2d-actions";
 
 interface Props {
   item: S2DItem;
@@ -129,7 +130,13 @@ export function S2DItemCard({
     toggleSelected(item.id, column ?? item.status);
   }
 
-  return (
+  // Right-click bulk-action menu. Only rendered when the card is
+  // mounted inside an <S2DActionsProvider> (i.e. on the board itself,
+  // not inside the dnd-kit DragOverlay preview, which has no provider
+  // in scope and shouldn't be a right-click target anyway).
+  const actions = useS2DActions();
+
+  const cardBody = (
     <div
       ref={setNodeRef}
       style={style}
@@ -278,5 +285,18 @@ export function S2DItemCard({
       )}
       </div>
     </div>
+  );
+
+  if (!actions || isOverlay) return cardBody;
+
+  return (
+    <S2DActionsContextMenu
+      item={item}
+      resolveSelection={actions.resolveSelection}
+      onAction={actions.runAction}
+      onClear={actions.clearSelection}
+    >
+      {cardBody}
+    </S2DActionsContextMenu>
   );
 }
