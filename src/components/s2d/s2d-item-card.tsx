@@ -222,11 +222,11 @@ export function S2DItemCard({
                 ? "Deselect. Shift-click for range."
                 : "Select. Shift-click for range. Cmd-click anywhere on the card to select without opening it."
             }
-            // Quiet at rest (border-muted-foreground/40), brightens on
-            // card hover, fills with primary on checked. No bg override
-            // and no shadow — let it sit in the chip row like any
-            // other chip rather than floating on the surface.
-            className="size-3.5 shrink-0 rounded-[4px] border-muted-foreground/40 bg-transparent shadow-none transition-colors group-hover:border-muted-foreground/80 data-[state=checked]:border-primary"
+            // Shrink to match the chip row scale (the base primitive is
+            // size-4); everything else (quiet border, transparent bg,
+            // no shadow, primary fill on check) now comes from the
+            // refined base in components/ui/checkbox.tsx.
+            className="size-3.5 shrink-0 group-hover:border-muted-foreground/70"
           />
         )}
         {item.ticket_number != null && (
