@@ -165,6 +165,34 @@ parent an explicit z-class (`z-chrome`) so its whole stacking context
 is lifted, not just its inline contents. The `<ChromeBar>` primitive
 bakes this in — use it instead of hand-rolling.
 
+**This only saves you for content that lives entirely INSIDE the bar.**
+A child overlay that extends visually OUTSIDE the bar (the Spotify
+queue dropdown is the canonical case — `absolute top-full` reaches
+below the TopBar to overlap the kanban board) is still confined to
+the bar's `z-chrome` stacking context. Its `z-dropdown` (50) only
+resolves WITHIN the bar's z=40 box, so globally it can never paint
+above z=40. Any sibling of the TopBar with its own stacking context
+(the S2D columns each get one because of their `backdrop-blur-sm`)
+can outrank it in painting order.
+
+**Rule: any overlay that needs to escape its parent's stacking
+context — dropdowns, popovers, sheets, modals, toasts — MUST portal
+out.** In practice that means: use the shadcn `*Content` primitives
+(`PopoverContent`, `SheetContent`, `DialogContent`, `DropdownMenuContent`,
+`SelectContent`, `TooltipContent`, `HoverCardContent`, `AlertDialogContent`)
+which all wrap their children in a Radix Portal. Or `<FocusOverlay>`
+for fullscreen takeovers, which portals into `#mashi-overlay-root`.
+For the rare cases where shadcn doesn't fit, `createPortal` from
+`react-dom` into the same `#mashi-overlay-root` anchor is the escape
+hatch.
+
+`pnpm audit:layers` enforces this: any file that uses `z-dropdown`,
+`z-widget`, `z-modal`, or `z-toast` and doesn't ALSO reference a
+Portal-using primitive (Radix `*.Portal`, shadcn `*Content`, `createPortal`,
+`<FocusOverlay>`) is flagged. Carve-outs for legitimate "fixed at the
+page root, nothing above it in the tree" cases (SprintWidget) live in
+the audit script's `EXCLUDE_FILES` with a justification comment.
+
 ### Stacking buckets — z-index is not enough
 
 The doctrine declares `GROUND = 0 < SHELL = 10 < PAGE_CHROME = 40` etc.
