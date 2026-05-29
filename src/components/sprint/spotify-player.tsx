@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useSpotifyState, useSpotifyControl, type SpotifyTrack } from "@/hooks/use-spotify";
 
@@ -154,7 +160,22 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
     }
   }
 
+  // The queue dropdown lives inside the TopBar, which is a `<ChromeBar>`
+  // with backdrop-blur + an explicit z-chrome. Any non-portaled child
+  // with z-dropdown gets trapped at z-chrome globally (its z=50 only
+  // resolves WITHIN the z=40 stacking context) and loses painting
+  // fights to siblings of the TopBar that have their own stacking
+  // contexts (every backdrop-blur kanban column on /s2d).
+  //
+  // Radix Popover portals its content into the body, escaping the
+  // TopBar's stacking context entirely. The anchor + trigger split
+  // lets us keep the dropdown's visual width matched to the player
+  // bar while the click target stays on just the chevron.
+  const queueOpen = expanded && queue.length > 0;
+
   return (
+    <Popover open={queueOpen} onOpenChange={setExpanded}>
+    <PopoverAnchor asChild>
     <div className="pointer-events-auto relative w-full">
       {/* Compact player bar — sized to fit inside the 48px page TopBar
           without crowding it. py-1 + h-7 thumb + h-6 buttons keeps a
@@ -236,42 +257,24 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
           />
         </div>
 
-        {/* Expand queue */}
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => setExpanded((v) => !v)}
-          className="mashi-icon-glow h-6 w-6"
-          aria-label={expanded ? "Hide queue" : "Show queue"}
-        >
-          {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-        </Button>
-      </div>
-
-      {/* Queue dropdown — absolute-positioned BELOW the player bar so
-          expanding it does not push page content down. max-h-72 keeps
-          it from running off-screen on short viewports; the inner ol
-          scrolls. transition-* + opacity gives the panel a quick
-          snap-down feel, mirroring Spotify's own bottom drawer. */}
-      <div
-        className={cn(
-          "absolute left-0 right-0 top-full z-dropdown mt-1 origin-top",
-          "rounded-lg border border-border/40 bg-card/95 p-2 shadow-2xl backdrop-blur-md",
-          "transition duration-150 ease-out",
-          expanded && queue.length > 0
-            ? "pointer-events-auto scale-100 opacity-100"
-            : "pointer-events-none scale-95 opacity-0"
-        )}
-        aria-hidden={!expanded}
-      >
-        <div className="mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Up next ({queue.length})
-        </div>
-        <ol className="max-h-72 space-y-0.5 overflow-y-auto">
-          {queue.map((t, i) => (
-            <QueueRow key={`${t.id}-${i}`} t={t} />
-          ))}
-        </ol>
+        {/* Expand queue — PopoverTrigger only wraps the chevron so the
+            click target is just this button, not the whole player bar.
+            The anchor element (containing the player bar) is what
+            Radix uses to position + width-match the popover content. */}
+        <PopoverTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="mashi-icon-glow h-6 w-6"
+            aria-label={queueOpen ? "Hide queue" : "Show queue"}
+          >
+            {queueOpen ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronUp className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </PopoverTrigger>
       </div>
 
       {premiumWarn && (
@@ -281,6 +284,29 @@ export function SpotifyPlayer({ enabled }: { enabled: boolean }) {
         </div>
       )}
     </div>
+    </PopoverAnchor>
+    {/* Queue dropdown content — portaled out of the TopBar's stacking
+        context. Width tracks the anchor (player bar) via Radix's
+        `--radix-popper-anchor-width` CSS var so the drawer feels like
+        an extension of the player. max-h-72 keeps it from running
+        off-screen; the inner ol scrolls. */}
+    <PopoverContent
+      side="bottom"
+      align="start"
+      sideOffset={6}
+      className="rounded-lg border border-border/40 bg-card/95 p-2 shadow-2xl backdrop-blur-md"
+      style={{ width: "var(--radix-popper-anchor-width)" }}
+    >
+      <div className="mb-1 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Up next ({queue.length})
+      </div>
+      <ol className="max-h-72 space-y-0.5 overflow-y-auto">
+        {queue.map((t, i) => (
+          <QueueRow key={`${t.id}-${i}`} t={t} />
+        ))}
+      </ol>
+    </PopoverContent>
+    </Popover>
   );
 }
 

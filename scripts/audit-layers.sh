@@ -41,6 +41,23 @@ EXCLUDE_FILES=(
   "src/lib/layers.ts"
   "src/app/globals.css"
   "scripts/audit-layers.sh"
+  # The ui/ primitives ARE the portals — they wrap their content in
+  # PopoverPrimitive.Portal / DialogPrimitive.Portal / etc and ship the
+  # high-z classes as part of that portaled content. They're the canonical
+  # safe site for z-dropdown / z-modal / z-toast usage.
+  "src/components/ui/popover.tsx"
+  "src/components/ui/sheet.tsx"
+  "src/components/ui/hover-card.tsx"
+  "src/components/ui/tooltip.tsx"
+  "src/components/ui/dialog.tsx"
+  "src/components/ui/alert-dialog.tsx"
+  "src/components/ui/dropdown-menu.tsx"
+  "src/components/ui/select.tsx"
+  "src/components/ui/sonner.tsx"
+  # SprintWidget mounts at the page root (fixed bottom-right) with
+  # nothing above it in the stacking tree that could trap its z. Safe
+  # without a portal because it isn't a descendant of any ChromeBar.
+  "src/components/sprint/sprint-widget.tsx"
   # Carve-outs: components that maintain a SELF-CONTAINED local stack
   # (decorative rings, swipe-deck card stacking). These z values are
   # scoped inside their own stacking context and never collide with the
@@ -171,6 +188,43 @@ shell_unpositioned() {
   fi
 }
 shell_unpositioned
+
+# 6. High-z classes (z-dropdown / z-widget / z-modal / z-toast) outside a
+# Portal-using primitive. This catches the "z-50 trapped inside z-40"
+# trap that bit the Spotify queue dropdown: any high-z element rendered
+# inline INSIDE a <ChromeBar> (which has backdrop-blur + z-chrome, so it
+# creates a stacking context) only resolves its z within that z-40 box.
+# Globally it can never paint above z-40, defeating its own purpose.
+#
+# The fix is always: portal out of the parent stacking context. shadcn's
+# *Content primitives (PopoverContent, SheetContent, DialogContent,
+# etc.) all wrap in a Radix Portal. createPortal does the same. The
+# FocusOverlay helper portals to the OverlayRoot anchor.
+#
+# We flag any file containing a high-z class that doesn't ALSO contain
+# at least one portal indicator. Carve-outs go into EXCLUDE_FILES with a
+# justification comment (ui/ primitives and the SprintWidget are
+# already carved out above).
+high_z_without_portal() {
+  local hits=""
+  # rg gives -l for list-of-files; grep needs -l too. Both supported.
+  local candidates
+  candidates=$("${FINDER[@]}" --files-with-matches \
+    'z-(dropdown|widget|modal|toast)\b' src/ 2>/dev/null \
+    | grep -vE "(${EXCLUDE_RE})" \
+    || true)
+  for f in $candidates; do
+    if ! grep -qE '(createPortal|PopoverContent|SheetContent|DialogContent|AlertDialogContent|DropdownMenuContent|TooltipContent|HoverCardContent|SelectContent|FocusOverlay|PopoverPrimitive\.Portal|DialogPrimitive\.Portal|SheetPrimitive\.Portal)' "$f"; then
+      hits+="$f"$'\n'
+    fi
+  done
+  if [ -n "$hits" ]; then
+    echo "=== High-z class without portal — z-dropdown/z-widget/z-modal/z-toast must be inside a Portal-using primitive (AGENTS.md: Stacking-context gotchas) ==="
+    echo "$hits"
+    violations=$((violations + 1))
+  fi
+}
+high_z_without_portal
 
 if [ "$violations" -gt 0 ]; then
   echo "Layer doctrine violations found. See AGENTS.md 'Layout doctrine'." >&2

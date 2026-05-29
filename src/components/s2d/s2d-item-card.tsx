@@ -167,38 +167,6 @@ export function S2DItemCard({
         )}
       {!isOverlay && (
         <span
-          className="pointer-events-auto absolute -left-1 -top-1"
-          // Modifiers listed in the title so the user can discover the
-          // range / no-sheet-open shortcuts without docs.
-          title={
-            isSelected
-              ? "Deselect. Shift-click for range."
-              : "Select. Shift-click for range. Cmd-click anywhere on the card to select without opening it."
-          }
-        >
-          <Checkbox
-            checked={isSelected}
-            onClick={handleCheckboxClick}
-            // Radix's Checkbox doesn't forward onClick to the inner button
-            // when also wired through Radix state — keep both so the
-            // interaction works whether the user clicks the visible box
-            // or its label area. We control selection state ourselves so
-            // onCheckedChange is a noop (the click handler does the work).
-            onCheckedChange={() => undefined}
-            aria-label={`Select ${item.title}`}
-            // Always visible at rest: previous opacity-30 fade combined
-            // with `border-border/60 bg-card` made the box camouflage
-            // perfectly against the card — selectability was invisible.
-            // Use border-muted-foreground/60 for visible-but-quiet at
-            // rest; Radix flips to primary fill on data-state=checked
-            // automatically. Hover ring on the card body still signals
-            // hit area.
-            className="size-4 rounded border-muted-foreground/60 bg-background/80 shadow-md"
-          />
-        </span>
-      )}
-      {!isOverlay && (
-        <span
           className={cn(
             "pointer-events-auto absolute top-1 opacity-0 transition-opacity group-hover:opacity-100",
             showUnseen ? "right-5" : "right-1"
@@ -223,8 +191,37 @@ export function S2DItemCard({
       )}
 
       {/* Chip row: wraps when contents exceed card width. PriorityDot
-          stays anchored to the right via ml-auto on the LAST line. */}
+          stays anchored to the right via ml-auto on the LAST line.
+          The select checkbox is the first child so it sits naturally
+          in the row's flow — previously it floated as an absolute
+          overhang on the card edge which read as a peeling sticker
+          against the card. Inline means it tone-matches the rest of
+          the chips, doesn't fight other absolute siblings, and the
+          chip row doesn't need extra padding to clear it. */}
       <div className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        {!isOverlay && (
+          <Checkbox
+            checked={isSelected}
+            onClick={handleCheckboxClick}
+            // Radix's onCheckedChange is a no-op here because the click
+            // handler above owns selection state (it needs to read
+            // modifier keys for shift-range + cmd-skip-sheet).
+            onCheckedChange={() => undefined}
+            aria-label={`Select ${item.title}`}
+            // Discoverable shortcut hints. The native title is fine for
+            // a tooltip here; a full Tooltip primitive is overkill.
+            title={
+              isSelected
+                ? "Deselect. Shift-click for range."
+                : "Select. Shift-click for range. Cmd-click anywhere on the card to select without opening it."
+            }
+            // Quiet at rest (border-muted-foreground/40), brightens on
+            // card hover, fills with primary on checked. No bg override
+            // and no shadow — let it sit in the chip row like any
+            // other chip rather than floating on the surface.
+            className="size-3.5 shrink-0 rounded-[4px] border-muted-foreground/40 bg-transparent shadow-none transition-colors group-hover:border-muted-foreground/80 data-[state=checked]:border-primary"
+          />
+        )}
         {item.ticket_number != null && (
           <span className="font-mono text-[10px] text-muted-foreground/80">
             MASH-{item.ticket_number}
