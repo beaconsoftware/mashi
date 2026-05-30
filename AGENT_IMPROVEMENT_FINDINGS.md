@@ -178,7 +178,7 @@ caught immediately.
     > message, persist on the user row, and resolve to Anthropic image/document content
     > blocks before the model call. New migration `043_agent_attachments.sql` (column + bucket
     > + RLS). Pure module + replay emission unit-tested (`test:attachments`).
-  - [ ] **3 · P3.b · @-mentions in the composer** · covers B2 · deps: P3.a · IN REVIEW (#PENDING) · PR: #PENDING
+  - [ ] **3 · P3.b · @-mentions in the composer** · covers B2 · deps: P3.a · IN REVIEW (#152) · PR: #152
     > Optional. `@`-typeahead over items/people/threads that pins a structured reference,
     > skipping the server-side `resolve_reference` round-trip. Needs a mention plugin over
     > the composer (light contenteditable / overlay), so it's deliberately deferred out of
