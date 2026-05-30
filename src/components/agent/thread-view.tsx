@@ -43,6 +43,7 @@ import { MessageSources } from "@/components/agent/message-sources";
 import { ThreadExport } from "@/components/agent/thread-export";
 import { EditableUserMessage } from "@/components/agent/editable-user-message";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AgentComposer } from "@/components/agent/composer";
 import { StoredAttachmentList } from "@/components/agent/attachment-chip";
 import { ReferenceChipList } from "@/components/agent/reference-chip";
@@ -704,9 +705,21 @@ export function ThreadView({
             />
           )}
           {isLoading && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Loading conversation…
+            // J5 / I3: skeleton placeholders on initial load, not a bare
+            // spinner. A right-aligned user bubble shape then an assistant
+            // block, so the layout settles into what's about to arrive.
+            <div
+              className="space-y-3"
+              role="status"
+              aria-busy="true"
+              aria-label="Loading conversation"
+            >
+              <Skeleton className="ml-auto h-9 w-2/3 rounded-lg" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
             </div>
           )}
           {showEmpty && (
@@ -823,7 +836,11 @@ export function ThreadView({
             </div>
           ))}
           {error && (
-            <div className="rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive">
+            // J4: failures are announced assertively to screen readers.
+            <div
+              role="alert"
+              className="rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive"
+            >
               {error}
             </div>
           )}
@@ -1012,7 +1029,10 @@ function MessageMetadataNote({
   if (!metadata) return null;
   if (metadata.error) {
     return (
-      <div className="rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive">
+      <div
+        role="alert"
+        className="rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive"
+      >
         {metadata.retryable
           ? "Connection dropped before Mashi finished. Send again to retry."
           : `Mashi hit an error: ${metadata.error}`}
@@ -1095,11 +1115,20 @@ function LiveTurnRows({
         <Message from="assistant">
           <MessageContent>
             <MessageResponse>{liveText}</MessageResponse>
+            {/* I3: a blinking caret at the head of the live answer so a
+                streaming turn reads as alive. Reduced-motion shows it
+                static (it's decorative; aria-hidden). */}
+            <span className="mashi-caret" aria-hidden="true" />
           </MessageContent>
         </Message>
       )}
       {!liveText && !hasToolCalls && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        // J4: the in-progress state announces distinctly to screen readers.
+        <div
+          className="flex items-center gap-2 text-xs text-muted-foreground"
+          role="status"
+          aria-busy="true"
+        >
           <Loader2 className="h-3 w-3 animate-spin" />
           Thinking…
         </div>

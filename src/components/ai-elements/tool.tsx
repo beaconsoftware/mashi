@@ -45,8 +45,15 @@ export type ToolPartState =
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps) => (
+  // I1: the most-repeated element in a turn. It lifts on hover like every
+  // other clickable row (.mashi-magnetic), animates in as it streams
+  // (.mashi-enter), and its content expand/collapse + chevron rotation are
+  // driven by Radix data-state below. Reduced-motion short-circuits both.
   <Collapsible
-    className={cn("group not-prose w-full rounded-md border", className)}
+    className={cn(
+      "mashi-magnetic mashi-enter group not-prose w-full rounded-md border",
+      className
+    )}
     {...props}
   />
 );

@@ -72,14 +72,9 @@ INTERACTIVE_RE='onClick=|role="button"'
 # ledger item; drop the entry in that PR.
 EXCLUDE_FILES=(
   "scripts/audit-motion.sh"
-  # thread-view: the core thread. Gains message entry + streaming + optimistic
-  # motion in I2 / I3 / K1 / K4. Grandfathered until then.
-  "src/components/agent/thread-view.tsx"
   # conversation: the scroll container + scroll-to-bottom button. Gains
-  # zero-jank scroll motion in K2.
+  # zero-jank scroll motion in K2 (P5.c). Grandfathered until then.
   "src/components/ai-elements/conversation.tsx"
-  # suggestion: the empty-state suggestion chip. Gains .mashi-magnetic in I6.
-  "src/components/ai-elements/suggestion.tsx"
 )
 
 build_exclude_grep() {

@@ -66,7 +66,12 @@ export function ChatTab({ itemId }: { itemId: string }) {
               Expand
             </Button>
           </div>
-          <div className="flex-1 min-h-0">
+          {/* H1: the embedded conversation log was starved to ~45px in a
+              live sprint slot (competing chrome in a short flex column).
+              Floor the role="log" viewport to a usable height so it scrolls
+              normally; the parent CanvasShell already scrolls. The
+              fullscreen Expand path is untouched (it gets ~485px). */}
+          <div className="flex-1 min-h-0 [&_[role=log]]:min-h-[220px]">
             <ThreadView itemId={itemId} />
           </div>
         </div>

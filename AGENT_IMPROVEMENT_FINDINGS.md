@@ -143,12 +143,13 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P3.a** Image paste + file upload (B1) · MERGED (#151)
 - [x] **P3.b** @-mentions in the composer (B2) · MERGED (#152)
 - [x] **P4.a** Approval card weight + inline diff (E2, E3) · MERGED (#153)
+- [x] **P4.b** Per-tool policy + ring-3 recall/undo (E1, E5, E4) · MERGED (#154)
 
-`audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
-`thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The batch
-that makes each one alive MUST remove its carve-out: thread-view + conversation land in P5
-(I2/I3/K1/K2/K4), suggestion in P5 (I6). Adding a new interactive file with no motion is
-caught immediately.
+`audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
+that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
+P5.a) and `ai-elements/suggestion.tsx` (I6, dropped in P5.a) are now live;
+`ai-elements/conversation.tsx` remains carved out until K2 (P5.c) gives it zero-jank scroll
+motion. Adding a new interactive file with no motion is caught immediately.
 
 ### Batches (the 6-PR collapse)
 
@@ -198,18 +199,37 @@ caught immediately.
     > not a red error. Inline before/after diff (E2) for update tools, fed by an optional
     > `approvalContext` before-snapshot on the tool def (migration `045_agent_approval_context.sql`
     > adds `agent_approvals.context`). Pure module unit-tested (`test:approval-meta`, 42 asserts).
-  - [ ] **4 · P4.b · Per-tool policy + recall/undo** · covers E1, E5, E4 · deps: P4.a · IN REVIEW (#154) · PR: #154
+  - [x] **4 · P4.b · Per-tool policy + recall/undo** · covers E1, E5, E4 · deps: P4.a · MERGED (#154) · PR: #154
     > Per-tool approval policy table + settings UI (E1: always-allow / ask / never, narrowly
     > scoped), ring reclassification (E5: draft_email / react_with_emoji lighter gate, needs
     > E1), post-send recall/undo for ring-3 where the provider allows it (E4: Slack delete,
     > GCal delete, Linear archive; honest "cannot recall" otherwise — needs E1 + E3 from P4.a).
-- [ ] **5 · P5 · Polish, feel + a11y** · covers H1, I1-I9, J1, J3, J4, J5, K1-K5 · deps: P1, P2 · TODO · PR: -
+- **5 · P5 · Polish, feel + a11y** · covers H1, I1-I9, J1, J3, J4, J5, K1-K5 · deps: P1, P2 · split into P5.a + P5.b + P5.c
   > The big polish batch: sprint chat height (H1); all of Epic I motion/type/composer/
   > translucency/reasoning/tool-card (I1-I9); usage view (J1), replay (J3), a11y (J4),
   > skeletons (J5); streaming cadence, zero-jank scroll, motion perf budget, instant
-  > feedback, feel-parity gate (K1-K5). Largest batch, expect to split into sub-rows
-  > (e.g. P5.a motion/entry, P5.b reasoning/tool-card, P5.c cadence/scroll/feel-gate).
-  > Must drop the `audit:motion` carve-outs for thread-view + conversation + suggestion.
+  > feedback, feel-parity gate (K1-K5). Split into three cohesive sub-rows. `MERGED` only
+  > when every sub-row is. Drops the `audit:motion` carve-outs as each file goes alive:
+  > thread-view + suggestion in P5.a (I2/I3/I6), conversation in P5.c (K2).
+  - [ ] **5 · P5.a · Design-system adoption pass** · covers H1, I1, I2, I3, I4, I5, I6, I7, J4, J5 · deps: P1, P2 · IN REVIEW (#TBD) · PR: -
+    > The className-level polish the doc calls "low-effort, high-ROI": sprint chat height
+    > floor (H1); tool-card hover + chevron + expand motion (I1); message entry motion (I2);
+    > streaming caret + reasoning entry (I3); metadata type scale (I4); composer text-sm +
+    > glow-focus (I5); real Spotlight suggestion chips (I6); sanctioned translucent user
+    > bubble (I7); a11y status/alert roles (J4); skeletons over spinners on load (J5). Adds
+    > `.mashi-enter` / `.mashi-caret` CSS utilities. Drops the thread-view + suggestion
+    > `audit:motion` carve-outs.
+  - [ ] **5 · P5.b · Component identity redesign** · covers I8, I9, J1, J3 · deps: P5.a · TODO · PR: -
+    > The redesigns, not just motion: reasoning block identity (I8: glyph, accent rail,
+    > auto-collapse to metadata), tool-call card identity (I9: per-tool icon + human label +
+    > collapsed-state outcome summary + status state machine + sequence rail). Plus the
+    > observability pair: agent cost in the usage view (J1, A2 already landed) and turn
+    > replay/debug (J3).
+  - [ ] **5 · P5.c · Feel parity (cadence + scroll + perf + optimistic)** · covers K1, K2, K3, K4, K5 · deps: P5.a, P5.b · TODO · PR: -
+    > Streaming cadence smoothing (K1), zero-jank auto-scroll + jump-to-latest (K2), motion
+    > perf budget / transform-only expand technique (K3, corrects I1/I8/I9), optimistic
+    > send (K4), and the K5 feel-parity acceptance review. Drops the conversation
+    > `audit:motion` carve-out (K2 makes it alive).
 - [ ] **6 · P6 · Higher ceiling** · covers F1, F2, G2, L1, L2, L3, L4 · deps: P1, P4, P5 · TODO · PR: -
   > Memory (F1), playbooks (F2), MCP client behind a flag (G2); Experience Phase 1 aliveness:
   > interactive/generative tool components (L1), slash + keyboard-first (L2), quick-action
