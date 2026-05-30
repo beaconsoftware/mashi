@@ -137,6 +137,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **A1** Per-thread turn lock + ordered replay · MERGED (#144)
 - [x] **A2** Route loop through `trackedStream` · MERGED (#145)
 - [x] **A7** Model/pricing drift guard · MERGED (#146)
+- [x] **P1** Foundation hardening (A3, A4, A5, A6, A8, A9) · MERGED (#148)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
 `thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The batch
@@ -146,15 +147,24 @@ caught immediately.
 
 ### Batches (the 6-PR collapse)
 
-- [ ] **1 · P1 · Foundation hardening** · covers A3, A4, A5, A6, A8, A9 · deps: none (A1/A2/A7 merged) · IN REVIEW (#148) · PR: #148
+- [x] **1 · P1 · Foundation hardening** · covers A3, A4, A5, A6, A8, A9 · deps: none (A1/A2/A7 merged) · MERGED (#148)
   > Rest of Epic A: cancellation + Stop button (A3), preserve partial text on abort (A8),
   > retry/backoff/reconnect (A4), approval-poll efficiency + abort (A5), per-turn/per-thread
   > token budget (A6), adaptive `max_tokens` (A9). Internal order: A3 → A8 → A4; A3 → A5;
   > A6 → A9.
-- [ ] **2 · P2 · Output trust + conversation control** · covers C1, C2, C3, C4, C5, D2, D3, D4 · deps: P1 · TODO · PR: -
-  > Citations (C1), readable tool-result output (C2), copy buttons (C3), code highlighting
-  > (C4), markdown 16→14 (C5); regenerate last turn (D2), edit-and-resend (D3), export +
-  > cross-thread search (D4). D2 needs A8 (P1); internal C1→C2, C4→C3, D2→D3.
+- **2 · P2 · Output trust + conversation control** · covers C1-C5, D2, D3, D4 · deps: P1 · split into P2.a + P2.b
+  > Split because output rendering (C, frontend) and conversation control (D, backend
+  > endpoints + truncation/re-run + cross-thread search index + migration) are two cohesive
+  > but distinct chunks, too large for one clean PR.
+  - [ ] **2 · P2.a · Output trust + rendering** · covers C1, C2, C3, C4, C5 · deps: P1 · IN REVIEW (#149) · PR: #149
+    > Citations / source chips (C1), readable tool-result summaries + wrap fix (C2), copy
+    > buttons (C3), code highlighting + copy via `@streamdown/code` (C4), markdown 16→14 (C5).
+    > All frontend; provenance/summary logic is a pure, unit-tested module (`test:provenance`).
+  - [ ] **2 · P2.b · Conversation control** · covers D2, D3, D4 · deps: P1, P2.a · TODO · PR: -
+    > Regenerate last turn (D2, needs A8 from P1), edit-and-resend a prior user turn (D3,
+    > shares D2's truncation/re-run path), export thread + cross-thread transcript search
+    > (D4, the larger half: a `user_id`-scoped full-text index + a new Search scope). Builds
+    > on P2.a's thread-view changes.
 - [ ] **3 · P3 · Input modalities** · covers B1, B2 · deps: none (A2 merged) · TODO · PR: -
   > Image paste + file upload (B1, may split into B1a/B1b sub-rows), @-mentions in composer
   > (B2, optional). B1 is the substantive piece; B2 only if it falls out cheaply.

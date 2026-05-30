@@ -17,11 +17,19 @@ import {
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement } from "react";
+import { CopyButton } from "@/components/agent/copy-button";
+import {
+  summarizeToolResult,
+  type ToolSummary,
+} from "@/lib/agent/provenance";
 
 // Mashi note: hand-copied from vercel/ai-elements/tool.tsx. Adapted to:
 //   - drop the shiki-based CodeBlock dependency (heavy; agent rarely
 //     emits code). Tool input/output renders inside a plain <pre>.
 //   - simplify the state union to match what Mashi's agent loop emits.
+//   - C2/C3: known tool results render as a readable summary with a
+//     "view raw" disclosure, and raw output gets a copy button. Wrapping
+//     uses break-words (not break-all, which mangled JSON).
 
 export type ToolPartState =
   | "approval-requested"
@@ -123,8 +131,57 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
     <h4 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
       Parameters
     </h4>
-    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted/60 px-2 py-1.5 font-mono text-[10px] text-foreground/80">
+    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/60 px-2 py-1.5 font-mono text-[10px] text-foreground/80">
       {JSON.stringify(input ?? null, null, 2)}
+    </pre>
+  </div>
+);
+
+/** C2: a compact, readable rendering of a known tool result. */
+const ToolSummaryView = ({ summary }: { summary: ToolSummary }) => (
+  <div className="space-y-1">
+    <p className="text-[11px] font-medium text-foreground">{summary.headline}</p>
+    {summary.rows.length > 0 && (
+      <ul className="space-y-0.5">
+        {summary.rows.map((row, i) => (
+          <li
+            key={`${row.title}-${i}`}
+            className="flex min-w-0 items-baseline gap-1.5 text-[11px]"
+          >
+            <span className="truncate text-foreground/90">{row.title}</span>
+            {row.meta && (
+              <span className="shrink-0 text-[10px] text-muted-foreground">
+                {row.meta}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+);
+
+/** The (wrap-fixed, copyable) raw JSON / text fallback. */
+const RawOutput = ({
+  text,
+  tone,
+}: {
+  text: string;
+  tone: "error" | "default";
+}) => (
+  <div className="relative">
+    <div className="absolute right-1 top-1 z-10">
+      <CopyButton text={text} label="Copy result" />
+    </div>
+    <pre
+      className={cn(
+        "max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md px-2 py-1.5 pr-8 font-mono text-[10px]",
+        tone === "error"
+          ? "bg-destructive/15 text-destructive"
+          : "bg-muted/60 text-foreground/80"
+      )}
+    >
+      {text}
     </pre>
   </div>
 );
@@ -132,38 +189,62 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
 export type ToolOutputProps = ComponentProps<"div"> & {
   output: unknown;
   errorText?: string | null;
+  /** When provided, a known result shape renders as a readable summary with
+   * raw JSON one click away (C2). */
+  toolName?: string;
 };
 
 export const ToolOutput = ({
   className,
   output,
   errorText,
+  toolName,
   ...props
 }: ToolOutputProps) => {
   if (!(output || errorText)) return null;
 
-  const renderOutput = (): ReactNode => {
-    if (errorText) return <span>{errorText}</span>;
-    if (isValidElement(output)) return output;
-    if (typeof output === "string") return output;
-    return JSON.stringify(output ?? null, null, 2);
-  };
+  // Caller-supplied React node passes through untouched.
+  if (!errorText && isValidElement(output)) {
+    return (
+      <div className={cn("space-y-1", className)} {...props}>
+        <h4 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          Result
+        </h4>
+        {output}
+      </div>
+    );
+  }
+
+  const rawText = errorText
+    ? errorText
+    : typeof output === "string"
+      ? output
+      : JSON.stringify(output ?? null, null, 2);
+
+  const summary =
+    !errorText && toolName ? summarizeToolResult(toolName, output) : null;
 
   return (
     <div className={cn("space-y-1", className)} {...props}>
       <h4 className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
         {errorText ? "Error" : "Result"}
       </h4>
-      <pre
-        className={cn(
-          "max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md px-2 py-1.5 font-mono text-[10px]",
-          errorText
-            ? "bg-destructive/15 text-destructive"
-            : "bg-muted/60 text-foreground/80"
-        )}
-      >
-        {renderOutput()}
-      </pre>
+      {summary ? (
+        <div className="space-y-1.5">
+          <ToolSummaryView summary={summary} />
+          <Collapsible className="group/raw">
+            <CollapsibleTrigger className="flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground">
+              <ChevronDownIcon className="size-3 transition-transform group-data-[state=open]/raw:rotate-180" />
+              View raw
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-1">
+              <RawOutput text={rawText} tone="default" />
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      ) : (
+        <RawOutput text={rawText} tone={errorText ? "error" : "default"} />
+      )}
     </div>
   );
 };

@@ -20,11 +20,13 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+import { code } from "@streamdown/code";
 
 // Mashi note: hand-copied from vercel/ai-elements/reasoning.tsx.
 // Replaced the motion/react-based Shimmer with a CSS-only shimmer span
-// (lighter; respects prefers-reduced-motion via globals.css). Dropped
-// streamdown plugins (cjk/code/math/mermaid) to keep the bundle lean.
+// (lighter; respects prefers-reduced-motion via globals.css). C4: wire
+// @streamdown/code so any code in narration highlights + gets a copy
+// button, matching the answer surface. cjk/math/mermaid stay unwired.
 const Shimmer = ({
   children,
   duration: _duration = 1,
@@ -224,7 +226,7 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown>{children}</Streamdown>
+      <Streamdown plugins={{ code }}>{children}</Streamdown>
     </CollapsibleContent>
   )
 );

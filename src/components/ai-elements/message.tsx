@@ -11,11 +11,15 @@ import { cn } from "@/lib/utils";
 import type { ComponentProps, HTMLAttributes } from "react";
 import { memo } from "react";
 import { Streamdown } from "streamdown";
+import { code } from "@streamdown/code";
 
 // Mashi note: hand-copied from vercel/ai-elements. Adapted to:
 //   - import our shadcn primitives (no @repo/shadcn-ui)
 //   - drop MessageBranch* (we don't use branching)
-//   - drop streamdown plugins (cjk/code/math/mermaid) to keep bundle lean
+//   - C4: wire @streamdown/code for code-block syntax highlighting + a copy
+//     button (via Streamdown's default controls). cjk/math/mermaid stay
+//     unwired — a chief-of-staff agent emits config/SQL snippets, not CJK
+//     typesetting, math, or diagrams.
 
 export type MessageRole = "user" | "assistant" | "system";
 
@@ -107,10 +111,14 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
+      // C5: assistant markdown body renders at the sanctioned text-sm (14px),
+      // not Streamdown v2's element-level 16px default. Descendant selectors
+      // beat its built-in prose specificity; headings still scale from there.
       className={cn(
-        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+        "size-full text-sm [&_p]:text-sm [&_li]:text-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      plugins={{ code }}
       {...props}
     />
   ),
