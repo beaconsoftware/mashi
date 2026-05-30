@@ -3,6 +3,8 @@ import {
   createPendingApproval,
 } from "@/lib/agent/approval";
 import { recordAction } from "@/lib/agent/undo";
+import { getTool } from "@/lib/agent/registry";
+import type { ApprovalContext } from "@/lib/agent/approval-meta";
 import type { PreToolUseHook } from "@/lib/agent/hooks/types";
 
 /**
@@ -38,12 +40,23 @@ export const ring3ApprovalHook: PreToolUseHook = {
         message: "ring-3 tools require a thread to seek approval",
       };
     }
+    // E2: ask the tool for a before-snapshot (update tools implement this)
+    // so the card can diff current vs proposed. Best-effort: a slow / failing
+    // context read must not block the approval, so swallow and proceed.
+    let context: ApprovalContext | null = null;
+    try {
+      context =
+        (await getTool(toolName)?.approvalContext?.(input, ctx)) ?? null;
+    } catch {
+      context = null;
+    }
     const pending = await createPendingApproval({
       userId: ctx.userId,
       threadId: ctx.threadId,
       callId,
       toolName,
       args: input,
+      context,
       supabase: ctx.supabase,
     });
     opts.emitApprovalNeeded?.({
@@ -51,6 +64,7 @@ export const ring3ApprovalHook: PreToolUseHook = {
       name: toolName,
       args: input,
       expiresAt: pending.expiresAt,
+      context,
     });
     const outcome = await awaitApprovalDecision({
       userId: ctx.userId,
@@ -98,9 +112,16 @@ export const ring3ApprovalHook: PreToolUseHook = {
       } catch {
         // best-effort
       }
+      // E3: the model must still see is_error=true so it knows the action did
+      // NOT run, but the UI reads the `cancelled` / `expired` marker to render
+      // a neutral "Cancelled" outcome instead of an alarming red error.
+      const synth =
+        outcome.kind === "cancel"
+          ? { ok: false, error, cancelled: true }
+          : { ok: false, error, expired: true };
       return {
         decision: "respond",
-        content: JSON.stringify({ ok: false, error }),
+        content: JSON.stringify(synth),
         isError: true,
       };
     }

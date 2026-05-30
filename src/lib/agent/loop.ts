@@ -91,6 +91,9 @@ export type AgentDelta =
       /** Server-stamped expiry (~5 min). After this the loop returns a
        * synthetic error to the model. */
       expiresAt: string;
+      /** E2: optional before-snapshot ({ before: {...} }) the card diffs
+       * against the proposed patch for update-type tools. */
+      context?: unknown;
     }
   | {
       kind: "approval-resolved";
@@ -764,6 +767,7 @@ async function runAgentTurnInner(
               name: d.name,
               args: d.args,
               expiresAt: d.expiresAt,
+              context: d.context,
             }),
           emitApprovalResolved: (d) =>
             opts.onDelta({

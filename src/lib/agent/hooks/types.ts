@@ -69,6 +69,8 @@ export interface PreToolUseHook {
       name: string;
       args: unknown;
       expiresAt: string;
+      /** E2: optional before-snapshot the card diffs against the patch. */
+      context?: unknown;
     }) => void;
     emitApprovalResolved?: (opts: {
       id: string;

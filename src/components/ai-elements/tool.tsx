@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import {
+  BanIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   CircleIcon,
@@ -38,6 +39,7 @@ export type ToolPartState =
   | "input-available"
   | "output-available"
   | "output-denied"
+  | "output-cancelled"
   | "output-error";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
@@ -56,6 +58,7 @@ const statusLabels: Record<ToolPartState, string> = {
   "input-streaming": "Pending",
   "output-available": "Completed",
   "output-denied": "Denied",
+  "output-cancelled": "Cancelled",
   "output-error": "Error",
 };
 
@@ -66,6 +69,7 @@ const statusIcons: Record<ToolPartState, ReactNode> = {
   "input-streaming": <CircleIcon className="size-3" />,
   "output-available": <CheckCircleIcon className="size-3 text-emerald-500" />,
   "output-denied": <XCircleIcon className="size-3 text-orange-600" />,
+  "output-cancelled": <BanIcon className="size-3 text-muted-foreground" />,
   "output-error": <XCircleIcon className="size-3 text-destructive" />,
 };
 
