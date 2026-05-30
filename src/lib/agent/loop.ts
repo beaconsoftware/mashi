@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type Anthropic from "@anthropic-ai/sdk";
-import { anthropic, MODELS } from "@/lib/anthropic/client";
+import { MODELS } from "@/lib/anthropic/client";
+import { trackedStream } from "@/lib/anthropic/tracked";
 import { sanitizeForAITells } from "@/lib/anthropic/sanitize";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { TOOL_REGISTRY } from "@/lib/agent/registry";
@@ -332,13 +333,25 @@ async function runAgentTurnInner(
   while (safety < maxIters) {
     safety += 1;
 
-    const stream = anthropic.messages.stream({
-      model,
-      system: systemPrompt,
-      messages: messageList,
-      max_tokens: 1024,
-      tools: anthropicTools as unknown as Anthropic.Messages.Tool[],
-    });
+    // A2: route every interactive model call through trackedStream so each
+    // round-trip lands a row in ai_usage_log (purpose "agent:turn",
+    // attributed to the user). The interactive loop is the dominant cost
+    // (Opus, up to maxIters calls per user turn); leaving it on the raw
+    // client meant the usage view silently under-reported. trackedStream
+    // returns the same MessageStream the SDK does, so the async-iteration
+    // and finalMessage() calls below are unchanged — it just awaits the
+    // final message internally to log usage as a side effect.
+    const stream = trackedStream(
+      {
+        model,
+        system: systemPrompt,
+        messages: messageList,
+        max_tokens: 1024,
+        tools: anthropicTools as unknown as Anthropic.Messages.Tool[],
+      },
+      "agent:turn",
+      opts.userId
+    );
 
     // Live text + tool_use accumulators per content block index.
     const blockState = new Map<
