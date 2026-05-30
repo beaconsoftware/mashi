@@ -144,6 +144,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P3.b** @-mentions in the composer (B2) · MERGED (#152)
 - [x] **P4.a** Approval card weight + inline diff (E2, E3) · MERGED (#153)
 - [x] **P4.b** Per-tool policy + ring-3 recall/undo (E1, E5, E4) · MERGED (#154)
+- [x] **P5.a** Design-system adoption pass (H1, I1-I7, J4, J5) · MERGED (#155)
 
 `audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
 that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
@@ -211,7 +212,7 @@ motion. Adding a new interactive file with no motion is caught immediately.
   > feedback, feel-parity gate (K1-K5). Split into three cohesive sub-rows. `MERGED` only
   > when every sub-row is. Drops the `audit:motion` carve-outs as each file goes alive:
   > thread-view + suggestion in P5.a (I2/I3/I6), conversation in P5.c (K2).
-  - [ ] **5 · P5.a · Design-system adoption pass** · covers H1, I1, I2, I3, I4, I5, I6, I7, J4, J5 · deps: P1, P2 · IN REVIEW (#155) · PR: #155
+  - [x] **5 · P5.a · Design-system adoption pass** · covers H1, I1, I2, I3, I4, I5, I6, I7, J4, J5 · deps: P1, P2 · MERGED (#155) · PR: #155
     > The className-level polish the doc calls "low-effort, high-ROI": sprint chat height
     > floor (H1); tool-card hover + chevron + expand motion (I1); message entry motion (I2);
     > streaming caret + reasoning entry (I3); metadata type scale (I4); composer text-sm +
@@ -219,7 +220,7 @@ motion. Adding a new interactive file with no motion is caught immediately.
     > bubble (I7); a11y status/alert roles (J4); skeletons over spinners on load (J5). Adds
     > `.mashi-enter` / `.mashi-caret` CSS utilities. Drops the thread-view + suggestion
     > `audit:motion` carve-outs.
-  - [ ] **5 · P5.b · Component identity redesign** · covers I8, I9, J1, J3 · deps: P5.a · TODO · PR: -
+  - [ ] **5 · P5.b · Component identity redesign** · covers I8, I9, J1, J3 · deps: P5.a · IN REVIEW (#PENDING) · PR: -
     > The redesigns, not just motion: reasoning block identity (I8: glyph, accent rail,
     > auto-collapse to metadata), tool-call card identity (I9: per-tool icon + human label +
     > collapsed-state outcome summary + status state machine + sequence rail). Plus the

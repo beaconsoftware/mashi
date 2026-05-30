@@ -25,8 +25,12 @@ import {
   ToolHeader,
   ToolInput,
   ToolOutput,
+  ToolRawName,
+  ToolSequence,
+  ToolSequenceItem,
   type ToolPartState,
 } from "@/components/ai-elements/tool";
+import { toolOutcome } from "@/lib/agent/tool-meta";
 import {
   Suggestion,
   Suggestions,
@@ -59,6 +63,7 @@ import {
   type PendingFollowUp,
 } from "@/components/agent/follow-up-card";
 import { ThreadSummaryCard } from "@/components/agent/thread-summary-card";
+import { ReplayDebugPanel } from "@/components/agent/replay-debug";
 import { ModeToggle } from "@/components/agent/mode-toggle";
 import type { AgentDelta } from "@/lib/agent/loop";
 import {
@@ -844,6 +849,13 @@ export function ThreadView({
               {error}
             </div>
           )}
+          {/* J3: internal-only turn replay / re-run. Self-gated on
+              NEXT_PUBLIC_AGENT_DEBUG; renders nothing for normal users. */}
+          <ReplayDebugPanel
+            messages={data?.messages ?? []}
+            onRerun={regenerate}
+            canRerun={canRegenerate}
+          />
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
@@ -956,8 +968,8 @@ function PersistedMessageRow({
           </Reasoning>
         )}
         {hasToolCalls && (
-          <div className="space-y-1.5">
-            {message.tool_calls!.map((tc) => {
+          <ToolCards
+            items={message.tool_calls!.map((tc) => {
               const result = resultByCallId.get(tc.id);
               const parsedOutput = result ? parseToolResult(result.content) : null;
               // E3/E1: a user-cancelled / expired call, or one blocked by the
@@ -975,23 +987,17 @@ function PersistedMessageRow({
                     ? "output-error"
                     : "output-available"
                 : "input-available";
-              return (
-                <Tool key={tc.id} defaultOpen={false}>
-                  <ToolHeader toolName={tc.name} state={state} />
-                  <ToolContent>
-                    <ToolInput input={tc.input} />
-                    {result && !cancelled && (
-                      <ToolOutput
-                        output={parsedOutput}
-                        errorText={result.is_error ? result.content : null}
-                        toolName={tc.name}
-                      />
-                    )}
-                  </ToolContent>
-                </Tool>
-              );
+              const showOutput = !!result && !cancelled;
+              return {
+                id: tc.id,
+                name: tc.name,
+                input: tc.input,
+                state,
+                output: showOutput ? parsedOutput : undefined,
+                errorText: showOutput && result!.is_error ? result!.content : null,
+              };
             })}
-          </div>
+          />
         )}
         {sources.length > 0 && <MessageSources sources={sources} />}
         {message.content && !hasToolCalls && (
@@ -1077,8 +1083,8 @@ function LiveTurnRows({
         </Reasoning>
       )}
       {hasToolCalls && (
-        <div className="space-y-1.5">
-          {liveToolCalls.map((tc) => {
+        <ToolCards
+          items={liveToolCalls.map((tc) => {
             // E3/E1: neutral "Cancelled" outcome for a user-cancelled /
             // expired / policy-blocked ring-3 call instead of a red error.
             const cancelled =
@@ -1093,23 +1099,17 @@ function LiveTurnRows({
                   : tc.ok
                     ? "output-available"
                     : "output-error";
-            return (
-              <Tool key={tc.id} defaultOpen={false}>
-                <ToolHeader toolName={tc.name} state={state} />
-                <ToolContent>
-                  <ToolInput input={tc.args} />
-                  {tc.ok !== undefined && !cancelled && (
-                    <ToolOutput
-                      output={tc.result}
-                      errorText={tc.ok === false ? tc.error ?? "error" : null}
-                      toolName={tc.name}
-                    />
-                  )}
-                </ToolContent>
-              </Tool>
-            );
+            const showOutput = tc.ok !== undefined && !cancelled;
+            return {
+              id: tc.id,
+              name: tc.name,
+              input: tc.args,
+              state,
+              output: showOutput ? tc.result : undefined,
+              errorText: showOutput && tc.ok === false ? tc.error ?? "error" : null,
+            };
           })}
-        </div>
+        />
       )}
       {liveText && !hasToolCalls && (
         <Message from="assistant">
@@ -1134,6 +1134,71 @@ function LiveTurnRows({
         </div>
       )}
     </div>
+  );
+}
+
+/** Resolved render state for one tool call, shared by the persisted and live
+ * paths so both get identical I9 card identity + the sequence rail. */
+interface ToolCardDescriptor {
+  id: string;
+  name: string;
+  input: unknown;
+  state: ToolPartState;
+  /** Present only when the result should render (not for an in-flight or a
+   * cancelled call). */
+  output: unknown;
+  errorText: string | null;
+}
+
+/**
+ * I9: a turn's tool calls. A single call renders as one card; several render
+ * as a connected sequence (a left timeline rail + a per-step status dot) so
+ * they read as one chain of steps, not loose boxes.
+ */
+function ToolCards({ items }: { items: ToolCardDescriptor[] }) {
+  if (items.length === 0) return null;
+  if (items.length === 1) {
+    return (
+      <div className="space-y-1.5">
+        <ToolCallCard {...items[0]} />
+      </div>
+    );
+  }
+  return (
+    <ToolSequence>
+      {items.map((it) => (
+        <ToolSequenceItem key={it.id} state={it.state}>
+          <ToolCallCard {...it} />
+        </ToolSequenceItem>
+      ))}
+    </ToolSequence>
+  );
+}
+
+/** One I9 tool card: per-tool icon + human label + collapsed outcome line, with
+ * the raw snake_case name + parameters + result on expand. */
+function ToolCallCard({
+  name,
+  input,
+  state,
+  output,
+  errorText,
+}: Omit<ToolCardDescriptor, "id">) {
+  const showOutput = output !== undefined || !!errorText;
+  // The collapsed "what happened" line, only meaningful once the call lands.
+  const outcome =
+    state === "output-available" ? toolOutcome(name, output, false) : null;
+  return (
+    <Tool defaultOpen={false}>
+      <ToolHeader toolName={name} state={state} outcome={outcome} />
+      <ToolContent>
+        <ToolRawName toolName={name} />
+        <ToolInput input={input} />
+        {showOutput && (
+          <ToolOutput output={output} errorText={errorText} toolName={name} />
+        )}
+      </ToolContent>
+    </Tool>
   );
 }
 
