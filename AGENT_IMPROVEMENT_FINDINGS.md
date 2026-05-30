@@ -146,6 +146,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P4.b** Per-tool policy + ring-3 recall/undo (E1, E5, E4) · MERGED (#154)
 - [x] **P5.a** Design-system adoption pass (H1, I1-I7, J4, J5) · MERGED (#155)
 - [x] **P5.b** Component identity redesign + observability (I8, I9, J1, J3) · MERGED (#157)
+- [x] **P5.c** Feel parity — cadence + scroll + perf + optimistic (K1-K5) · MERGED (#158)
 
 `audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
 that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
@@ -208,7 +209,7 @@ motion is caught immediately.
     > scoped), ring reclassification (E5: draft_email / react_with_emoji lighter gate, needs
     > E1), post-send recall/undo for ring-3 where the provider allows it (E4: Slack delete,
     > GCal delete, Linear archive; honest "cannot recall" otherwise — needs E1 + E3 from P4.a).
-- **5 · P5 · Polish, feel + a11y** · covers H1, I1-I9, J1, J3, J4, J5, K1-K5 · deps: P1, P2 · split into P5.a + P5.b + P5.c
+- [x] **5 · P5 · Polish, feel + a11y** · covers H1, I1-I9, J1, J3, J4, J5, K1-K5 · deps: P1, P2 · split into P5.a + P5.b + P5.c · MERGED (all sub-rows landed)
   > The big polish batch: sprint chat height (H1); all of Epic I motion/type/composer/
   > translucency/reasoning/tool-card (I1-I9); usage view (J1), replay (J3), a11y (J4),
   > skeletons (J5); streaming cadence, zero-jank scroll, motion perf budget, instant
@@ -229,16 +230,40 @@ motion is caught immediately.
     > collapsed-state outcome summary + status state machine + sequence rail). Plus the
     > observability pair: agent cost in the usage view (J1, A2 already landed) and turn
     > replay/debug (J3).
-  - [ ] **5 · P5.c · Feel parity (cadence + scroll + perf + optimistic)** · covers K1, K2, K3, K4, K5 · deps: P5.a, P5.b · IN REVIEW (#158) · PR: #158
+  - [x] **5 · P5.c · Feel parity (cadence + scroll + perf + optimistic)** · covers K1, K2, K3, K4, K5 · deps: P5.a, P5.b · MERGED (#158) · PR: #158
     > Streaming cadence smoothing (K1), zero-jank auto-scroll + jump-to-latest (K2), motion
     > perf budget / transform-only expand technique (K3, corrects I1/I8/I9), optimistic
     > send (K4), and the K5 feel-parity acceptance review. Drops the conversation
     > `audit:motion` carve-out (K2 makes it alive).
-- [ ] **6 · P6 · Higher ceiling** · covers F1, F2, G2, L1, L2, L3, L4 · deps: P1, P4, P5 · TODO · PR: -
+- [ ] **6 · P6 · Higher ceiling** · covers F1, F2, G2, L1, L2, L3, L4 · deps: P1, P4, P5 · split into P6.a + P6.b + P6.c + P6.d
   > Memory (F1), playbooks (F2), MCP client behind a flag (G2); Experience Phase 1 aliveness:
   > interactive/generative tool components (L1), slash + keyboard-first (L2), quick-action
   > chips (L3), live narration + presence (L4). L1 needs I9 (P5) + E3 (P4); L4 needs I8/K1
-  > (P5). May split aliveness (L1-L4) into its own sub-row if it gets heavy.
+  > (P5). Split (as the brief anticipated): the two Feature-Tool capabilities (F1, F2) are each
+  > a clean diff; the L1-L4 aliveness cluster is its own frontend-functional sub-row (L4 needs
+  > F1's memory moment, so it follows P6.a); G2 is XL-behind-a-flag and stands alone. `MERGED`
+  > only when every sub-row is.
+  - [ ] **6 · P6.a · Agent-proposed memory (F1)** · covers F1 · deps: P1, P4, P5 · IN REVIEW (#159) · PR: #159
+    > `propose_memory` ring-2 (write_mashi) tool that OFFERS to append a durable fact to
+    > MASHI.md. Routes through the existing approval card as a LIGHT confirm (reuses E3) via a
+    > new `requiresApproval` opt-in on the tool def + generalized approval hook; the append is
+    > char-cap-guarded (8000, pure `memory.ts`, `test:memory`) and undoable for 30s
+    > (`restore_mashi_md` reverse op). Always-on in act mode (CORE_TOOLS) so offers are
+    > reliable; the loop already re-reads MASHI.md every turn, so an accepted fact is present
+    > next turn. No migration (uses existing `user_profile.mashi_md` + `agent_actions`).
+  - [ ] **6 · P6.b · Playbooks (F2)** · covers F2 · deps: P6.a · TODO · PR: -
+    > A small library of user-triggerable, parameterized, multi-step playbooks the agent runs
+    > step by step with the normal approval gates; a trigger surface in Spotlight. Pairs with
+    > G1 (X2). New table + migration.
+  - [ ] **6 · P6.c · Aliveness phase 1 (L1, L2, L3, L4)** · covers L1, L2, L3, L4 · deps: P6.a · TODO · PR: -
+    > Interactive/generative tool-result components (L1, needs I9 + E3, both merged), slash
+    > commands + keyboard-first (L2, shares B2's typeahead), contextual quick-action chips (L3),
+    > live tool narration + presence (L4, needs I8/K1 + F1's memory moment from P6.a).
+  - [ ] **6 · P6.d · MCP client behind a flag (G2)** · covers G2 · deps: P6.a · TODO · PR: -
+    > XL, staged, behind a flag: an MCP *client* so users can register external MCP servers;
+    > their tools map into the ring model (external writes → ring-3 approval) + tool-retrieval
+    > index + settings UI + encrypted per-user credentials. Honor injection-defense (external
+    > tool output is untrusted data). Likely its own multi-PR split when started.
 
 ### XL items (kept separate, one PR each)
 

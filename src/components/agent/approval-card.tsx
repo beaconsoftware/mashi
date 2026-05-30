@@ -24,6 +24,7 @@ import {
   flattenEditable,
   formatValue,
   isLongField,
+  isPolicyControlled,
   type ApprovalContext,
   type ApprovalMeta,
   type DiffRow,
@@ -55,7 +56,8 @@ interface Props {
 }
 
 /**
- * Inline approval card for ring-3 (write_world) agent tool calls.
+ * Inline approval card for ring-3 (write_world) agent tool calls, plus opt-in
+ * ring-2 confirms (F1: `propose_memory` renders here as a light card).
  *
  * P4.a (E2 + E3) gave this card weight and fidelity:
  *  - It reads the action's weight (`approvalMetaFor`): an irreversible SEND
@@ -119,9 +121,13 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
   );
 
   // E1: inline "always allow" — eligible for everything except irreversible
-  // sends (an email / Slack post / Linear comment is never waved through).
+  // sends (an email / Slack post / Linear comment is never waved through), and
+  // only for policy-controlled tools (F1: a propose_memory confirm is never
+  // policy-bypassable, so it shows no toggle).
   const canRemember = useMemo(
-    () => isAlwaysAllowEligible(approval.name),
+    () =>
+      isAlwaysAllowEligible(approval.name) &&
+      isPolicyControlled(approval.name),
     [approval.name]
   );
   const rememberSuffix = useMemo(

@@ -24,8 +24,11 @@ import {
   flattenEditable,
   isCancelledResult,
   isExpiredResult,
+  isPolicyControlled,
+  listApprovalToolNames,
   type EditableLeaf,
 } from "@/lib/agent/approval-meta";
+import { isAlwaysAllowEligible } from "@/lib/agent/policy";
 
 const stats = { pass: 0, fail: 0 };
 
@@ -153,12 +156,47 @@ function testCancelMarkers() {
   assert(!isExpiredResult({ cancelled: true }), "cancelled is not expired");
 }
 
+function testPolicyControl() {
+  console.log("isPolicyControlled / listApprovalToolNames (F1)");
+  // propose_memory: a light, reversible confirm that is never policy-bypassable.
+  const mem = approvalMetaFor("propose_memory");
+  assert(mem.weight === "reversible", "propose_memory → weight reversible (light)");
+  assert(mem.reversible === true, "propose_memory is reversible");
+  assert(
+    isPolicyControlled("propose_memory") === false,
+    "propose_memory is NOT policy-controlled"
+  );
+  assert(
+    !listApprovalToolNames().includes("propose_memory"),
+    "propose_memory excluded from the policy UI tool list"
+  );
+  // It must therefore show no inline always-allow toggle even though its
+  // weight (reversible) would otherwise be eligible.
+  assert(
+    isAlwaysAllowEligible("propose_memory") &&
+      !(isAlwaysAllowEligible("propose_memory") && isPolicyControlled("propose_memory")),
+    "eligible by weight, but the card's canRemember resolves false"
+  );
+  // Existing ring-3 tools stay policy-controlled and in the list.
+  assert(isPolicyControlled("send_email"), "send_email stays policy-controlled");
+  assert(
+    listApprovalToolNames().includes("send_email"),
+    "send_email still in the policy UI list"
+  );
+  // Unknown tools default to policy-controlled (a generic ring-3 tool earns one).
+  assert(
+    isPolicyControlled("some_new_ring3_tool"),
+    "unknown tool defaults to policy-controlled"
+  );
+}
+
 console.log("\n=== approval-meta.test.ts ===\n");
 testMeta();
 testDiff();
 testFlatten();
 testApplyEdits();
 testCancelMarkers();
+testPolicyControl();
 
 console.log(`\n${stats.pass} passed, ${stats.fail} failed\n`);
 if (stats.fail > 0) process.exit(1);

@@ -10,12 +10,14 @@ import { effectiveDecision, scopeForCall } from "@/lib/agent/policy";
 import type { PreToolUseHook } from "@/lib/agent/hooks/types";
 
 /**
- * Quality Phase 4 — ring-3 approval gate as a PreToolUse hook.
+ * Quality Phase 4 — approval gate as a PreToolUse hook.
  *
  * Replaces the inline branch at the original loop.ts:409-484. The hook
- * fires for ring='write_world' tools only. It writes a pending row to
- * `agent_approvals`, emits an `approval-needed` SSE delta, and blocks
- * until the user clicks Approve / Edit / Cancel (or the row expires).
+ * fires for every ring='write_world' tool, AND (F1 / P6.a) for any tool
+ * that opts in via `requiresApproval` — e.g. the ring-2 `propose_memory`
+ * confirm. It writes a pending row to `agent_approvals`, emits an
+ * `approval-needed` SSE delta, and blocks until the user clicks Approve /
+ * Edit / Cancel (or the row expires).
  *
  * Outcome mapping:
  *   - approve  → allow (the loop dispatches the handler normally)
@@ -28,10 +30,15 @@ import type { PreToolUseHook } from "@/lib/agent/hooks/types";
  *
  * Cancel and expired both also write an audit row so the user can see
  * what was attempted even though it didn't execute.
+ *
+ * The per-tool policy layer (E1: always_allow / never) is consulted ONLY
+ * for ring-3 (`write_world`) calls; an opt-in ring-2 confirm always asks
+ * (a memory write is never silently waved through).
  */
 export const ring3ApprovalHook: PreToolUseHook = {
   name: "ring3-approval",
-  matches: (_toolName, ring) => ring === "write_world",
+  matches: (toolName, ring) =>
+    ring === "write_world" || getTool(toolName)?.requiresApproval === true,
   async run(opts) {
     const { ctx, toolName, input, callId } = opts;
     if (!ctx.threadId) {
@@ -47,40 +54,44 @@ export const ring3ApprovalHook: PreToolUseHook = {
     // scope skips the card and lets the call through (still audited by the
     // post-tool hook); `ask` falls through to the normal gate. A failed
     // policy read defaults to `ask` — never silently widen access.
-    const policies = await loadToolPolicies(ctx.userId, ctx.supabase).catch(
-      () => []
-    );
-    const decision = effectiveDecision(
-      policies,
-      toolName,
-      scopeForCall(toolName, input)
-    );
-    if (decision === "never") {
-      const error = "Blocked by your approval policy (set to never).";
-      try {
-        await recordAction({
-          userId: ctx.userId,
-          threadId: ctx.threadId,
-          toolName,
-          ring: "write_world",
-          args: input,
-          result: { ok: false, error, blocked_by_policy: true },
-          ok: false,
-          supabase: ctx.supabase,
-        });
-      } catch {
-        // best-effort audit
+    // Policy applies to ring-3 world writes only; an opt-in ring-2 confirm
+    // (propose_memory) always asks and is never policy-bypassed.
+    if (opts.ring === "write_world") {
+      const policies = await loadToolPolicies(ctx.userId, ctx.supabase).catch(
+        () => []
+      );
+      const decision = effectiveDecision(
+        policies,
+        toolName,
+        scopeForCall(toolName, input)
+      );
+      if (decision === "never") {
+        const error = "Blocked by your approval policy (set to never).";
+        try {
+          await recordAction({
+            userId: ctx.userId,
+            threadId: ctx.threadId,
+            toolName,
+            ring: "write_world",
+            args: input,
+            result: { ok: false, error, blocked_by_policy: true },
+            ok: false,
+            supabase: ctx.supabase,
+          });
+        } catch {
+          // best-effort audit
+        }
+        return {
+          decision: "respond",
+          content: JSON.stringify({ ok: false, error, blocked_by_policy: true }),
+          isError: true,
+        };
       }
-      return {
-        decision: "respond",
-        content: JSON.stringify({ ok: false, error, blocked_by_policy: true }),
-        isError: true,
-      };
-    }
-    if (decision === "always_allow") {
-      // Pre-authorized for this scope. No card; the post-tool audit hook
-      // records the action so there's still a trail of every bypassed write.
-      return { decision: "allow" };
+      if (decision === "always_allow") {
+        // Pre-authorized for this scope. No card; the post-tool audit hook
+        // records the action so there's still a trail of every bypassed write.
+        return { decision: "allow" };
+      }
     }
 
     // E2: ask the tool for a before-snapshot (update tools implement this)
@@ -146,7 +157,7 @@ export const ring3ApprovalHook: PreToolUseHook = {
           userId: ctx.userId,
           threadId: ctx.threadId,
           toolName,
-          ring: "write_world",
+          ring: opts.ring,
           args: input,
           result: { ok: false, error },
           ok: false,

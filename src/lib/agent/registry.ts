@@ -47,6 +47,7 @@ import { resolve_reference } from "@/lib/agent/tools/resolve_reference";
 import { attach_thread_to_item } from "@/lib/agent/tools/attach_thread_to_item";
 import { list_recent_threads } from "@/lib/agent/tools/list_recent_threads";
 import { ask_followup_question } from "@/lib/agent/tools/ask_followup_question";
+import { propose_memory } from "@/lib/agent/tools/propose_memory";
 // Phase 5 — ring 3 (write_world) catalogue + supporting reads.
 import { list_linear_teams } from "@/lib/agent/tools/list_linear_teams";
 import { send_email } from "@/lib/agent/tools/send_email";
@@ -137,6 +138,8 @@ export const TOOL_REGISTRY: Record<string, AnyToolDefinition> = {
   [set_watch_target.name]: set_watch_target,
   // Phase 8 — Focus card plan editor
   [set_plan.name]: set_plan,
+  // P6.a (F1) — agent-proposed MASHI.md memory write (light approval confirm).
+  [propose_memory.name]: propose_memory,
   // Phase 4 — binding orphan threads to items
   [attach_thread_to_item.name]: attach_thread_to_item,
   // Phase 5 — supporting read for Linear creates

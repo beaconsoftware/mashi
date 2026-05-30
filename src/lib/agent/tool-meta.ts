@@ -48,6 +48,7 @@ export type ToolIconKey =
   | "plan"
   | "mail"
   | "emoji"
+  | "memory"
   | "generic";
 
 export interface ToolMeta {
@@ -110,6 +111,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   set_watch_target: { icon: "watch", label: "Set a watch target" },
   set_plan: { icon: "plan", label: "Update the plan" },
   attach_thread_to_item: { icon: "reference", label: "Attach thread to an item" },
+  propose_memory: { icon: "memory", label: "Remember this" },
   list_linear_teams: { icon: "linear", label: "List Linear teams" },
   // Ring 3 — write_world
   send_email: { icon: "mail", label: "Send an email" },

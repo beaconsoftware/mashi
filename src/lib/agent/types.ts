@@ -50,6 +50,14 @@ export interface ToolDefinition<TArgs, TResult> {
   args: z.ZodType<TArgs>;
   handler: (input: TArgs, ctx: ToolContext) => Promise<TResult>;
   /**
+   * F1 (P6.a): opt a tool into the approval gate regardless of ring. Ring-3
+   * (`write_world`) tools always gate; a ring-2 (`write_mashi`) tool that
+   * touches durable user state and wants explicit confirmation before it runs
+   * sets this to route through the SAME approval card as a LIGHT confirm
+   * (classified via approval-meta). `propose_memory` is the first user.
+   */
+  requiresApproval?: boolean;
+  /**
    * E2: optional before-snapshot for the approval card. Ring-3 update tools
    * implement this to read the resource's current values (cheaply, from the
    * local mirror) so the approval card can diff them against the proposed
