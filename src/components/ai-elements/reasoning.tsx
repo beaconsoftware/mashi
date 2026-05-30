@@ -148,7 +148,9 @@ export const Reasoning = memo(
     return (
       <ReasoningContext.Provider value={contextValue}>
         <Collapsible
-          className={cn("not-prose mb-4", className)}
+          // I3: the reasoning block animates in on mount like the rest of
+          // the thread, rather than blinking into place.
+          className={cn("mashi-enter not-prose mb-4", className)}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}
@@ -188,18 +190,20 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
+          // I4: the reasoning trigger is metadata, not body — text-xs (12px)
+          // so it doesn't compete with the answer.
+          "flex w-full items-center gap-2 text-muted-foreground text-xs transition-colors hover:text-foreground",
           className
         )}
         {...props}
       >
         {children ?? (
           <>
-            <BrainIcon className="size-4" />
+            <BrainIcon className="size-3" />
             {getThinkingMessage(isStreaming, duration)}
             <ChevronDownIcon
               className={cn(
-                "size-4 transition-transform",
+                "size-3 transition-transform",
                 isOpen ? "rotate-180" : "rotate-0"
               )}
             />

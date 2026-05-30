@@ -39,8 +39,17 @@ import { AgentComposer } from "@/components/agent/composer";
 import type { AttachmentDescriptor } from "@/lib/agent/attachments";
 import type { AgentReference } from "@/lib/agent/references";
 import { Button } from "@/components/ui/button";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 
 type SpotlightTab = "ask" | "search";
+
+// I6: the Spotlight empty state shows real, clickable suggestion chips
+// (consistent with the item-bound thread), not a single italic example.
+const SPOTLIGHT_SUGGESTIONS = [
+  "what should I focus on today?",
+  "what's blocked right now?",
+  "summarize my unread Slack",
+];
 
 export function SpotlightAgent() {
   const { open, setOpen } = useSpotlightModal();
@@ -326,15 +335,21 @@ function AskMashiTab({
               </Button>
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-2">
               <p className="inline-flex items-center gap-1 font-medium text-foreground">
                 <Sparkles className="h-3 w-3 text-primary" />
                 Ask Mashi anything
               </p>
-              <p className="text-[11px] text-muted-foreground/85">
-                Try, &quot;what did we decide on the brand spend last week?&quot;,
-                or, &quot;find the Mihir thing and snooze it until Monday&quot;.
-              </p>
+              <Suggestions>
+                {SPOTLIGHT_SUGGESTIONS.map((s) => (
+                  <Suggestion
+                    key={s}
+                    suggestion={s}
+                    onClick={send}
+                    className="text-[11px]"
+                  />
+                ))}
+              </Suggestions>
             </div>
           )}
         </div>

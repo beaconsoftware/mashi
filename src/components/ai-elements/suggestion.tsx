@@ -44,7 +44,8 @@ export const Suggestion = ({
 
   return (
     <Button
-      className={cn("cursor-pointer rounded-full px-4", className)}
+      // I6: clickable chip lifts on hover like every other row in Mashi.
+      className={cn("mashi-magnetic cursor-pointer rounded-full px-4", className)}
       onClick={handleClick}
       size={size}
       type="button"

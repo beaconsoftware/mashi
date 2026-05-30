@@ -473,7 +473,9 @@ export function AgentComposer({
           }}
           rows={2}
           placeholder={dragging ? "Drop files to attach…" : placeholder}
-          className={`min-h-0 resize-none rounded-md border-border/40 bg-card/80 px-2.5 py-1.5 text-xs leading-snug placeholder:text-muted-foreground/60 ${
+          // I5: the primary input renders at text-sm (14px) and gets the
+          // primary-tinted glow on focus, layered over shadcn's ring.
+          className={`mashi-glow-focus min-h-0 resize-none rounded-md border-border/40 bg-card/80 px-2.5 py-1.5 text-sm leading-snug placeholder:text-muted-foreground/60 ${
             dragging ? "ring-1 ring-primary/50" : ""
           }`}
           disabled={disabled}

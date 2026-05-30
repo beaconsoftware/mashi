@@ -28,9 +28,11 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 export const Message = ({ className, from, ...props }: MessageProps) => (
+  // I2: messages fade + rise in on mount (.mashi-enter, once per element, so
+  // it never fights streaming text inside an already-mounted bubble).
   <div
     className={cn(
-      "group flex w-full max-w-[95%] flex-col gap-2",
+      "mashi-enter group flex w-full max-w-[95%] flex-col gap-2",
       from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
       className
     )}
@@ -48,7 +50,9 @@ export const MessageContent = ({
   <div
     className={cn(
       "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
-      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+      // I7: the user bubble samples the ambient via a sanctioned /80 step so
+      // the thread reads as the same glass material as the rest of the app.
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary/80 group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
       "group-[.is-assistant]:text-foreground",
       className
     )}
