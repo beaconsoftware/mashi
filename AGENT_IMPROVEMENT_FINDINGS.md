@@ -189,7 +189,7 @@ caught immediately.
   > nested args + inline diff, all frontend + a thin before-snapshot read) is separable from
   > the policy/safety chunk (a new policy table + settings UI + provider-specific recall/undo
   > + ring reclassification). Internal deps: E3→E2; E1→E5; E1+E3→E4.
-  - [ ] **4 · P4.a · Approval card weight + diff** · covers E2, E3 · deps: none · IN REVIEW (#PENDING) · PR: #PENDING
+  - [ ] **4 · P4.a · Approval card weight + diff** · covers E2, E3 · deps: none · IN REVIEW (#153) · PR: #153
     > Approval-card rework (E3): action weight (`approvalMetaFor`) so an irreversible SEND
     > reads destructive + `.mashi-glow-focus` while a draft / reaction reads light; multi-line
     > body editing; nested-object / array-element editing via `flattenEditable` / `applyEdits`
