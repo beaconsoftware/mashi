@@ -39,6 +39,8 @@ import { ThreadExport } from "@/components/agent/thread-export";
 import { EditableUserMessage } from "@/components/agent/editable-user-message";
 import { Button } from "@/components/ui/button";
 import { AgentComposer } from "@/components/agent/composer";
+import { StoredAttachmentList } from "@/components/agent/attachment-chip";
+import type { AttachmentDescriptor } from "@/lib/agent/attachments";
 import { UndoStrip, type UndoableAction } from "@/components/agent/undo-strip";
 import {
   ApprovalCard,
@@ -76,6 +78,8 @@ interface AgentMessageRow {
     truncated?: boolean;
     budget_exhausted?: boolean;
   } | null;
+  /** B1 (P3): attachments on a user row. */
+  attachments?: AttachmentDescriptor[] | null;
 }
 
 /** A4/A6/A9 non-fatal, turn-level note rendered inline below the live turn. */
@@ -137,6 +141,7 @@ export function ThreadView({
   threadId,
   onItemBound,
   initialMessage,
+  initialAttachments,
 }: {
   itemId?: string;
   threadId?: string;
@@ -151,6 +156,9 @@ export function ThreadView({
    * AskMashiTab racing the mount with a parallel POST. Fires once per
    * thread; guarded by a per-thread ref so re-renders don't re-send. */
   initialMessage?: string;
+  /** B1 (P3): attachments to send with the first message (Spotlight Ask
+   * flow uploads them in its composer before the thread row exists). */
+  initialAttachments?: AttachmentDescriptor[];
 }) {
   if (!itemId && !threadId) {
     throw new Error("ThreadView requires either itemId or threadId");
@@ -199,9 +207,10 @@ export function ThreadView({
   // this, the user's typed text disappears from the composer and
   // doesn't reappear in the transcript until the persisted query
   // refetches — visible flicker after every send.
-  const [pendingUserMessage, setPendingUserMessage] = useState<string | null>(
-    null
-  );
+  const [pendingUserMessage, setPendingUserMessage] = useState<{
+    text: string;
+    attachments?: AttachmentDescriptor[];
+  } | null>(null);
   const [undoables, setUndoables] = useState<UndoableAction[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   // Quality Phase 1: the model can ask one focused follow-up question
@@ -420,13 +429,15 @@ export function ThreadView({
     }
   }
 
-  async function send(message: string) {
-    if (!message.trim() || streaming) return;
+  async function send(message: string, attachments?: AttachmentDescriptor[]) {
+    // B1: a turn is valid with text, attachments, or both.
+    if ((!message.trim() && !(attachments?.length ?? 0)) || streaming) return;
     // Render the user message immediately so the composer-clear ↔
     // refetch-arrive gap doesn't blink the message out of existence.
-    setPendingUserMessage(message);
+    setPendingUserMessage({ text: message, attachments });
     await streamAgentTurn(`${baseEndpoint}/messages`, {
       message,
+      attachments,
       cursor,
       mode: activeMode,
     });
@@ -500,11 +511,14 @@ export function ThreadView({
   // change without unmount, etc.) we don't double-send.
   const firedInitialRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!initialMessage || !initialMessage.trim()) return;
+    const hasInitial =
+      (initialMessage && initialMessage.trim().length > 0) ||
+      (initialAttachments?.length ?? 0) > 0;
+    if (!hasInitial) return;
     const k = threadId ?? itemId ?? "";
     if (!k || firedInitialRef.current === k) return;
     firedInitialRef.current = k;
-    void send(initialMessage);
+    void send(initialMessage ?? "", initialAttachments);
     // `send` closes over streaming + activeMode + cursor by design — we
     // only want this to fire once per thread when the initial message
     // first arrives, so we don't include it in deps.
@@ -719,13 +733,23 @@ export function ThreadView({
             </div>
           )}
           {pendingUserMessage && (
-            <Message from="user">
-              <MessageContent>
-                <p className="whitespace-pre-wrap text-sm">
-                  {pendingUserMessage}
-                </p>
-              </MessageContent>
-            </Message>
+            <div className="space-y-1.5">
+              {pendingUserMessage.attachments &&
+                pendingUserMessage.attachments.length > 0 && (
+                  <StoredAttachmentList
+                    attachments={pendingUserMessage.attachments}
+                  />
+                )}
+              {pendingUserMessage.text.trim().length > 0 && (
+                <Message from="user">
+                  <MessageContent>
+                    <p className="whitespace-pre-wrap text-sm">
+                      {pendingUserMessage.text}
+                    </p>
+                  </MessageContent>
+                </Message>
+              )}
+            </div>
           )}
           {streaming && (
             <LiveTurnRows
@@ -829,23 +853,30 @@ function PersistedMessageRow({
   onEditUser?: (messageId: string, content: string) => void;
 }) {
   if (message.role === "user") {
+    const atts = Array.isArray(message.attachments) ? message.attachments : [];
     // D3: every prior user turn is editable. Editing re-runs the
     // conversation from that message (the server truncates after it).
-    if (onEditUser && message.content) {
-      return (
+    const body =
+      onEditUser && message.content ? (
         <EditableUserMessage
           content={message.content}
           disabled={!!streaming}
           onResend={(next) => onEditUser(message.id, next)}
         />
-      );
-    }
+      ) : message.content ? (
+        <Message from="user">
+          <MessageContent>
+            <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+          </MessageContent>
+        </Message>
+      ) : null;
+    if (atts.length === 0) return body;
+    // B1: render attachment chips above the (optional) message body.
     return (
-      <Message from="user">
-        <MessageContent>
-          <p className="whitespace-pre-wrap text-sm">{message.content}</p>
-        </MessageContent>
-      </Message>
+      <div className="space-y-1.5">
+        <StoredAttachmentList attachments={atts} />
+        {body}
+      </div>
     );
   }
   if (message.role === "assistant") {
