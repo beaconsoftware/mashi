@@ -55,6 +55,14 @@ jobs:
       - name: Audit translucency
         run: pnpm audit:translucency
 
+      # Motion/liveness guard (AGENTS.md Foundation invariant #6). Cheap grep
+      # like the other audits: flags banned hover-scale/rotate patterns and
+      # interactive files with no Mashi motion utility, scoped to the agent
+      # surface. A grep can't prove smoothness; the real bar is the K5
+      # feel-parity review in AGENT_IMPROVEMENT_FINDINGS.md.
+      - name: Audit motion
+        run: pnpm audit:motion
+
   visual:
     name: Visual regression
     runs-on: ubuntu-latest

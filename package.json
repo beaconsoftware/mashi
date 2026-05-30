@@ -10,12 +10,13 @@
     "typecheck": "tsc --noEmit",
     "audit:layers": "bash scripts/audit-layers.sh",
     "audit:translucency": "bash scripts/audit-translucency.sh",
+    "audit:motion": "bash scripts/audit-motion.sh",
     "test:visual": "playwright test --config=playwright.config.ts",
     "test:visual:update": "playwright test --config=playwright.config.ts --update-snapshots",
     "test:hooks": "tsx src/lib/agent/hooks/__tests__/runner.test.ts",
     "embed-tools": "tsx scripts/embed-tools.ts",
     "check:embeddings": "tsx scripts/embed-tools.ts --check",
-    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm check:embeddings"
+    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm audit:motion && pnpm check:embeddings"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
