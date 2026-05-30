@@ -150,8 +150,10 @@ not jamming multi-week work into one un-reviewable diff.
 `audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
 that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
 P5.a) and `ai-elements/suggestion.tsx` (I6, dropped in P5.a) are now live;
-`ai-elements/conversation.tsx` remains carved out until K2 (P5.c) gives it zero-jank scroll
-motion. Adding a new interactive file with no motion is caught immediately.
+`ai-elements/conversation.tsx` is now live too (K2 in P5.c gave its jump-to-latest
+affordance `.mashi-enter`/`.mashi-press`; its carve-out is dropped). The only remaining
+`EXCLUDE_FILES` entry is the audit script itself. Adding a new interactive file with no
+motion is caught immediately.
 
 ### Batches (the 6-PR collapse)
 
@@ -227,7 +229,7 @@ motion. Adding a new interactive file with no motion is caught immediately.
     > collapsed-state outcome summary + status state machine + sequence rail). Plus the
     > observability pair: agent cost in the usage view (J1, A2 already landed) and turn
     > replay/debug (J3).
-  - [ ] **5 · P5.c · Feel parity (cadence + scroll + perf + optimistic)** · covers K1, K2, K3, K4, K5 · deps: P5.a, P5.b · IN REVIEW (#PENDING) · PR: #PENDING
+  - [ ] **5 · P5.c · Feel parity (cadence + scroll + perf + optimistic)** · covers K1, K2, K3, K4, K5 · deps: P5.a, P5.b · IN REVIEW (#158) · PR: #158
     > Streaming cadence smoothing (K1), zero-jank auto-scroll + jump-to-latest (K2), motion
     > perf budget / transform-only expand technique (K3, corrects I1/I8/I9), optimistic
     > send (K4), and the K5 feel-parity acceptance review. Drops the conversation
