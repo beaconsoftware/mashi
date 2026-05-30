@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 import {
   Mail,
   MessageSquare,
+  MessageSquareText,
   GitBranch,
   Mic,
   Calendar as CalIcon,
@@ -56,18 +57,30 @@ const SOURCE_ICONS: Record<SpotlightSource, React.ComponentType<{ className?: st
   linear: GitBranch,
   fireflies: Mic,
   calendar: CalIcon,
+  conversations: MessageSquareText,
 };
 
 export function SpotlightSearchPanel({
   onPicked,
+  onConversation,
 }: {
   onPicked: () => void;
+  /** D4: open a matched agent thread. The parent decides whether to open
+   * the item-bound sheet (bound thread) or resume the orphan chat
+   * (Spotlight thread), so the generic href router is bypassed. */
+  onConversation?: (hit: SpotlightHit) => void;
 }) {
   const router = useRouter();
   const setSelectedItem = useS2DStore((s) => s.setSelectedItem);
   const { query, setQuery, debounced, hits, grouped } = useSpotlight();
 
   function selectHit(h: SpotlightHit) {
+    if (h.source === "conversations") {
+      // Parent owns dialog state for this path (it may switch tabs rather
+      // than close), so don't call onPicked here.
+      onConversation?.(h);
+      return;
+    }
     onPicked();
     if (h.external && h.href.startsWith("http")) {
       window.open(h.href, "_blank", "noopener,noreferrer");

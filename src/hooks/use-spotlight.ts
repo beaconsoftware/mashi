@@ -7,6 +7,7 @@
  * keystroke. Returns ranked, grouped hits.
  */
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useInboxMessages } from "@/hooks/use-inbox";
 import { useMeetings } from "@/hooks/use-meetings";
 import { useLinearIssues } from "@/hooks/use-linear-issues";
@@ -19,7 +20,8 @@ export type SpotlightSource =
   | "slack"
   | "linear"
   | "fireflies"
-  | "calendar";
+  | "calendar"
+  | "conversations";
 
 export interface SpotlightHit {
   source: SpotlightSource;
@@ -29,6 +31,21 @@ export interface SpotlightHit {
   meta: string;
   href: string;
   external?: boolean;
+  /** D4: present only for source==="conversations" — how to open the
+   * matched agent thread (item-bound vs orphan). The Spotlight surface
+   * handles navigation rather than the generic href router. */
+  thread?: { threadId: string; itemId: string | null };
+}
+
+interface ConversationHit {
+  id: string;
+  title: string;
+  item_id: string | null;
+  ticket_number: number | null;
+  is_orphan: boolean;
+  snippet: string;
+  last_message_at: string | null;
+  created_at: string;
 }
 
 const MAX_TOTAL = 200;
@@ -57,7 +74,42 @@ export function useSpotlight(initialDelayMs = 120) {
   const { data: events = [] } = useCalendarEvents();
   const { data: s2d = [] } = useS2DItems();
 
-  const hits: SpotlightHit[] = useMemo(() => {
+  // D4: cross-thread transcript search. Unlike the other sources (which
+  // run client-side over cached data), agent transcripts live only
+  // server-side, so this is a debounced network query against the
+  // full-text index. Enabled once there's a real term.
+  const { data: convoData } = useQuery<{ threads: ConversationHit[] }>({
+    queryKey: ["spotlight-conversations", debounced],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/agent/threads/search?q=${encodeURIComponent(debounced)}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) throw new Error(`conversation search ${res.status}`);
+      return res.json();
+    },
+    enabled: debounced.length >= 2,
+    staleTime: 30_000,
+  });
+
+  const conversationHits: SpotlightHit[] = useMemo(() => {
+    if (!debounced) return [];
+    return (convoData?.threads ?? []).map((t) => ({
+      source: "conversations" as const,
+      id: t.id,
+      title: t.title,
+      snippet: t.snippet,
+      meta: t.ticket_number
+        ? `MASH-${t.ticket_number}`
+        : t.is_orphan
+          ? "Spotlight chat"
+          : "Conversation",
+      href: "#",
+      thread: { threadId: t.id, itemId: t.item_id },
+    }));
+  }, [debounced, convoData]);
+
+  const localHits: SpotlightHit[] = useMemo(() => {
     if (!debounced) return [];
     const q = debounced;
     const out: SpotlightHit[] = [];
@@ -140,6 +192,12 @@ export function useSpotlight(initialDelayMs = 120) {
     return out.slice(0, MAX_TOTAL);
   }, [debounced, s2d, messages, meetings, issues, events]);
 
+  // Conversations come last so the unified board/connector results lead.
+  const hits = useMemo(
+    () => [...localHits, ...conversationHits],
+    [localHits, conversationHits]
+  );
+
   const grouped = useMemo(() => {
     const map = new Map<SpotlightSource, SpotlightHit[]>();
     for (const h of hits) {
@@ -154,6 +212,7 @@ export function useSpotlight(initialDelayMs = 120) {
       "calendar",
       "gmail",
       "slack",
+      "conversations",
     ];
     return order
       .filter((s) => map.has(s))
@@ -170,4 +229,5 @@ export const SPOTLIGHT_SOURCE_META = {
   linear: { label: "Linear", color: "text-indigo-300" },
   fireflies: { label: "Meetings", color: "text-orange-400" },
   calendar: { label: "Calendar", color: "text-sky-400" },
+  conversations: { label: "Conversations", color: "text-primary" },
 } as const;

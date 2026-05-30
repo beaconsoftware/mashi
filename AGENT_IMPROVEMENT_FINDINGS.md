@@ -138,6 +138,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **A2** Route loop through `trackedStream` · MERGED (#145)
 - [x] **A7** Model/pricing drift guard · MERGED (#146)
 - [x] **P1** Foundation hardening (A3, A4, A5, A6, A8, A9) · MERGED (#148)
+- [x] **P2.a** Output trust + rendering (C1, C2, C3, C4, C5) · MERGED (#149)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
 `thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The batch
@@ -156,11 +157,11 @@ caught immediately.
   > Split because output rendering (C, frontend) and conversation control (D, backend
   > endpoints + truncation/re-run + cross-thread search index + migration) are two cohesive
   > but distinct chunks, too large for one clean PR.
-  - [ ] **2 · P2.a · Output trust + rendering** · covers C1, C2, C3, C4, C5 · deps: P1 · IN REVIEW (#149) · PR: #149
+  - [x] **2 · P2.a · Output trust + rendering** · covers C1, C2, C3, C4, C5 · deps: P1 · MERGED (#149) · PR: #149
     > Citations / source chips (C1), readable tool-result summaries + wrap fix (C2), copy
     > buttons (C3), code highlighting + copy via `@streamdown/code` (C4), markdown 16→14 (C5).
     > All frontend; provenance/summary logic is a pure, unit-tested module (`test:provenance`).
-  - [ ] **2 · P2.b · Conversation control** · covers D2, D3, D4 · deps: P1, P2.a · TODO · PR: -
+  - [ ] **2 · P2.b · Conversation control** · covers D2, D3, D4 · deps: P1, P2.a · IN REVIEW (#150) · PR: #150
     > Regenerate last turn (D2, needs A8 from P1), edit-and-resend a prior user turn (D3,
     > shares D2's truncation/re-run path), export thread + cross-thread transcript search
     > (D4, the larger half: a `user_id`-scoped full-text index + a new Search scope). Builds

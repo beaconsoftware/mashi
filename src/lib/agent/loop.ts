@@ -172,6 +172,15 @@ export interface RunAgentTurnOpts {
   tokenBudget?: number;
   /** A6: optional per-turn USD ceiling; whichever ceiling trips first. */
   costBudget?: number;
+  /**
+   * P2.b: whether to persist `userMessage` as a fresh user row before
+   * streaming. Default true. Regenerate (D2) and Edit-and-resend (D3)
+   * pass false: the route has already truncated the thread back to the
+   * anchor user message (which it edited in place for D3), so that row is
+   * the last live message and re-appending it would duplicate the turn.
+   * `userMessage` is still used for per-turn tool retrieval in that case.
+   */
+  appendUserMessage?: boolean;
 }
 
 interface AnthropicToolDef {
@@ -303,15 +312,19 @@ async function runAgentTurnInner(
   supabase: ReturnType<typeof createSupabaseServiceClient>
 ): Promise<void> {
   // Persist the user message before we start streaming so a crash
-  // mid-stream still leaves a recoverable thread.
-  await appendMessage({
-    userId: opts.userId,
-    threadId: opts.threadId,
-    role: "user",
-    content: opts.userMessage,
-    cursorContext: opts.cursor,
-    supabase,
-  });
+  // mid-stream still leaves a recoverable thread. P2.b re-runs
+  // (regenerate / edit-and-resend) skip this: the anchor user row already
+  // exists and is the last live message after the route's truncation.
+  if (opts.appendUserMessage !== false) {
+    await appendMessage({
+      userId: opts.userId,
+      threadId: opts.threadId,
+      role: "user",
+      content: opts.userMessage,
+      cursorContext: opts.cursor,
+      supabase,
+    });
+  }
 
   const { thread, messages } = await loadThread({
     userId: opts.userId,
