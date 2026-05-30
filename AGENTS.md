@@ -376,6 +376,30 @@ Wrap every tween in `withMotion(() => ...)` so users with
 `prefers-reduced-motion: reduce` get no animation. Hand-rolled
 `gsap.to(el, { duration: 0.5 })` without the helper is a smell.
 
+### Performance budget — transform/opacity only (K3)
+
+Motion must hold 60fps. **Animate only `transform` and `opacity`** (and
+`clip-path`); those are GPU-composited and never trigger layout. **Never
+animate a layout-triggering property** — `height`, `width`, `top`/`left`/
+`right`/`bottom`, `margin`, `padding` — across frames; animating layout forces
+a reflow every frame and janks, especially during a live streaming turn.
+
+- **Expand / collapse**: don't tween `height`. Use the `grid-template-rows:
+  0fr → 1fr` trick, a `clip-path` reveal, or a transform/opacity slide+fade
+  (the agent tool-card and reasoning blocks use Radix `data-state` slide+fade,
+  which is transform/opacity, not height). A one-time reflow when content
+  mounts is fine; an *animated* height is not.
+- **Progress / meter bars**: scale a full-width fill with `transform: scaleX()`
+  from `origin-left`, not an animated `width` (see `undo-strip.tsx`).
+- **Streaming text** reveals through the K1 buffer (`useRevealBuffer`), not by
+  re-laying-out on every delta.
+
+`pnpm audit:motion` flags the Tailwind arbitrary layout-transition idiom
+(`transition-[height]`, `transition-[width]`, …) and `animate-collapsible-*` on
+the agent surface. A grep can't prove 60fps; the real bar is the K5
+feel-parity review (`FEEL_PARITY_REVIEW.md`) — capture a devtools trace and
+confirm no layout/paint thrash during expand and streaming.
+
 ## Foundation invariants
 
 These rules are load-bearing. Every PR that fails one of them is

@@ -160,10 +160,13 @@ export function UndoStrip({ action, onUndone, onExpired }: Props) {
           {seconds}s
         </span>
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-amber-500/40">
+      {/* K3: the recall countdown bar animates via transform: scaleX (GPU-
+          composited) rather than width, so it never triggers per-frame layout.
+          The track is full-width; the fill scales from the left edge. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-amber-500/40">
         <div
-          className="h-full bg-amber-500/95 transition-[width] duration-200 ease-linear"
-          style={{ width: `${pct}%` }}
+          className="h-full w-full origin-left bg-amber-500/95 transition-transform duration-200 ease-linear motion-reduce:transition-none"
+          style={{ transform: `scaleX(${Math.max(0, Math.min(pct, 100)) / 100})` }}
         />
       </div>
     </div>

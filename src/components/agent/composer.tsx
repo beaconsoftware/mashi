@@ -140,6 +140,23 @@ export function AgentComposer({
     ref.current?.focus();
   }, []);
 
+  // K4: the composer autosizes to its content so a multi-line draft grows the
+  // input instead of scrolling inside two fixed rows. We capture the initial
+  // (rows=2) height once and never shrink below it, so the at-rest composer is
+  // visually unchanged; it grows up to a cap, then scrolls internally. Height
+  // is set in an effect (not during render) so the React Compiler stays happy.
+  const baseHeightRef = useRef<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (baseHeightRef.current === null) baseHeightRef.current = el.scrollHeight;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(
+      Math.max(el.scrollHeight, baseHeightRef.current),
+      200
+    )}px`;
+  }, [text]);
+
   // Revoke any outstanding object URLs when the composer unmounts. We
   // intentionally read objectUrlsRef.current at cleanup time (not a
   // setup-time snapshot, which would be the empty initial array) so every
@@ -475,7 +492,7 @@ export function AgentComposer({
           placeholder={dragging ? "Drop files to attach…" : placeholder}
           // I5: the primary input renders at text-sm (14px) and gets the
           // primary-tinted glow on focus, layered over shadcn's ring.
-          className={`mashi-glow-focus min-h-0 resize-none rounded-md border-border/40 bg-card/80 px-2.5 py-1.5 text-sm leading-snug placeholder:text-muted-foreground/60 ${
+          className={`mashi-glow-focus min-h-0 resize-none overflow-y-auto rounded-md border-border/40 bg-card/80 px-2.5 py-1.5 text-sm leading-snug placeholder:text-muted-foreground/60 ${
             dragging ? "ring-1 ring-primary/50" : ""
           }`}
           disabled={disabled}

@@ -145,6 +145,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P4.a** Approval card weight + inline diff (E2, E3) · MERGED (#153)
 - [x] **P4.b** Per-tool policy + ring-3 recall/undo (E1, E5, E4) · MERGED (#154)
 - [x] **P5.a** Design-system adoption pass (H1, I1-I7, J4, J5) · MERGED (#155)
+- [x] **P5.b** Component identity redesign + observability (I8, I9, J1, J3) · MERGED (#157)
 
 `audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
 that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
@@ -220,13 +221,13 @@ motion. Adding a new interactive file with no motion is caught immediately.
     > bubble (I7); a11y status/alert roles (J4); skeletons over spinners on load (J5). Adds
     > `.mashi-enter` / `.mashi-caret` CSS utilities. Drops the thread-view + suggestion
     > `audit:motion` carve-outs.
-  - [ ] **5 · P5.b · Component identity redesign** · covers I8, I9, J1, J3 · deps: P5.a · IN REVIEW (#157) · PR: #157
+  - [x] **5 · P5.b · Component identity redesign** · covers I8, I9, J1, J3 · deps: P5.a · MERGED (#157) · PR: #157
     > The redesigns, not just motion: reasoning block identity (I8: glyph, accent rail,
     > auto-collapse to metadata), tool-call card identity (I9: per-tool icon + human label +
     > collapsed-state outcome summary + status state machine + sequence rail). Plus the
     > observability pair: agent cost in the usage view (J1, A2 already landed) and turn
     > replay/debug (J3).
-  - [ ] **5 · P5.c · Feel parity (cadence + scroll + perf + optimistic)** · covers K1, K2, K3, K4, K5 · deps: P5.a, P5.b · TODO · PR: -
+  - [ ] **5 · P5.c · Feel parity (cadence + scroll + perf + optimistic)** · covers K1, K2, K3, K4, K5 · deps: P5.a, P5.b · IN REVIEW (#PENDING) · PR: #PENDING
     > Streaming cadence smoothing (K1), zero-jank auto-scroll + jump-to-latest (K2), motion
     > perf budget / transform-only expand technique (K3, corrects I1/I8/I9), optimistic
     > send (K4), and the K5 feel-parity acceptance review. Drops the conversation

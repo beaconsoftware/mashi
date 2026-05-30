@@ -36,6 +36,7 @@ import {
   Suggestions,
 } from "@/components/ai-elements/suggestion";
 import { useCursorContext } from "@/lib/agent/cursor-context";
+import { useRevealBuffer } from "@/hooks/use-reveal-buffer";
 import { deriveSources, type SourceDescriptor } from "@/lib/agent/provenance";
 import {
   isBlockedResult,
@@ -211,7 +212,11 @@ export function ThreadView({
   const persistedMode: AgentMode = data?.thread?.mode ?? "act";
   const activeMode: AgentMode = storedMode ?? persistedMode;
 
-  const [liveText, setLiveText] = useState("");
+  // K1: the live assistant text streams through a reveal buffer so bursty SSE
+  // deltas read as a smooth, steady reveal instead of lurching. `reveal.text`
+  // is the currently-revealed prefix; we render that, never the raw target.
+  const reveal = useRevealBuffer();
+  const liveText = reveal.text;
   const [liveToolCalls, setLiveToolCalls] = useState<InFlightToolCall[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -349,7 +354,7 @@ export function ThreadView({
   ) {
     if (streaming) return;
     setStreaming(true);
-    setLiveText("");
+    reveal.reset();
     setLiveToolCalls([]);
     setPendingApprovals([]);
     setPendingFollowUps([]);
@@ -358,6 +363,11 @@ export function ThreadView({
 
     const controller = new AbortController();
     abortRef.current = controller;
+
+    // K4: on a failed turn (rejected/unreachable/non-abort error) we keep the
+    // optimistic user bubble so the message isn't lost — the error block offers
+    // a Retry. Only a clean success (or a user-initiated Stop) clears it.
+    let failed = false;
 
     try {
       const res = await fetch(url, {
@@ -380,7 +390,7 @@ export function ThreadView({
             "Mashi is still working on this thread in another tab."
         );
         setStreaming(false);
-        setPendingUserMessage(null);
+        failed = true;
         return;
       }
       if (!res.ok || !res.body) {
@@ -391,7 +401,7 @@ export function ThreadView({
           | null;
         setError(payload?.message ?? `Couldn't reach Mashi (${res.status}).`);
         setStreaming(false);
-        setPendingUserMessage(null);
+        failed = true;
         return;
       }
       // Accepted: now safe to apply any optimistic truncation.
@@ -428,6 +438,7 @@ export function ThreadView({
       // it. Any other failure surfaces normally.
       if (!controller.signal.aborted) {
         setError(err instanceof Error ? err.message : "stream failed");
+        failed = true;
       }
     } finally {
       // Wait for the refetch to land BEFORE we clear live state. If we
@@ -436,6 +447,9 @@ export function ThreadView({
       // and pops back in from persisted data — a very visible flicker.
       // Awaiting refetchQueries keeps the live render up while the durable
       // rows arrive.
+      // K1: reveal whatever streamed in full before we tear the live view down,
+      // so the buffer's bounded lag never clips the tail of the answer.
+      reveal.flush();
       try {
         await queryClient.refetchQueries({ queryKey });
       } catch {
@@ -443,9 +457,10 @@ export function ThreadView({
       }
       abortRef.current = null;
       setStreaming(false);
-      setLiveText("");
+      reveal.reset();
       setLiveToolCalls([]);
-      setPendingUserMessage(null);
+      // K4: keep the optimistic bubble on failure so Retry can resend it.
+      if (!failed) setPendingUserMessage(null);
     }
   }
 
@@ -466,6 +481,16 @@ export function ThreadView({
       cursor,
       mode: activeMode,
     });
+  }
+
+  // K4: resend the optimistic message a failed turn left on screen. The bubble
+  // (and its attachments / references) is still in `pendingUserMessage`; clear
+  // the error and run it through the same send path.
+  function retryLastSend() {
+    const p = pendingUserMessage;
+    if (!p || streaming) return;
+    setError(null);
+    void send(p.text, p.attachments, p.references);
   }
 
   // P2.b: optimistically drop every cached message after `anchorId` (and
@@ -561,7 +586,8 @@ export function ThreadView({
 
   function applyDelta(d: AgentDelta) {
     if (d.kind === "text") {
-      setLiveText((prev) => prev + d.text);
+      // K1: feed the delta into the reveal buffer; the rAF loop paces it out.
+      reveal.append(d.text);
     } else if (d.kind === "tool_call_start") {
       setLiveToolCalls((prev) => [
         ...prev,
@@ -844,9 +870,23 @@ export function ThreadView({
             // J4: failures are announced assertively to screen readers.
             <div
               role="alert"
-              className="rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive"
+              className="flex items-center justify-between gap-2 rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive"
             >
-              {error}
+              <span className="min-w-0">{error}</span>
+              {/* K4: a failed send keeps its message; offer a one-click resend
+                  so the input never feels like it swallowed the turn. */}
+              {pendingUserMessage && !streaming && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={retryLastSend}
+                  className="mashi-press h-6 shrink-0 gap-1 px-2 text-[11px] text-destructive hover:text-destructive"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Retry
+                </Button>
+              )}
             </div>
           )}
           {/* J3: internal-only turn replay / re-run. Self-gated on

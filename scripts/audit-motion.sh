@@ -72,9 +72,6 @@ INTERACTIVE_RE='onClick=|role="button"'
 # ledger item; drop the entry in that PR.
 EXCLUDE_FILES=(
   "scripts/audit-motion.sh"
-  # conversation: the scroll container + scroll-to-bottom button. Gains
-  # zero-jank scroll motion in K2 (P5.c). Grandfathered until then.
-  "src/components/ai-elements/conversation.tsx"
 )
 
 build_exclude_grep() {
@@ -133,6 +130,18 @@ banned 'hover:-?translate-' \
   'Hand-rolled hover translate, use .mashi-magnetic / .mashi-lift.'
 banned 'group-hover:rotate-' \
   'Hand-rolled group-hover:rotate-* on an icon, use <NavIcon> or .mashi-icon-hover.'
+
+# K3 performance budget: agent-surface motion is transform/opacity only (and
+# the grid-rows / clip technique for expand). Animating a layout-triggering
+# property (height/width/box-offsets/margin/padding) forces per-frame layout
+# and janks; use translate/scale or grid-template-rows instead. This catches
+# the Tailwind arbitrary-transition idiom (transition-[height], etc.) and the
+# tailwindcss-animate height-collapse keyframes. Carve out with
+# `// motion-audit-ok: <reason>` if a one-off truly needs it.
+banned 'transition-\[(height|width|top|bottom|left|right|inset|margin|padding|max-height|max-width)' \
+  'Animated layout property (K3 performance budget), use transform (translate/scale) or the grid-template-rows expand trick, never animate layout. AGENTS.md Motion doctrine.'
+banned 'animate-collapsible-' \
+  'tailwindcss-animate height collapse (K3 performance budget), expand via transform/opacity or grid-template-rows, not animated height.'
 
 # --- Check 2: dead interactive files ---------------------------------------
 # A file with a clickable handler that uses none of the Mashi motion system.
