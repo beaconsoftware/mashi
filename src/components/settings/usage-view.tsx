@@ -28,6 +28,12 @@ interface UsageRow {
 
 type Window = "7d" | "30d" | "all";
 
+/** J1: the interactive + background agent logs its model calls under
+ * `agent:`-prefixed purposes ("agent:turn", "agent:compact_thread"). Treat
+ * every such row as agent spend so the usage view can call it out distinctly
+ * (A2 made these rows exist; this surfaces them). */
+const isAgentPurpose = (purpose: string) => purpose.startsWith("agent:");
+
 function windowSinceIso(w: Window): string | null {
   if (w === "all") return null;
   const days = w === "7d" ? 7 : 30;
@@ -61,13 +67,21 @@ export function UsageView() {
     let calls = 0;
     let inTok = 0;
     let outTok = 0;
+    // J1: agent spend, broken out from the total.
+    let agentCost = 0;
+    let agentCalls = 0;
     for (const r of rows) {
-      cost += Number(r.cost_usd) || 0;
+      const c = Number(r.cost_usd) || 0;
+      cost += c;
       calls++;
       inTok += r.input_tokens || 0;
       outTok += r.output_tokens || 0;
+      if (isAgentPurpose(r.purpose)) {
+        agentCost += c;
+        agentCalls++;
+      }
     }
-    return { cost, calls, inTok, outTok };
+    return { cost, calls, inTok, outTok, agentCost, agentCalls };
   }, [rows]);
 
   const byPurpose = useMemo(() => {
@@ -152,6 +166,17 @@ export function UsageView() {
             <Stat label="calls" value={totals.calls.toLocaleString()} />
             <Stat label="input tokens" value={fmtTok(totals.inTok)} />
             <Stat label="output tokens" value={fmtTok(totals.outTok)} />
+            {/* J1: interactive + background agent spend, called out distinctly
+                so chat cost is legible against the rest of the AI bill. */}
+            <Stat
+              label="agent cost"
+              value={fmtUsd(totals.agentCost)}
+              hint={
+                totals.cost > 0
+                  ? `${((totals.agentCost / totals.cost) * 100).toFixed(0)}% of total · ${totals.agentCalls.toLocaleString()} calls`
+                  : `${totals.agentCalls.toLocaleString()} calls`
+              }
+            />
             <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <Sparkles className="h-3 w-3 text-primary" />
               live from ai_usage_log
@@ -181,7 +206,21 @@ export function UsageView() {
               <tbody>
                 {byPurpose.map(([purpose, d]) => (
                   <tr key={purpose} className="border-b border-border/30">
-                    <td className="px-3 py-2 font-mono">{purpose}</td>
+                    <td className="px-3 py-2 font-mono">
+                      {/* J1: agent rows lead with a sparkle + accent so chat
+                          spend stands out among triage / copilot / sync. */}
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5",
+                          isAgentPurpose(purpose) && "text-primary"
+                        )}
+                      >
+                        {isAgentPurpose(purpose) && (
+                          <Sparkles className="h-3 w-3" />
+                        )}
+                        {purpose}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-right font-mono text-muted-foreground">
                       {d.calls.toLocaleString()}
                     </td>
@@ -302,7 +341,17 @@ export function UsageView() {
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Stat({
+  label,
+  value,
+  accent,
+  hint,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  hint?: string;
+}) {
   return (
     <div>
       <div
@@ -316,8 +365,14 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
       <div className="mt-0.5 flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
         {label === "cost" && <DollarSign className="h-2.5 w-2.5" />}
         {label === "calls" && <Clock className="h-2.5 w-2.5" />}
+        {label === "agent cost" && <Sparkles className="h-2.5 w-2.5" />}
         {label}
       </div>
+      {hint && (
+        <div className="mt-0.5 text-[10px] normal-case tracking-normal text-muted-foreground/80">
+          {hint}
+        </div>
+      )}
     </div>
   );
 }

@@ -150,7 +150,15 @@ export const Reasoning = memo(
         <Collapsible
           // I3: the reasoning block animates in on mount like the rest of
           // the thread, rather than blinking into place.
-          className={cn("mashi-enter not-prose mb-4", className)}
+          // I8: a thin left accent rail gives the reasoning its own identity
+          // and visually separates it from the answer below. The rail warms
+          // to the primary while Mashi is thinking, then cools to a quiet
+          // border once the block auto-collapses to "Thought for Xs" metadata.
+          className={cn(
+            "mashi-enter not-prose mb-4 border-l-2 pl-3 transition-colors",
+            isStreaming ? "border-primary/50" : "border-border/40",
+            className
+          )}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}
@@ -199,7 +207,16 @@ export const ReasoningTrigger = memo(
       >
         {children ?? (
           <>
-            <BrainIcon className="size-3" />
+            {/* I8: the glyph pulses in the primary while Mashi is thinking,
+                then settles to a quiet muted brain once done. Reduced-motion
+                gets the static glyph. */}
+            <BrainIcon
+              className={cn(
+                "size-3 shrink-0",
+                isStreaming &&
+                  "animate-pulse text-primary motion-reduce:animate-none"
+              )}
+            />
             {getThinkingMessage(isStreaming, duration)}
             <ChevronDownIcon
               className={cn(
