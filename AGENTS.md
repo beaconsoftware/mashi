@@ -392,6 +392,21 @@ guaranteed to regress something:
    bounced.
 5. **Z-index goes through `Z.*` constants / `z-*` utility classes only.**
    `pnpm audit:layers` enforces. No `z-[103]`.
+6. **Interactive surfaces are alive by default; flat is a defect, not a
+   style choice.** Any element with an `onClick` (rows, cards, CTAs, icon
+   triggers) outside `src/components/ui/` must reach for the canonical
+   motion: `.mashi-magnetic` on clickable rows, `.mashi-lift` on focal
+   cards, `.mashi-press` on tactile CTAs (baked into `<Button>`),
+   `.mashi-glow-focus` on primary inputs, `<NavIcon>` for icon triggers.
+   Mounts and disclosures animate through `withMotion(() => ...)` with
+   `DUR`/`EASE`; tool cards and expanders animate open, they never pop. A
+   surface that ships with `transition: all 0s` everywhere has skipped the
+   design system, and that is a bug to bounce in review. Enforcement:
+   `pnpm audit:motion` (to be wired, see `AGENT_IMPROVEMENT_FINDINGS.md`
+   Epic I) flags an interactive element with no `mashi-*` utility and no
+   `withMotion`-driven animation, with a `// motion-audit-ok: <reason>`
+   carve-out for the legitimately-static cases. Until that audit lands
+   this is reviewer-enforced. See "Polish patterns" for the how.
 
 ### Component decision tree
 
@@ -565,6 +580,41 @@ aurora, the onboard hero entries — earn their hand-craft. Those use
 GSAP timelines directly. The doctrine here covers the recurring
 polish so the bespoke moments aren't drowned out by every button also
 trying to be flashy.
+
+### Liveness is a hard rule, not a convenience
+
+The decision tree above says you "almost never have to think about it."
+Read that as: the utilities make liveness cheap, not optional. A static
+interactive surface is a defect, this is Foundation invariant #6, and it
+is enforced the same way layers and translucency are. "It rendered
+correctly" is not the bar; "it feels like the rest of Mashi" is.
+
+### New-surface adoption checklist
+
+Before a new surface (page, panel, dialog, thread) ships, confirm it
+adopted the design system, not just that it renders:
+
+- Type, spacing, radius, opacity use sanctioned tokens. No arbitrary
+  `text-[15px]`, `gap-[7px]`, `rounded-[7px]`, `bg-card/30`.
+- Interactive primitives come from `src/components/ui/` (shadcn first).
+- Clickable rows use `.mashi-magnetic`, focal cards `.mashi-lift`, CTAs
+  `.mashi-press`, primary inputs `.mashi-glow-focus`, icon triggers
+  `<NavIcon>`.
+- Mounts and disclosures animate through `withMotion` + `DUR`/`EASE`.
+  Nothing pops in with `transition: all 0s`.
+- Loading uses `<Skeleton>`, not a bare spinner.
+- Streaming or long-running states carry motion (caret, shimmer,
+  staggered entry), not a static spinner then a content dump.
+- Translucent surfaces sample the ambient via a sanctioned `/N` step or
+  a primitive.
+- `pnpm verify` plus the audits (`audit:layers`, `audit:translucency`,
+  and `audit:motion` once wired) pass.
+
+The agent surface (the ⌘K Mashi Spotlight, item threads, sprint chat)
+was the first surface to ship having skipped most of this, and it reads
+flat next to the rest of the app. Measured: message bubbles and tool
+cards at `transition: all 0s`, zero `mashi-*` utilities in the thread.
+Don't let the next surface do the same.
 
 ## React Compiler / lint quirks
 
