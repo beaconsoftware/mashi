@@ -57,6 +57,11 @@ export const CORE_TOOLS = [
   "ask_followup_question",
   "get_message_thread",
   "resolve_reference",
+  // F1 (P6.a): always available in ACT mode so the agent can OFFER to remember
+  // a durable fact whenever one surfaces mid-turn, not only when the user's
+  // message happens to embed-match it. Filtered out in plan mode automatically
+  // (it's write_mashi, not read).
+  "propose_memory",
 ] as const;
 
 export interface RetrieveToolsOpts {

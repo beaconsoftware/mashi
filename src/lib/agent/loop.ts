@@ -283,6 +283,9 @@ function buildSystemPrompt(opts: {
   lines.push(
     "Email + Slack bodies: when the user asks about content of a message (what someone said, what they asked for, an amount, a date), call get_message_thread and read the `full_content` field, not the `preview`. Previews are truncated at 240 chars and routinely cut off mid-sentence."
   );
+  lines.push(
+    "Memory: when you learn a durable, reusable fact about the user (a lasting preference, a personal mapping like 'the brand thing means MAP-435', a standing instruction), offer to remember it by calling propose_memory with a single standalone line. The user confirms before it's saved. Do this sparingly, only for facts worth recalling on future turns, never for one-off task details or anything already in MASHI.md above."
+  );
   if (opts.mode === "plan") {
     lines.push("");
     lines.push("# Mode");

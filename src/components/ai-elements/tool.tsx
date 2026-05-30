@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   BanIcon,
+  Brain,
   Building2,
   Calendar,
   CalendarDays,
@@ -182,6 +183,7 @@ const TOOL_ICONS: Record<ToolIconKey, LucideIcon> = {
   plan: ListChecks,
   mail: Mail,
   emoji: SmilePlus,
+  memory: Brain,
   generic: WrenchIcon,
 };
 

@@ -54,6 +54,11 @@ export type ReverseOp =
       kind: "delete_watch_check_in";
       id: string;
     }
+  // F1 (P6.a): restore MASHI.md to its value before a propose_memory append.
+  | {
+      kind: "restore_mashi_md";
+      prior: string;
+    }
   // Restore primary item + un-delete duplicates after a merge.
   | {
       kind: "restore_merge";
@@ -289,6 +294,14 @@ async function applyReverseOp(
         .delete()
         .eq("user_id", userId)
         .eq("id", op.id);
+      if (error) throw error;
+      return;
+    }
+    case "restore_mashi_md": {
+      const { error } = await supabase
+        .from("user_profile")
+        .update({ mashi_md: op.prior })
+        .eq("user_id", userId);
       if (error) throw error;
       return;
     }

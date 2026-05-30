@@ -49,6 +49,13 @@ export interface ApprovalMeta {
   /** Primary-button label, e.g. "Send email", "Create draft", "Apply
    * changes". */
   primaryLabel: string;
+  /**
+   * F1 (P6.a): whether this tool is exposed in the per-tool approval policy UI
+   * (E1) and eligible for `always_allow`. Defaults to true. A ring-2 confirm
+   * like `propose_memory` sets this false: it gets the light card but is never
+   * policy-bypassable (no automatic, un-confirmed memory writes).
+   */
+  policyControl?: boolean;
 }
 
 const META: Record<string, ApprovalMeta> = {
@@ -160,6 +167,17 @@ const META: Record<string, ApprovalMeta> = {
     isUpdate: false,
     primaryLabel: "Move",
   },
+  // F1 (P6.a): ring-2 memory confirm. Lightest weight; never policy-bypassable.
+  propose_memory: {
+    weight: "reversible",
+    verb: "Remember",
+    noun: "this in MASHI.md",
+    consequence: "Appends this to your memory file. You can undo it.",
+    reversible: true,
+    isUpdate: false,
+    primaryLabel: "Remember it",
+    policyControl: false,
+  },
 };
 
 /**
@@ -167,10 +185,20 @@ const META: Record<string, ApprovalMeta> = {
  * `external` weight so a newly-added ring-3 tool still gets a sane,
  * non-trivialising card until it earns a dedicated row.
  */
-/** The ring-3 tools that carry a dedicated meta row — i.e. the set the
- * per-tool approval policy UI (E1) offers a control for. */
+/** The tools that carry a dedicated meta row AND are policy-controlled — i.e.
+ * the set the per-tool approval policy UI (E1) offers a control for. Excludes
+ * opt-in ring-2 confirms like `propose_memory` (policyControl: false) that get
+ * the card but are never policy-bypassable. */
 export function listApprovalToolNames(): string[] {
-  return Object.keys(META);
+  return Object.keys(META).filter((name) => isPolicyControlled(name));
+}
+
+/** Whether a tool participates in the per-tool approval policy (E1) — i.e. it
+ * can be set to always_allow / never. Unknown tools default to true (a generic
+ * ring-3 tool still earns a policy control); only tools that explicitly opt out
+ * (`policyControl: false`) are excluded. */
+export function isPolicyControlled(toolName: string): boolean {
+  return META[toolName]?.policyControl !== false;
 }
 
 export function approvalMetaFor(toolName: string): ApprovalMeta {
