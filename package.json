@@ -18,9 +18,10 @@
     "test:pricing": "tsx src/lib/anthropic/__tests__/pricing.test.ts",
     "test:retry": "tsx src/lib/agent/__tests__/retry.test.ts",
     "test:budget": "tsx src/lib/agent/__tests__/budget.test.ts",
+    "test:provenance": "tsx src/lib/agent/__tests__/provenance.test.ts",
     "embed-tools": "tsx scripts/embed-tools.ts",
     "check:embeddings": "tsx scripts/embed-tools.ts --check",
-    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm audit:motion && pnpm check:embeddings && pnpm test:pricing && pnpm test:retry && pnpm test:budget"
+    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm audit:motion && pnpm check:embeddings && pnpm test:pricing && pnpm test:retry && pnpm test:budget && pnpm test:provenance"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",

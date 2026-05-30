@@ -32,6 +32,9 @@ import {
   Suggestions,
 } from "@/components/ai-elements/suggestion";
 import { useCursorContext } from "@/lib/agent/cursor-context";
+import { deriveSources, type SourceDescriptor } from "@/lib/agent/provenance";
+import { CopyButton } from "@/components/agent/copy-button";
+import { MessageSources } from "@/components/agent/message-sources";
 import { AgentComposer } from "@/components/agent/composer";
 import { UndoStrip, type UndoableAction } from "@/components/agent/undo-strip";
 import {
@@ -727,6 +730,19 @@ function PersistedMessageRow({
   if (message.role === "assistant") {
     const hasToolCalls =
       Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+    // C1: provenance for this turn, derived from the read tools it called and
+    // their (non-error) results. Computed per-row from props already in hand —
+    // no cross-message memo in the parent (which tipped the React Compiler).
+    const sources = hasToolCalls
+      ? dedupeSources(
+          message.tool_calls!.flatMap((tc) => {
+            const r = resultByCallId.get(tc.id);
+            return r && !r.is_error
+              ? deriveSources(tc.name, parseToolResult(r.content))
+              : [];
+          })
+        )
+      : [];
     return (
       <div className="space-y-2">
         {message.content && hasToolCalls && (
@@ -754,6 +770,7 @@ function PersistedMessageRow({
                       <ToolOutput
                         output={parsedOutput}
                         errorText={result.is_error ? result.content : null}
+                        toolName={tc.name}
                       />
                     )}
                   </ToolContent>
@@ -762,10 +779,16 @@ function PersistedMessageRow({
             })}
           </div>
         )}
+        {sources.length > 0 && <MessageSources sources={sources} />}
         {message.content && !hasToolCalls && (
           <Message from="assistant">
             <MessageContent>
               <MessageResponse>{message.content}</MessageResponse>
+              {/* C3: copy the answer. Fades in on hover / keyboard focus so a
+                  settled answer reads clean. */}
+              <div className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                <CopyButton text={message.content} label="Copy answer" />
+              </div>
             </MessageContent>
           </Message>
         )}
@@ -854,6 +877,7 @@ function LiveTurnRows({
                     <ToolOutput
                       output={tc.result}
                       errorText={tc.ok === false ? tc.error ?? "error" : null}
+                      toolName={tc.name}
                     />
                   )}
                 </ToolContent>
@@ -885,4 +909,18 @@ function parseToolResult(content: string): unknown {
   } catch {
     return content;
   }
+}
+
+/** Collapse duplicate sources (same href, or same kind+title) across the
+ * several read tools one turn may have used. */
+function dedupeSources(sources: SourceDescriptor[]): SourceDescriptor[] {
+  const seen = new Set<string>();
+  const out: SourceDescriptor[] = [];
+  for (const s of sources) {
+    const key = `${s.kind}:${s.href ?? s.title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
 }
