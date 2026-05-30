@@ -44,9 +44,14 @@ is built on sand. Foundation first, then experience.
 ## Execution protocol (the loop)
 
 This doc is the single source of truth for the agent buildout. Workflow: Sidd pastes the
-same prompt each time, a fresh agent session does exactly one item and opens one PR, Sidd
-reviews and merges, repeat until the Progress ledger is all merged. The agent holds no
+same prompt each time, a fresh agent session does exactly one **batch** and opens one PR,
+Sidd reviews and merges, repeat until the Progress ledger is all merged. The agent holds no
 memory between runs; it reconstructs all state from this ledger plus the open/merged PRs.
+
+The ledger was collapsed from one-PR-per-item into ~6 thematic batches (Sidd's call) so
+review is a handful of PRs, not ~50. A **batch** is one PR that lands every brief it
+`covers` together; the genuinely XL items (subagents, scheduled runs, the artifact
+workspace) stay as their own PRs because they cannot be one clean diff.
 
 ### The repeatable continuation prompt (paste verbatim each run)
 
@@ -59,8 +64,8 @@ ledger is fully merged.
 > in `AGENT_IMPROVEMENT_FINDINGS.md`. You have no memory of previous runs. Reconstruct all
 > state from that doc's Progress ledger (on `main`) plus the open and merged PRs
 > (`gh pr list`, `gh pr view`). Then follow the Execution protocol in that doc: sync the
-> ledger against open/merged PRs, pick the single next eligible item, implement only that
-> item per its brief on a fresh `claude/agent-<id>` branch, run `pnpm verify` (and
+> ledger against open/merged PRs, pick the single next eligible batch, implement every brief
+> it covers on a fresh `claude/agent-<id>` branch, run `pnpm verify` (and
 > `pnpm test:visual:update` for UI, committing the baselines), open the PR in our
 > convention, update the ledger row to IN REVIEW with the PR number, and stop. If nothing is
 > eligible because a dependency is still in review, tell me exactly which PR to merge and
@@ -69,35 +74,37 @@ ledger is fully merged.
 
 ### What the agent does each run (precise)
 
-1. Read this doc (the Progress ledger + the target item's brief) and `AGENTS.md`.
+1. Read this doc (the Progress ledger + every brief the target batch covers) and `AGENTS.md`.
 2. **Sync.** For every ledger row marked `IN REVIEW (#N)`, run
    `gh pr view N --json state,mergedAt`; if merged, set it `MERGED (#N)` and tick the box.
    This reconciliation rides inside the PR you are about to open.
-3. **Eligibility.** An item is ELIGIBLE iff: status is `TODO`, it is not already in an open
-   PR, and every item in its `deps` is `MERGED`.
-4. **If no eligible item:** if items remain but are blocked on `IN REVIEW` deps, report
+3. **Eligibility.** A batch is ELIGIBLE iff: status is `TODO`, it is not already in an open
+   PR, and every batch in its `deps` is `MERGED`. (deps internal to a batch are satisfied by
+   landing them in the same PR.)
+4. **If no eligible batch:** if batches remain but are blocked on `IN REVIEW` deps, report
    exactly which open PR(s) to merge and STOP. If everything is `MERGED`, report "buildout
    complete" and STOP.
-5. Pick the eligible item with the **lowest Order number**.
-6. Branch `claude/agent-<id>-<slug>` off the latest `main`.
-7. **Implement ONLY that item**, per its brief. Honor `AGENTS.md`: sanctioned tokens and
-   primitives, the motion/liveness invariant (#6) and `withMotion`, additive + idempotent
-   migrations, multi-tenancy owner-only RLS, the em-dash ban. If the item is too large for
-   one clean PR (B1, E3, G1, L5 especially), split it: add sub-rows (e.g. `B1a`, `B1b`) to
-   the ledger with their own deps and do the first sub-row this run.
+5. Pick the eligible batch with the **lowest Order number**.
+6. Branch `claude/agent-<id>-<slug>` off the latest `main` (`<id>` is the batch id, e.g. `p1`).
+7. **Implement that batch** (every brief it covers), per their briefs. Honor `AGENTS.md`:
+   sanctioned tokens and primitives, the motion/liveness invariant (#6) and `withMotion`,
+   additive + idempotent migrations, multi-tenancy owner-only RLS, the em-dash ban. If the
+   batch is too large for one clean PR (P5 and the XL items especially), split it: add
+   sub-rows (e.g. `P5.a`, `P5.b`) to the ledger with their own `covers` slices and deps, do
+   the first sub-row this run; the batch is `MERGED` only when every sub-row is.
 8. **Verify.** Run `pnpm verify`. For any UI change run `pnpm test:visual:update` and commit
    the new PNGs. Add or extend tests where the acceptance criteria are testable (hook tests,
    the A7 pricing assertion, etc.).
 9. Update the ledger row to `IN REVIEW` and fill the PR number after opening.
-10. **Open the PR.** Title `Agent <id>: <short title>`. Body: link the brief section, copy
-    its acceptance criteria as a checklist, state how it was verified, note any migration.
+10. **Open the PR.** Title `Agent <id>: <short title>`. Body: link the briefs covered, copy
+    their acceptance criteria as a checklist, state how it was verified, note any migration.
     End the body with the Claude Code trailer. (This standing loop is Sidd's explicit,
     ongoing ask to push and PR; do not extend it to merging.)
-11. STOP. Summarize: item done, PR link, what is next and what it is blocked on.
+11. STOP. Summarize: batch done, PR link, what is next and what it is blocked on.
 
 ### Rules
 
-- One item, one PR, per run. Never batch.
+- One batch, one PR, per run.
 - **Never merge; never push to `main`.** Sidd reviews and merges.
 - Dependencies are satisfied only by `MERGED`, not `IN REVIEW`, so code always builds on
   landed work. (Parallelizing via stacked branches is a deliberate change to this protocol;
@@ -113,98 +120,72 @@ ledger is fully merged.
 
 ## Progress ledger
 
-Ordered for execution (lowest Order number first). `deps` are the hard predecessors that
-must be `MERGED` before the item is eligible. `D1` is folded into `A3` (the Stop button is
-part of cancellation), so it has no own row. `B2` is optional, kept low priority.
+Collapsed into batches (lowest Order number first). Each batch is one PR that lands every
+brief in its `covers` set; `deps` are the predecessor **batches** that must be `MERGED`
+first (deps internal to a batch land in the same PR). The per-item briefs below (Epics A-L)
+are unchanged, they are the implementation detail for each batch. `D1` is folded into `A3`
+(the Stop button is part of cancellation). `B2` is optional, folded into P3.
 
-### Bootstrap (landed outside the numbered loop)
+The collapse keeps the bulk of the work to 6 thematic batches (P1-P6) and keeps the three
+genuinely XL items as their own PRs (X1-X3), so it lands in ~9 PRs rather than ~50, while
+not jamming multi-week work into one un-reviewable diff.
 
-- [x] **B0a** Tracker doc + motion/liveness doctrine on `main` · MERGED (#142)
+### Landed
+
+- [x] **B0a** Tracker doc + motion/liveness doctrine · MERGED (#142)
 - [x] **B0b** `audit:motion` script + wired into `pnpm verify` and CI · MERGED (#143)
+- [x] **A1** Per-thread turn lock + ordered replay · MERGED (#144)
+- [x] **A2** Route loop through `trackedStream` · MERGED (#145)
+- [x] **A7** Model/pricing drift guard · MERGED (#146)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
-`thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The PR
-that makes each one alive MUST remove its carve-out: thread-view in I2/I3/K1/K4,
-conversation in K2, suggestion in I6. Adding a new interactive file with no motion is
+`thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The batch
+that makes each one alive MUST remove its carve-out: thread-view + conversation land in P5
+(I2/I3/K1/K2/K4), suggestion in P5 (I6). Adding a new interactive file with no motion is
 caught immediately.
 
-### Sprint 1: foundation + flagged fixes
+### Batches (the 6-PR collapse)
 
-- [x] **1 · A1** Per-thread turn lock + ordered replay · deps: none · MERGED (#144) · PR: #144
-- [x] **2 · A2** Route loop through `trackedStream` · deps: none · MERGED (#145) · PR: #145
-- [ ] **3 · A7** Model/pricing drift guard · deps: none · IN REVIEW (#146) · PR: #146
-- [ ] **4 · A3** Cancellation + Stop button · deps: A1 · TODO · PR: -
-- [ ] **5 · A8** Preserve partial text on error/abort · deps: A1, A3 · TODO · PR: -
-- [ ] **6 · H1** Sprint Focus-card chat height fix · deps: none · TODO · PR: -
-- [ ] **7 · C5** Markdown body 16px to 14px · deps: none · TODO · PR: -
-- [ ] **8 · I4** Metadata type scale (reasoning/tool labels) · deps: none · TODO · PR: -
+- [ ] **1 · P1 · Foundation hardening** · covers A3, A4, A5, A6, A8, A9 · deps: none (A1/A2/A7 merged) · TODO · PR: -
+  > Rest of Epic A: cancellation + Stop button (A3), preserve partial text on abort (A8),
+  > retry/backoff/reconnect (A4), approval-poll efficiency + abort (A5), per-turn/per-thread
+  > token budget (A6), adaptive `max_tokens` (A9). Internal order: A3 → A8 → A4; A3 → A5;
+  > A6 → A9.
+- [ ] **2 · P2 · Output trust + conversation control** · covers C1, C2, C3, C4, C5, D2, D3, D4 · deps: P1 · TODO · PR: -
+  > Citations (C1), readable tool-result output (C2), copy buttons (C3), code highlighting
+  > (C4), markdown 16→14 (C5); regenerate last turn (D2), edit-and-resend (D3), export +
+  > cross-thread search (D4). D2 needs A8 (P1); internal C1→C2, C4→C3, D2→D3.
+- [ ] **3 · P3 · Input modalities** · covers B1, B2 · deps: none (A2 merged) · TODO · PR: -
+  > Image paste + file upload (B1, may split into B1a/B1b sub-rows), @-mentions in composer
+  > (B2, optional). B1 is the substantive piece; B2 only if it falls out cheaply.
+- [ ] **4 · P4 · Approvals + safety** · covers E1, E2, E3, E4, E5 · deps: none · TODO · PR: -
+  > Per-tool approval policy (E1), approval card weight + body + nested args (E3), inline
+  > diff/preview (E2), post-send recall/undo for ring-3 (E4), ring classification review
+  > (E5). Internal E3→E2; E1+E3→E4; E1→E5.
+- [ ] **5 · P5 · Polish, feel + a11y** · covers H1, I1-I9, J1, J3, J4, J5, K1-K5 · deps: P1, P2 · TODO · PR: -
+  > The big polish batch: sprint chat height (H1); all of Epic I motion/type/composer/
+  > translucency/reasoning/tool-card (I1-I9); usage view (J1), replay (J3), a11y (J4),
+  > skeletons (J5); streaming cadence, zero-jank scroll, motion perf budget, instant
+  > feedback, feel-parity gate (K1-K5). Largest batch, expect to split into sub-rows
+  > (e.g. P5.a motion/entry, P5.b reasoning/tool-card, P5.c cadence/scroll/feel-gate).
+  > Must drop the `audit:motion` carve-outs for thread-view + conversation + suggestion.
+- [ ] **6 · P6 · Higher ceiling** · covers F1, F2, G2, L1, L2, L3, L4 · deps: P1, P4, P5 · TODO · PR: -
+  > Memory (F1), playbooks (F2), MCP client behind a flag (G2); Experience Phase 1 aliveness:
+  > interactive/generative tool components (L1), slash + keyboard-first (L2), quick-action
+  > chips (L3), live narration + presence (L4). L1 needs I9 (P5) + E3 (P4); L4 needs I8/K1
+  > (P5). May split aliveness (L1-L4) into its own sub-row if it gets heavy.
 
-### Sprint 2: resilience + control
+### XL items (kept separate, one PR each)
 
-- [ ] **9 · A4** Retry / backoff / reconnect · deps: A8 · TODO · PR: -
-- [ ] **10 · A5** Approval poll efficiency + abort · deps: A3 · TODO · PR: -
-- [ ] **11 · A6** Per-turn/per-thread token budget · deps: A2 · TODO · PR: -
-- [ ] **12 · A9** Adaptive `max_tokens` for drafting · deps: A6 · TODO · PR: -
-- [ ] **13 · D2** Regenerate last turn · deps: A1, A8 · TODO · PR: -
-- [ ] **14 · D3** Edit-and-resend prior user turn · deps: D2 · TODO · PR: -
-
-### Sprint 3: input + trust
-
-- [ ] **15 · C1** Wire Sources citation primitive · deps: none · TODO · PR: -
-- [ ] **16 · C2** Readable tool-result output · deps: C1 · TODO · PR: -
-- [ ] **17 · C4** Code highlighting or drop dead deps · deps: none · TODO · PR: -
-- [ ] **18 · C3** Copy buttons · deps: C4 · TODO · PR: -
-- [ ] **19 · B1** Image paste + file upload (split likely) · deps: A2 · TODO · PR: -
-
-### Sprint 4: approvals + polish + feel
-
-- [ ] **20 · E1** Per-tool approval policy · deps: none · TODO · PR: -
-- [ ] **21 · E3** Approval card weight + body + nested args · deps: none · TODO · PR: -
-- [ ] **22 · E2** Inline diff/preview on approval · deps: E3 · TODO · PR: -
-- [ ] **23 · E4** Post-send recall/undo for ring-3 · deps: E1, E3 · TODO · PR: -
-- [ ] **24 · E5** Ring classification review · deps: E1 · TODO · PR: -
-- [ ] **25 · I1** Tool-card motion (expand/hover/chevron) · deps: none · TODO · PR: -
-- [ ] **26 · I2** Message entry motion · deps: none · TODO · PR: -
-- [ ] **27 · I3** Streaming caret + skeletons + reasoning entry · deps: none · TODO · PR: -
-- [ ] **28 · I5** Composer styling (text-sm + glow-focus) · deps: none · TODO · PR: -
-- [ ] **29 · I6** Real suggestion chips in Spotlight · deps: none · TODO · PR: -
-- [ ] **30 · I7** Translucency consistency · deps: none · TODO · PR: -
-- [ ] **31 · I8** Reasoning block redesign · deps: I3, I4, C5 · TODO · PR: -
-- [ ] **32 · I9** Tool-call card identity redesign · deps: C1, C2, I1, I7 · TODO · PR: -
-- [ ] **33 · K1** Streaming cadence smoothing · deps: A3, I3 · TODO · PR: -
-- [ ] **34 · K2** Zero-jank auto-scroll + layout stability · deps: I1, I9, K1 · TODO · PR: -
-- [ ] **35 · K3** Motion performance budget (corrects I1/I8/I9) · deps: I1 · TODO · PR: -
-- [ ] **36 · K4** Instant / optimistic feedback · deps: A1, A4 · TODO · PR: -
-- [ ] **37 · D4** Export thread + cross-thread search · deps: none · TODO · PR: -
-- [ ] **38 · J4** A11y: streaming announce + error roles · deps: none · TODO · PR: -
-- [ ] **39 · J5** Skeletons over spinners · deps: I3 · TODO · PR: -
-- [ ] **40 · J1** Usage view sees agent cost · deps: A2 · TODO · PR: -
-- [ ] **41 · K5** Feel-parity acceptance gate · deps: I1, I8, I9, K1, K2, K3, K4, A3 · TODO · PR: -
-
-### Sprint 5+: higher ceiling (gated behind foundation)
-
-- [ ] **42 · F1** Agent-proposed MASHI.md memory · deps: none · TODO · PR: -
-- [ ] **43 · F2** Skills/playbooks in-app · deps: A6 · TODO · PR: -
-- [ ] **44 · G1** Scheduled / cron agent runs · deps: A2, A6, A4 · TODO · PR: -
-- [ ] **45 · F3** Subagent dispatch · deps: A1, A2, A3, A6 · TODO · PR: -
-- [ ] **46 · G2** MCP client (behind a flag) · deps: A6, E1 · TODO · PR: -
-- [ ] **47 · J2** Cross-thread tool-call timeline · deps: G1 · TODO · PR: -
-- [ ] **48 · J3** Replay / debug a turn · deps: A1, D2 · TODO · PR: -
-- [ ] **49 · B2** @-mentions in composer (optional) · deps: none · TODO · PR: -
-
-### Experience Phase 1: aliveness (Epic L)
-
-- [ ] **50 · L1** Interactive / generative tool components · deps: I9, E3 · TODO · PR: -
-- [ ] **51 · L2** Slash commands + keyboard-first · deps: L1 · TODO · PR: -
-- [ ] **52 · L3** Contextual quick-action chips · deps: L1 · TODO · PR: -
-- [ ] **53 · L4** Live narration + presence · deps: I8, K1 · TODO · PR: -
-
-### Experience Phase 2: artifact workspace (Epic L)
-
-- [ ] **54 · L5** Native artifact runtime (split: contract, persistence, render, dispatch) · deps: A1, B1, E3 · TODO · PR: -
-- [ ] **55 · L6** Split-canvas workspace layout · deps: L5 · TODO · PR: -
-- [ ] **56 · L7** Approval-as-artifact · deps: L5, E2 · TODO · PR: -
-- [ ] **57 · L8** Proactivity / presence across time · deps: G1, L5 · TODO · PR: -
+- [ ] **7 · X1 · Subagent dispatch** · covers F3 · deps: P1 · TODO · PR: -
+- [ ] **8 · X2 · Scheduled / cron agent runs + timeline** · covers G1, J2 · deps: P1 · TODO · PR: -
+  > G1 (cron runs, gated on A2/A6/A4 all in P1) is the bulk; J2 (cross-thread tool-call
+  > timeline) depends on G1 and rides along.
+- [ ] **9 · X3 · Artifact workspace** · covers L5, L6, L7, L8 · deps: P3, P4, X2 · TODO · PR: -
+  > The big bet, Experience Phase 2. Native artifact runtime (L5, itself split into
+  > contract → persistence → render → dispatch sub-rows), split-canvas layout (L6),
+  > approval-as-artifact (L7, needs E2 in P4), proactivity across time (L8, needs G1 in X2).
+  > This batch is multi-sprint and WILL ship as several stacked sub-PRs, not one.
 
 ## How to read a brief
 
