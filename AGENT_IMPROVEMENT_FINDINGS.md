@@ -220,7 +220,7 @@ motion. Adding a new interactive file with no motion is caught immediately.
     > bubble (I7); a11y status/alert roles (J4); skeletons over spinners on load (J5). Adds
     > `.mashi-enter` / `.mashi-caret` CSS utilities. Drops the thread-view + suggestion
     > `audit:motion` carve-outs.
-  - [ ] **5 · P5.b · Component identity redesign** · covers I8, I9, J1, J3 · deps: P5.a · IN REVIEW (#PENDING) · PR: -
+  - [ ] **5 · P5.b · Component identity redesign** · covers I8, I9, J1, J3 · deps: P5.a · IN REVIEW (#157) · PR: #157
     > The redesigns, not just motion: reasoning block identity (I8: glyph, accent rail,
     > auto-collapse to metadata), tool-call card identity (I9: per-tool icon + human label +
     > collapsed-state outcome summary + status state machine + sequence rail). Plus the
