@@ -2,7 +2,7 @@
   "dxt_version": "0.1",
   "name": "mashi",
   "display_name": "Mashi",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Read your unified work data — board, meetings, messages, Linear, calendar — across every connected source.",
   "long_description": "Mashi is a personal chief-of-staff system that pulls Gmail, Slack, Linear, Fireflies, and Google Calendar into one place. This extension exposes that unified surface as MCP tools so Claude can answer 'what do we know about X' with one tool call instead of hitting five distributed MCPs and trying to reconcile the results. Tools are read-only and scoped to your own data via a personal API token.",
   "author": {
@@ -62,7 +62,9 @@
     { "name": "get_linear_issue", "description": "Linear issue by id, external_id, or URL." },
     { "name": "get_calendar_event", "description": "Calendar event by id or external_id." },
     { "name": "who_is", "description": "Cross-source lookup for a person by name or email — gathers meetings, messages, Linear assignments, S2D mentions." },
-    { "name": "context_for_item", "description": "Full source-side context for an S2D item — every linked Gmail thread, Slack convo, Linear issue, Fireflies meeting." }
+    { "name": "context_for_item", "description": "Full source-side context for an S2D item — every linked Gmail thread, Slack convo, Linear issue, Fireflies meeting." },
+    { "name": "get_style", "description": "Cached communication-style profile for drafting in the user's voice." },
+    { "name": "run_sync", "description": "Trigger a fresh sync for one or more of the user's connections." }
   ],
   "compatibility": {
     "claude_desktop": ">=0.10.0",

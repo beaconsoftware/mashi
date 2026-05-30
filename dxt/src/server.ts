@@ -229,6 +229,26 @@ const TOOLS: Array<{ name: string; description: string; inputSchema: object }> =
       additionalProperties: false,
     },
   },
+  {
+    name: "get_style",
+    description: "The user's cached communication-style profile (extracted via /settings/style in the Mashi web app). Returns summary, voice traits, recurring phrases, greeting / sign-off, and few-shot examples for drafting in their voice. Takes no args — the cached profile is the source of truth; if voice has drifted the user re-extracts from settings.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "run_sync",
+    description: "Trigger a fresh sync for one or more of the user's connections (Gmail, Linear, Slack, Fireflies, Google Calendar). Always scoped to the calling user. If neither provider nor connection_id is given, syncs every connection. Useful for re-running after a fix without going through the dashboard UI.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        provider: {
+          type: "string",
+          enum: ["linear", "gmail", "gcal", "slack", "fireflies"],
+        },
+        connection_id: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 // ── HTTP client for the Mashi backend ───────────────────────────────
