@@ -130,8 +130,8 @@ caught immediately.
 
 ### Sprint 1: foundation + flagged fixes
 
-- [ ] **1 · A1** Per-thread turn lock + ordered replay · deps: none · IN REVIEW (#144) · PR: #144
-- [ ] **2 · A2** Route loop through `trackedStream` · deps: none · TODO · PR: -
+- [x] **1 · A1** Per-thread turn lock + ordered replay · deps: none · MERGED (#144) · PR: #144
+- [ ] **2 · A2** Route loop through `trackedStream` · deps: none · IN REVIEW (#145) · PR: #145
 - [ ] **3 · A7** Model/pricing drift guard · deps: none · TODO · PR: -
 - [ ] **4 · A3** Cancellation + Stop button · deps: A1 · TODO · PR: -
 - [ ] **5 · A8** Preserve partial text on error/abort · deps: A1, A3 · TODO · PR: -
