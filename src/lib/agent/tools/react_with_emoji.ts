@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@/lib/agent/types";
 import { getActiveAccessToken } from "@/lib/oauth/flow";
+import type { ReverseOp } from "@/lib/agent/undo";
 
 const args = z.object({
   channel: z.string().min(1),
@@ -22,7 +23,13 @@ const SLACK_API = "https://slack.com/api";
  */
 export const react_with_emoji: ToolDefinition<
   Args,
-  { ok: boolean; error?: string }
+  {
+    ok: boolean;
+    error?: string;
+    /** E4: peeled off before the model sees it; powers the post-action
+     * recall strip (reactions.remove within the undo window). */
+    _undo?: { op: ReverseOp; summary: string };
+  }
 > = {
   name: "react_with_emoji",
   description:
@@ -58,6 +65,17 @@ export const react_with_emoji: ToolDefinition<
     if (!j.ok) {
       return { ok: false, error: `Slack reaction failed: ${j.error ?? "unknown"}` };
     }
-    return { ok: true };
+    return {
+      ok: true,
+      _undo: {
+        op: {
+          kind: "recall_slack_reaction",
+          channel: input.channel,
+          ts: input.ts,
+          name,
+        },
+        summary: `Added :${name}: reaction.`,
+      },
+    };
   },
 };

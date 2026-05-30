@@ -75,11 +75,16 @@ export type AgentDelta =
        * by the in-chat undo strip. */
       token: string;
       summary: string;
-      /** Wall-clock expiry of the undo window (server-stamped). */
-      expiresAt: string;
+      /** Wall-clock expiry of the undo window (server-stamped). Absent for a
+       * non-recallable note (E4). */
+      expiresAt?: string;
       /** Which tool emitted this, so the UI can correlate to the
        * collapsed tool row in the timeline. */
       toolName: string;
+      /** E4: false for an irreversible ring-3 send — the strip renders a
+       * neutral "can't be recalled" note with no Undo button. Defaults to
+       * true (the ring-2 + recallable ring-3 path). */
+      recallable?: boolean;
     }
   | {
       kind: "approval-needed";
@@ -857,7 +862,11 @@ async function runAgentTurnInner(
           handlerResult != null &&
           typeof handlerResult === "object" &&
           !Array.isArray(handlerResult);
-        if (effectiveDef.ring === "write_mashi" && isObjectResult) {
+        if (
+          (effectiveDef.ring === "write_mashi" ||
+            effectiveDef.ring === "write_world") &&
+          isObjectResult
+        ) {
           const obj = handlerResult as Record<string, unknown> & {
             _undo?: { summary: string; op: ReverseOp };
           };
@@ -884,6 +893,7 @@ async function runAgentTurnInner(
               summary: d.summary,
               expiresAt: d.expiresAt,
               toolName: d.toolName,
+              recallable: d.recallable,
             }),
         });
 

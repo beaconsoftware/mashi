@@ -5,6 +5,8 @@ import {
 import { recordAction } from "@/lib/agent/undo";
 import { getTool } from "@/lib/agent/registry";
 import type { ApprovalContext } from "@/lib/agent/approval-meta";
+import { loadToolPolicies } from "@/lib/agent/policy-server";
+import { effectiveDecision, scopeForCall } from "@/lib/agent/policy";
 import type { PreToolUseHook } from "@/lib/agent/hooks/types";
 
 /**
@@ -40,6 +42,47 @@ export const ring3ApprovalHook: PreToolUseHook = {
         message: "ring-3 tools require a thread to seek approval",
       };
     }
+    // E1: consult the user's per-tool policy BEFORE doing any approval work.
+    // `never` blocks outright (no card); an eligible `always_allow` for this
+    // scope skips the card and lets the call through (still audited by the
+    // post-tool hook); `ask` falls through to the normal gate. A failed
+    // policy read defaults to `ask` — never silently widen access.
+    const policies = await loadToolPolicies(ctx.userId, ctx.supabase).catch(
+      () => []
+    );
+    const decision = effectiveDecision(
+      policies,
+      toolName,
+      scopeForCall(toolName, input)
+    );
+    if (decision === "never") {
+      const error = "Blocked by your approval policy (set to never).";
+      try {
+        await recordAction({
+          userId: ctx.userId,
+          threadId: ctx.threadId,
+          toolName,
+          ring: "write_world",
+          args: input,
+          result: { ok: false, error, blocked_by_policy: true },
+          ok: false,
+          supabase: ctx.supabase,
+        });
+      } catch {
+        // best-effort audit
+      }
+      return {
+        decision: "respond",
+        content: JSON.stringify({ ok: false, error, blocked_by_policy: true }),
+        isError: true,
+      };
+    }
+    if (decision === "always_allow") {
+      // Pre-authorized for this scope. No card; the post-tool audit hook
+      // records the action so there's still a trail of every bypassed write.
+      return { decision: "allow" };
+    }
+
     // E2: ask the tool for a before-snapshot (update tools implement this)
     // so the card can diff current vs proposed. Best-effort: a slow / failing
     // context read must not block the approval, so swallow and proceed.

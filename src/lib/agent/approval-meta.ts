@@ -167,6 +167,12 @@ const META: Record<string, ApprovalMeta> = {
  * `external` weight so a newly-added ring-3 tool still gets a sane,
  * non-trivialising card until it earns a dedicated row.
  */
+/** The ring-3 tools that carry a dedicated meta row — i.e. the set the
+ * per-tool approval policy UI (E1) offers a control for. */
+export function listApprovalToolNames(): string[] {
+  return Object.keys(META);
+}
+
 export function approvalMetaFor(toolName: string): ApprovalMeta {
   return (
     META[toolName] ?? {
@@ -403,5 +409,19 @@ export function isExpiredResult(result: unknown): boolean {
     !!result &&
     typeof result === "object" &&
     (result as Record<string, unknown>).expired === true
+  );
+}
+
+/**
+ * P4.b (E1): a call refused by the user's own `never` policy is not an error
+ * and not a cancellation, it's a deliberate block. The model still sees
+ * `is_error: true` so it knows the action did not run; the UI reads this
+ * marker to render a neutral outcome rather than an alarming red error.
+ */
+export function isBlockedResult(result: unknown): boolean {
+  return (
+    !!result &&
+    typeof result === "object" &&
+    (result as Record<string, unknown>).blocked_by_policy === true
   );
 }

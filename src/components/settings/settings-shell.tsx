@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plug, Eye, Mic, KeyRound, Activity } from "lucide-react";
+import { Plug, Eye, Mic, KeyRound, Activity, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TopBar } from "@/components/layout/top-bar";
 import { Surface } from "@/components/layout/primitives";
@@ -57,6 +57,12 @@ const SECTIONS: SectionConfig[] = [
     label: "Style",
     description: "Teach Mashi to write like you.",
     icon: Mic,
+  },
+  {
+    href: "/settings/policies",
+    label: "Approvals",
+    description: "Which agent actions can skip the approval card.",
+    icon: ShieldCheck,
   },
   {
     href: "/settings/api-tokens",

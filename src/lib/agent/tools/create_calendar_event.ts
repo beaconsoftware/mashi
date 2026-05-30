@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@/lib/agent/types";
 import { getActiveAccessToken } from "@/lib/oauth/flow";
+import type { ReverseOp } from "@/lib/agent/undo";
 
 const args = z.object({
   title: z.string().min(1).max(1024),
@@ -34,6 +35,9 @@ export const create_calendar_event: ToolDefinition<
     event_id?: string;
     html_link?: string;
     error?: string;
+    /** E4: peeled off before the model sees it; powers the post-create
+     * recall strip (delete the event within the undo window). */
+    _undo?: { op: ReverseOp; summary: string };
   }
 > = {
   name: "create_calendar_event",
@@ -94,6 +98,14 @@ export const create_calendar_event: ToolDefinition<
       ok: true,
       event_id: j.id,
       html_link: j.htmlLink,
+      ...(j.id
+        ? {
+            _undo: {
+              op: { kind: "delete_calendar_event", event_id: j.id },
+              summary: `Created "${input.title}" on your calendar.`,
+            },
+          }
+        : {}),
     };
   },
 };

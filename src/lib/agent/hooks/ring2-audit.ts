@@ -1,4 +1,5 @@
 import { recordAction, type ReverseOp } from "@/lib/agent/undo";
+import { approvalMetaFor } from "@/lib/agent/approval-meta";
 import type { PostToolUseHook } from "@/lib/agent/hooks/types";
 
 /**
@@ -23,9 +24,14 @@ export const ring2AuditHook: PostToolUseHook = {
     const { ctx, toolName, input, result, ok, ring } = opts;
     if (!ctx.threadId) return;
 
+    // E4: both ring-2 and recallable ring-3 tools ship an `_undo` payload.
     let undoPayload: ReverseOp | null = null;
     let undoSummary: string | null = null;
-    if (ring === "write_mashi" && ok && isObjectResult(result)) {
+    if (
+      (ring === "write_mashi" || ring === "write_world") &&
+      ok &&
+      isObjectResult(result)
+    ) {
       const raw = (result as { _undo?: { summary: string; op: ReverseOp } })
         ._undo;
       if (raw && raw.op && raw.summary) {
@@ -48,12 +54,28 @@ export const ring2AuditHook: PostToolUseHook = {
         supabase: ctx.supabase,
       });
       if (recorded.undoSummary && recorded.undoExpiresAt) {
+        // Recallable: ring-2 board edit OR a ring-3 action with a reverse op.
         opts.emitUndoable?.({
           token: recorded.id,
           summary: recorded.undoSummary,
           expiresAt: recorded.undoExpiresAt,
           toolName,
+          recallable: true,
         });
+      } else if (ring === "write_world" && ok) {
+        // E4 honesty: a ring-3 SEND with no reverse op (email, Linear
+        // comment) can't be recalled — say so explicitly instead of going
+        // silent. Lighter reversible actions (mark-read, archive) and
+        // updates skip the note.
+        const meta = approvalMetaFor(toolName);
+        if (meta.weight === "send") {
+          opts.emitUndoable?.({
+            token: recorded.id,
+            summary: `Sent. This ${meta.noun} can't be recalled.`,
+            toolName,
+            recallable: false,
+          });
+        }
       }
     } catch (err) {
       console.warn(
