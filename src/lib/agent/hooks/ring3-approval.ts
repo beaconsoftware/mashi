@@ -57,6 +57,9 @@ export const ring3ApprovalHook: PreToolUseHook = {
       threadId: ctx.threadId,
       callId,
       supabase: ctx.supabase,
+      // A5: stop polling the moment the turn's request is aborted (closed
+      // tab / Stop button) instead of burning the full 270s window.
+      signal: ctx.signal,
     });
     if (outcome.kind === "edit") {
       opts.emitApprovalResolved?.({ id: callId, outcome: "edit" });

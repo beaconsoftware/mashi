@@ -105,6 +105,8 @@ export async function POST(
           onDelta: enqueue,
           toolRings: ["read", "write_mashi", "write_world"],
           turnId,
+          // A3: forward the request abort signal (see the /messages route).
+          signal: req.signal,
         });
       } catch (err) {
         enqueue({

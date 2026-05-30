@@ -54,6 +54,10 @@ export interface AgentMessageRow {
   /** A1: monotonic per-insert sequence. Deterministic tiebreaker behind
    * created_at so replay is totally ordered. */
   seq: number;
+  /** P1: optional per-message annotations (A8 error/retryable, A3
+   * cancelled, A9 truncated, A6 budget_exhausted). NULL for healthy
+   * messages. */
+  metadata: Record<string, unknown> | null;
 }
 
 type Supa = SupabaseClient;
@@ -162,6 +166,10 @@ interface AppendMessageInput {
   toolCalls?: unknown | null;
   toolResults?: unknown | null;
   cursorContext?: unknown | null;
+  /** P1: optional per-message annotations (A8 error/retryable, A3
+   * cancelled, A9 truncated, A6 budget_exhausted). NULL for healthy
+   * messages. */
+  metadata?: Record<string, unknown> | null;
   supabase?: Supa;
 }
 
@@ -184,6 +192,7 @@ export async function appendMessage(
       tool_calls: opts.toolCalls ?? null,
       tool_results: opts.toolResults ?? null,
       cursor_context: opts.cursorContext ?? null,
+      metadata: opts.metadata ?? null,
     })
     .select("*")
     .single();

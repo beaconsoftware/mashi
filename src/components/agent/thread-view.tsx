@@ -61,6 +61,23 @@ interface AgentMessageRow {
     | Array<{ tool_use_id: string; content: string; is_error: boolean }>
     | null;
   created_at: string;
+  /** P1: optional annotations stamped on the exceptional loop paths
+   * (A8 error/retryable, A3 cancelled, A9 truncated, A6 budget). */
+  metadata?: {
+    error?: string;
+    retryable?: boolean;
+    cancelled?: boolean;
+    truncated?: boolean;
+    budget_exhausted?: boolean;
+  } | null;
+}
+
+/** A4/A6/A9 non-fatal, turn-level note rendered inline below the live turn. */
+interface TurnNotice {
+  id: string;
+  level: "info" | "warn";
+  message: string;
+  code?: string;
 }
 
 interface ThreadData {
@@ -165,6 +182,12 @@ export function ThreadView({
   const [liveToolCalls, setLiveToolCalls] = useState<InFlightToolCall[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A4/A6/A9: non-fatal turn notices (retry hiccup, truncation, budget).
+  const [notices, setNotices] = useState<TurnNotice[]>([]);
+  // A3: AbortController for the in-flight turn. The Stop button and unmount
+  // both abort it, which tears down the fetch and (via req.signal on the
+  // server) cancels the upstream model call + approval poll.
+  const abortRef = useRef<AbortController | null>(null);
   // Optimistic user message bubble. Rendered as soon as the user
   // submits and cleared once the post-stream refetch lands. Without
   // this, the user's typed text disappears from the composer and
@@ -267,6 +290,19 @@ export function ThreadView({
     return all;
   }, [pendingFollowUps, persistedFollowUps]);
 
+  // A3: abort the in-flight turn. The fetch read loop unwinds, the server
+  // sees req.signal abort and persists the partial answer, and we refetch
+  // to show it. No error is surfaced for a user-initiated stop.
+  function stop() {
+    abortRef.current?.abort();
+  }
+
+  // A3: abort any in-flight turn when the thread view unmounts (sheet
+  // closed, route change) so a backgrounded turn doesn't keep spending.
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
   async function streamAgentTurn(url: string, body: unknown) {
     if (streaming) return;
     setStreaming(true);
@@ -274,7 +310,11 @@ export function ThreadView({
     setLiveToolCalls([]);
     setPendingApprovals([]);
     setPendingFollowUps([]);
+    setNotices([]);
     setError(null);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const res = await fetch(url, {
@@ -282,6 +322,7 @@ export function ThreadView({
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       if (res.status === 409) {
         // A1: another turn already holds this thread's lock (a second
@@ -331,15 +372,26 @@ export function ThreadView({
           applyDelta(delta);
         }
       }
-      // Wait for the refetch to land BEFORE we clear live state. If we
-      // clear first, the just-streamed assistant turn disappears for
-      // the duration of the refetch and pops back in from persisted
-      // data — a very visible flicker. Awaiting refetchQueries keeps
-      // the live render up while the durable rows arrive.
-      await queryClient.refetchQueries({ queryKey });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "stream failed");
+      // A3: a user-initiated Stop aborts the fetch; that's not an error.
+      // The server persisted whatever streamed; the finally refetch shows
+      // it. Any other failure surfaces normally.
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? err.message : "stream failed");
+      }
     } finally {
+      // Wait for the refetch to land BEFORE we clear live state. If we
+      // clear first, the just-streamed assistant turn (or the partial
+      // preserved on a Stop) disappears for the duration of the refetch
+      // and pops back in from persisted data — a very visible flicker.
+      // Awaiting refetchQueries keeps the live render up while the durable
+      // rows arrive.
+      try {
+        await queryClient.refetchQueries({ queryKey });
+      } catch {
+        // Non-fatal: the next natural refetch will reconcile.
+      }
+      abortRef.current = null;
       setStreaming(false);
       setLiveText("");
       setLiveToolCalls([]);
@@ -472,6 +524,25 @@ export function ThreadView({
       ]);
       queryClient.invalidateQueries({ queryKey: ["s2d_items"] });
       queryClient.invalidateQueries({ queryKey: ["s2d-items"] });
+    } else if (d.kind === "notice") {
+      // A4/A6/A9 non-fatal note (retry hiccup, truncation, budget). Render
+      // inline without killing the stream. Dedupe consecutive identical
+      // notices (repeated retry hiccups) so they don't pile up.
+      setNotices((prev) =>
+        prev.length > 0 &&
+        prev[prev.length - 1].message === d.message &&
+        prev[prev.length - 1].code === d.code
+          ? prev
+          : [
+              ...prev,
+              {
+                id: `${d.code ?? "note"}-${prev.length}-${Date.now()}`,
+                level: d.level,
+                message: d.message,
+                code: d.code,
+              },
+            ]
+      );
     } else if (d.kind === "error") {
       setError(d.message);
     }
@@ -583,6 +654,14 @@ export function ThreadView({
               ))}
             </div>
           )}
+          {notices.map((n) => (
+            <div
+              key={n.id}
+              className="rounded-md border border-border/40 bg-card/55 px-2.5 py-1.5 text-[11px] text-muted-foreground"
+            >
+              {n.message}
+            </div>
+          ))}
           {error && (
             <div className="rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive">
               {error}
@@ -608,7 +687,12 @@ export function ThreadView({
           Plan mode. Mashi will not write or send. Switch to Act to execute.
         </div>
       )}
-      <AgentComposer disabled={streaming} onSend={send} mode={activeMode} />
+      <AgentComposer
+        disabled={streaming}
+        onSend={send}
+        onStop={stop}
+        mode={activeMode}
+      />
     </div>
   );
 }
@@ -685,11 +769,49 @@ function PersistedMessageRow({
             </MessageContent>
           </Message>
         )}
+        <MessageMetadataNote metadata={message.metadata} />
       </div>
     );
   }
   // role === "tool" → handled by sibling assistant via resultByCallId
   return null;
+}
+
+/**
+ * Renders the P1 per-message annotation (A8 error, A3 cancelled, A9
+ * truncated, A6 budget) below a persisted assistant turn. Null for a
+ * healthy message. The partial text the user saw is already rendered
+ * above; this is just the non-destructive footnote about why the turn
+ * ended the way it did.
+ */
+function MessageMetadataNote({
+  metadata,
+}: {
+  metadata: AgentMessageRow["metadata"];
+}) {
+  if (!metadata) return null;
+  if (metadata.error) {
+    return (
+      <div className="rounded border border-destructive/40 bg-destructive/15 px-2.5 py-1.5 text-[11px] text-destructive">
+        {metadata.retryable
+          ? "Connection dropped before Mashi finished. Send again to retry."
+          : `Mashi hit an error: ${metadata.error}`}
+      </div>
+    );
+  }
+  // budget_exhausted messages carry the full explanation in their content
+  // already, so they don't get a redundant footnote here.
+  const note = metadata.cancelled
+    ? "Stopped."
+    : metadata.truncated
+      ? "Cut off at the length limit. Ask Mashi to continue."
+      : null;
+  if (!note) return null;
+  return (
+    <div className="rounded-md border border-border/40 bg-card/55 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+      {note}
+    </div>
+  );
 }
 
 /**

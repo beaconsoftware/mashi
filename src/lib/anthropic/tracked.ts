@@ -48,6 +48,20 @@ function computeCostUsd(model: string, usage: Anthropic.Messages.Usage): number 
   return (i * p.input + o * p.output + cr * p.cache_read + cw * p.cache_write) / 1_000_000;
 }
 
+/**
+ * Public USD cost for a usage block, using the same pricing table the
+ * usage log stamps. Exposed for the A6 per-turn budget accumulator, which
+ * needs the cost of each model call without writing a log row of its own.
+ * Returns 0 for an unpriced model (the A7 drift guard fails CI before such
+ * a model can ship).
+ */
+export function costForUsage(
+  model: string,
+  usage: Anthropic.Messages.Usage | null | undefined
+): number {
+  return usage ? computeCostUsd(model, usage) : 0;
+}
+
 async function logUsage(opts: {
   purpose: string;
   model: string;
@@ -127,14 +141,19 @@ export async function trackedCreate(
  * because final usage is in the last event).
  */
 type StreamParams = Parameters<typeof anthropic.messages.stream>[0];
+type StreamOptions = Parameters<typeof anthropic.messages.stream>[1];
 
 export function trackedStream(
   params: StreamParams,
   purpose: string,
-  userId?: string | null
+  userId?: string | null,
+  /** Per-request options forwarded to the SDK. A3 threads an
+   * `AbortSignal` here so a client disconnect / Stop button aborts the
+   * upstream Anthropic request, not just the server-side reader. */
+  options?: StreamOptions
 ): ReturnType<typeof anthropic.messages.stream> {
   const t0 = Date.now();
-  const stream = anthropic.messages.stream(params);
+  const stream = anthropic.messages.stream(params, options);
 
   // Fire-and-forget logging once the final message resolves
   stream
