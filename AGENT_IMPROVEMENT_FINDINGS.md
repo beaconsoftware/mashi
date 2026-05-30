@@ -267,7 +267,7 @@ motion is caught immediately.
     > for one clean PR, and the L-internal deps order it (L2/L3 both need L1; L4 is independent),
     > so it's split: P6.c.a lands the L1 foundation + L4 narration; P6.c.b lands L2 + L3 (both on
     > L1). `MERGED` only when both sub-rows are.
-    - [ ] **6 · P6.c.a · Interactive tool results + live narration (L1, L4)** · covers L1, L4 · deps: P6.a · IN REVIEW (#PENDING) · PR: #PENDING
+    - [ ] **6 · P6.c.a · Interactive tool results + live narration (L1, L4)** · covers L1, L4 · deps: P6.a · IN REVIEW (#161) · PR: #161
       > L1: a result-type → component registry renders board-item results (search_board,
       > list_today) as a live list with inline Open / Snooze / Done, and a set_plan result as a
       > live checklist; unmapped results fall back to the I9 readable card. Inline actions dispatch
