@@ -56,15 +56,17 @@ de-hardcoding, and the standing guardrail that makes regression loud.
 
 ## Progress ledger
 
-Collapsed into batches (lowest Order first). Each batch is one PR landing every
+Collapsed into **3 PRs** (lowest Order first). Each batch is one PR landing every
 brief in its `covers` set; `deps` are predecessor batches that must be `MERGED`
-first. The per-item briefs (Epics A-F) are the implementation detail.
+first. The per-item briefs (Epics A-F) are the implementation detail. This is
+S-effort work overall (~1-2 days), so the split is by review mindset, not by
+epic: all isolation/security fixes together, de-hardcoding separate, guardrail
+last.
 
-Most batches are independent and could be parallelized via stacked branches, but
-the default is serial-on-merged. **P6 (the guardrail) must land last** — wiring
-the `audit:tenancy` check before the violations are fixed would make CI red
-immediately. (Alternative: land P6 first with every outstanding file carved out,
-then remove carve-outs as P1-P5 land. Default plan keeps it last.)
+Two boundaries are load-bearing: PR-1 contains the `ai_usage_log` **migration**
+(C1) which auto-deploys to prod on merge — call it out in the PR body and watch
+the deploy. **PR-3 (the guardrail) must land last** — wiring `audit:tenancy`
+before the violations are fixed would make CI red immediately.
 
 ### Landed
 
@@ -72,44 +74,36 @@ then remove carve-outs as P1-P5 land. Default plan keeps it last.)
 
 ### Batches
 
-- [ ] **1 · P1 · Cross-tenant service-role scoping** · covers T1, T2, T3, T4, T5, T6, T7 · deps: none · TODO · PR: -
-  > The real breaches, all in service-role paths where RLS is bypassed. Add
-  > `.eq("user_id", …)` to the Fireflies close-detection reads (T1/T2) and the
-  > `action_items_extracted` write (T3); scope the Fireflies/Gmail gate reads
-  > (T4/T5) and the reconcile `linear_issues` lookup (T6); give
-  > `getActiveAccessToken` a `userId` param so it self-scopes (T7). Mostly
-  > one-line diffs; `conn.user_id`/`userId` is already in scope at each site.
-  > Highest priority, lowest risk. Internal order: T7 first (touches a shared
-  > helper signature), then T1-T6.
-- [ ] **2 · P2 · Route auth-gate hardening** · covers T8, T9, T12, T13, T14 · deps: none · TODO · PR: -
-  > Enforce auth before any DB/LLM call: `s2d/[id]/suggest` (T8) and
-  > `style/extract` (T9) must 401 and pass `user.id` to the model call; add
-  > explicit `getUser()` + ownership checks (not silent RLS reliance) to
-  > `s2d/[id]/context` (T12), `connections/[id]` DELETE/PATCH (T13), and
-  > `sync/[provider]/[connectionId]` (T14), returning 401/404 correctly.
-- [ ] **3 · P3 · RLS + cost-attribution integrity** · covers T10, T17 · deps: none · TODO · PR: -
-  > Thread `userId` into every `trackedCreate` (the 4 system jobs + suggest +
-  > style/extract) so no more `user_id NULL` usage rows (T17); then a migration
-  > tightening `ai_usage_log` INSERT to `WITH CHECK (auth.uid() = user_id OR
-  > auth.uid() IS NULL)` (T10). SELECT is already owner-only (015). One migration.
-- [ ] **4 · P4 · Defense-in-depth** · covers T11, T15, T16, T18 · deps: none · TODO · PR: -
-  > Sanitizer parity on the 5 agent search-tool `.or()` filters (T11, strip
-  > `,()`); add `.eq("user_id", …)` to all `connected_accounts` status stamps
-  > (T15); verify item ownership in `getOrCreateThreadForItem` (T16);
-  > constant-time `CRON_SECRET` compare + a rate-limit shim on LLM/auth routes
-  > (T18). No cross-tenant break in any of these today; hardening only.
-- [ ] **5 · P5 · De-hardcode → env** · covers H1, H3, H4, H5, H6, H7 · deps: none · TODO · PR: -
-  > Fix the Linear "assigned to me" hardcoded email (H1, the one user-facing
-  > bug here); genericize Beacon example copy in the triage prompt + UI (H3/H6);
-  > move prod project ref / domain / download repo-owner / allowlist seed to env
-  > and update `.env.example` (H4/H5/H7).
-- [ ] **6 · P6 · Standing guardrail** · covers F1, F2 · deps: P1, P2, P3, P4, P5 · TODO · PR: -
-  > `scripts/audit-tenancy.sh` + `audit:tenancy` in `pnpm verify` and CI (F1):
-  > flags service-role files with a query lacking a nearby `user_id` filter
-  > (`// tenancy-audit-ok:` carve-out), email/domain/project-ref literals in
+- [ ] **1 · PR-1 · Tenant-isolation fixes** · covers T1-T18 (Epics A, B, C, D) · deps: none · TODO · PR: -
+  > All the security work in one focused, reviewable PR. **Epic A** — cross-tenant
+  > service-role scoping (the real breaches): `.eq("user_id", …)` on the Fireflies
+  > close-detection reads (T1/T2) + `action_items_extracted` write (T3), the
+  > Fireflies/Gmail gate reads (T4/T5), the reconcile `linear_issues` lookup (T6),
+  > and a `userId` param on `getActiveAccessToken` so it self-scopes (T7). **Epic
+  > B** — route auth gates: 401-before-LLM on `suggest` (T8) + `style/extract`
+  > (T9); explicit `getUser()` + ownership on the RLS-only routes (T12/T13/T14).
+  > **Epic C** — `trackedCreate` userId threading (T17) + `ai_usage_log` INSERT
+  > migration (T10). **Epic D** — `.or()` sanitizer parity (T11),
+  > `connected_accounts` status-stamp scoping (T15), thread itemId ownership
+  > (T16), constant-time `CRON_SECRET` + rate-limit shim (T18).
+  > **Internal order**: A5/T7 first (changes a shared helper signature, typecheck
+  > then forces every caller); C2/T17 before C1/T10 (so no NULL rows exist when
+  > the INSERT policy tightens). **Migration callout**: C1 adds a migration that
+  > auto-deploys on merge — flag it in the PR body, watch the deploy.
+  > If review of D/E drags, peel Epic A into its own PR so the breaches merge fast.
+- [ ] **2 · PR-2 · De-hardcode → env** · covers H1, H3, H4, H5, H6, H7 (Epic E) · deps: none · TODO · PR: -
+  > Different concern (config/product, not isolation), kept separate for a
+  > clean review. Fix the Linear "assigned to me" hardcoded email (H1, the one
+  > user-facing bug); genericize Beacon example copy in the triage prompt + UI
+  > (H3/H6); move prod project ref / domain / download repo-owner / allowlist seed
+  > to env + update `.env.example` (H4/H5/H7). Independent of PR-1.
+- [ ] **3 · PR-3 · Standing guardrail** · covers F1, F2 (Epic F) · deps: PR-1, PR-2 · TODO · PR: -
+  > Must land last. `scripts/audit-tenancy.sh` + `audit:tenancy` in `pnpm verify`
+  > and CI (F1): flags service-role files with a query lacking a nearby `user_id`
+  > filter (`// tenancy-audit-ok:` carve-out), email/domain/project-ref literals in
   > `src/`, and the first-user pattern outside migrations. Wire
-  > `supabase/tests/rls_assertions.sql` into CI against the migrated DB (F2).
-  > Lands last so it goes green on a clean tree.
+  > `supabase/tests/rls_assertions.sql` into CI against the migrated DB (F2). Goes
+  > green only on the clean tree PR-1 + PR-2 produce.
 
 ## How to read a brief
 
