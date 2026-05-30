@@ -117,6 +117,17 @@ Ordered for execution (lowest Order number first). `deps` are the hard predecess
 must be `MERGED` before the item is eligible. `D1` is folded into `A3` (the Stop button is
 part of cancellation), so it has no own row. `B2` is optional, kept low priority.
 
+### Bootstrap (landed outside the numbered loop)
+
+- [x] **B0a** Tracker doc + motion/liveness doctrine on `main` · MERGED (#142)
+- [ ] **B0b** `audit:motion` script + wired into `pnpm verify` and CI · IN REVIEW (#143)
+
+`audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
+`thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The PR
+that makes each one alive MUST remove its carve-out: thread-view in I2/I3/K1/K4,
+conversation in K2, suggestion in I6. Adding a new interactive file with no motion is
+caught immediately.
+
 ### Sprint 1: foundation + flagged fixes
 
 - [ ] **1 · A1** Per-thread turn lock + ordered replay · deps: none · TODO · PR: -

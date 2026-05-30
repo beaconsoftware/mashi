@@ -402,11 +402,15 @@ guaranteed to regress something:
    `DUR`/`EASE`; tool cards and expanders animate open, they never pop. A
    surface that ships with `transition: all 0s` everywhere has skipped the
    design system, and that is a bug to bounce in review. Enforcement:
-   `pnpm audit:motion` (to be wired, see `AGENT_IMPROVEMENT_FINDINGS.md`
-   Epic I) flags an interactive element with no `mashi-*` utility and no
-   `withMotion`-driven animation, with a `// motion-audit-ok: <reason>`
-   carve-out for the legitimately-static cases. Until that audit lands
-   this is reviewer-enforced. See "Polish patterns" for the how.
+   `pnpm audit:motion` (in `pnpm verify` and CI) flags two things: the banned
+   hand-rolled patterns (`hover:scale-*`, `group-hover:rotate-*`, see "Polish
+   patterns / What NOT to do") and interactive files (`onClick` / `role=button`)
+   that use none of the Mashi motion utilities. Carve-out with a
+   `// motion-audit-ok: <reason>` comment (same line, line above, or file-wide)
+   or `EXCLUDE_FILES` in the script. It is a COARSE grep, scoped to the agent
+   surface today and widening as other surfaces adopt the system, and it cannot
+   prove smoothness, the real bar is the K5 feel-parity review in
+   `AGENT_IMPROVEMENT_FINDINGS.md`. See "Polish patterns" for the how.
 
 ### Component decision tree
 
@@ -608,7 +612,7 @@ adopted the design system, not just that it renders:
 - Translucent surfaces sample the ambient via a sanctioned `/N` step or
   a primitive.
 - `pnpm verify` plus the audits (`audit:layers`, `audit:translucency`,
-  and `audit:motion` once wired) pass.
+  and `audit:motion`) pass.
 
 The agent surface (the ⌘K Mashi Spotlight, item threads, sprint chat)
 was the first surface to ship having skipped most of this, and it reads
