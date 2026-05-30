@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@/lib/agent/types";
 import { getActiveAccessToken } from "@/lib/oauth/flow";
+import type { ReverseOp } from "@/lib/agent/undo";
 
 const args = z.object({
   title: z.string().min(1).max(1024),
@@ -37,6 +38,9 @@ export const create_linear_issue: ToolDefinition<
     identifier?: string;
     url?: string;
     error?: string;
+    /** E4: peeled off before the model sees it; powers the post-create
+     * recall strip (archive the issue within the undo window). */
+    _undo?: { op: ReverseOp; summary: string };
   }
 > = {
   name: "create_linear_issue",
@@ -99,11 +103,20 @@ export const create_linear_issue: ToolDefinition<
     if (!j.data?.issueCreate?.success) {
       return { ok: false, error: "Linear reported failure." };
     }
+    const issue = j.data.issueCreate.issue;
     return {
       ok: true,
-      issue_id: j.data.issueCreate.issue?.id,
-      identifier: j.data.issueCreate.issue?.identifier,
-      url: j.data.issueCreate.issue?.url,
+      issue_id: issue?.id,
+      identifier: issue?.identifier,
+      url: issue?.url,
+      ...(issue?.id
+        ? {
+            _undo: {
+              op: { kind: "archive_linear_issue", issue_id: issue.id },
+              summary: `Created ${issue.identifier ?? "issue"} in Linear.`,
+            },
+          }
+        : {}),
     };
   },
 };

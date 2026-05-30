@@ -8,8 +8,12 @@ import { cn } from "@/lib/utils";
 export interface UndoableAction {
   token: string;
   summary: string;
-  expiresAt: string;
+  /** Absent for a non-recallable note (E4). */
+  expiresAt?: string;
   toolName: string;
+  /** E4: false for an irreversible ring-3 send. The strip renders a neutral
+   * "can't be recalled" note rather than an Undo control. Defaults to true. */
+  recallable?: boolean;
 }
 
 interface Props {
@@ -34,7 +38,10 @@ interface Props {
  *     than smoothly drain, which is fine.
  */
 export function UndoStrip({ action, onUndone, onExpired }: Props) {
-  const expiresAt = new Date(action.expiresAt).getTime();
+  // E4: an irreversible ring-3 send has no recall — render a neutral note,
+  // honestly, instead of a dead Undo button.
+  const recallable = action.recallable !== false && !!action.expiresAt;
+  const expiresAt = new Date(action.expiresAt ?? 0).getTime();
   const totalMs = Math.max(expiresAt - Date.now(), 1);
   const [remainingMs, setRemainingMs] = useState(() =>
     Math.max(expiresAt - Date.now(), 0)
@@ -46,7 +53,7 @@ export function UndoStrip({ action, onUndone, onExpired }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (resolved) return;
+    if (resolved || !recallable) return;
     const tick = () => {
       const ms = Math.max(expiresAt - Date.now(), 0);
       setRemainingMs(ms);
@@ -58,7 +65,7 @@ export function UndoStrip({ action, onUndone, onExpired }: Props) {
     tick();
     const id = window.setInterval(tick, 250);
     return () => window.clearInterval(id);
-  }, [expiresAt, onExpired, resolved]);
+  }, [expiresAt, onExpired, resolved, recallable]);
 
   async function clickUndo() {
     if (undoing || resolved) return;
@@ -92,6 +99,15 @@ export function UndoStrip({ action, onUndone, onExpired }: Props) {
 
   const seconds = Math.ceil(remainingMs / 1000);
   const pct = Math.max(0, Math.min(100, (remainingMs / totalMs) * 100));
+
+  // E4: non-recallable ring-3 send — a neutral, honest note, no controls.
+  if (!recallable) {
+    return (
+      <div className="rounded-md border border-border/40 bg-card/80 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+        {action.summary}
+      </div>
+    );
+  }
 
   if (resolved === "undone") {
     return (

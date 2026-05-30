@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getActiveAccessToken } from "@/lib/oauth/flow";
 import type { ToolRing } from "@/lib/agent/types";
 
 /**
@@ -61,6 +62,33 @@ export type ReverseOp =
       prior_primary_description: string | null;
       duplicate_ids: string[];
       prior_duplicate_statuses: Record<string, string>;
+    }
+  // ---- E4: ring-3 (write_world) recall ops. The provider supports a
+  // best-effort reversal of a just-completed external write. Each carries
+  // exactly what its provider API needs; the token is resolved at undo time
+  // from the user's connected account for the relevant provider. ----
+  // Delete a just-sent Slack message (chat.delete).
+  | {
+      kind: "recall_slack_message";
+      channel: string;
+      ts: string;
+    }
+  // Remove a just-added Slack reaction (reactions.remove).
+  | {
+      kind: "recall_slack_reaction";
+      channel: string;
+      ts: string;
+      name: string;
+    }
+  // Delete a just-created Google Calendar event.
+  | {
+      kind: "delete_calendar_event";
+      event_id: string;
+    }
+  // Archive a just-created Linear issue (issueArchive).
+  | {
+      kind: "archive_linear_issue";
+      issue_id: string;
     };
 
 export interface RecordActionInput {
@@ -94,8 +122,11 @@ export async function recordAction(
   input: RecordActionInput
 ): Promise<RecordedAction> {
   const supabase = input.supabase ?? createSupabaseServiceClient();
+  // E4: ring-3 (write_world) writes can also be undoable now — a tool that
+  // can recall its external action (Slack delete, GCal delete, Linear
+  // archive) ships an `_undo` payload exactly like ring-2 does.
   const undoable =
-    input.ring === "write_mashi" &&
+    (input.ring === "write_mashi" || input.ring === "write_world") &&
     input.ok &&
     input.undoPayload != null &&
     input.undoSummary != null;
@@ -283,9 +314,104 @@ async function applyReverseOp(
       }
       return;
     }
+    case "recall_slack_message": {
+      const token = await providerToken(userId, "slack", supabase);
+      const j = await slackPost("chat.delete", token, {
+        channel: op.channel,
+        ts: op.ts,
+      });
+      if (!j.ok) throw new Error(`Slack recall failed: ${j.error ?? "unknown"}`);
+      return;
+    }
+    case "recall_slack_reaction": {
+      const token = await providerToken(userId, "slack", supabase);
+      const j = await slackPost("reactions.remove", token, {
+        channel: op.channel,
+        timestamp: op.ts,
+        name: op.name,
+      });
+      // already-removed is fine — the reaction is gone either way.
+      if (!j.ok && j.error !== "no_reaction") {
+        throw new Error(`Slack reaction recall failed: ${j.error ?? "unknown"}`);
+      }
+      return;
+    }
+    case "delete_calendar_event": {
+      const token = await providerToken(userId, "gcal", supabase);
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(
+          op.event_id
+        )}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+      );
+      // 410 Gone = already deleted; treat as success.
+      if (!res.ok && res.status !== 410 && res.status !== 404) {
+        throw new Error(`Calendar delete failed: ${res.status}`);
+      }
+      return;
+    }
+    case "archive_linear_issue": {
+      const token = await providerToken(userId, "linear", supabase);
+      const res = await fetch("https://api.linear.app/graphql", {
+        method: "POST",
+        headers: { Authorization: token, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: `mutation ArchiveIssue($id: String!) { issueArchive(id: $id) { success } }`,
+          variables: { id: op.issue_id },
+        }),
+      });
+      if (!res.ok) throw new Error(`Linear API ${res.status}`);
+      const j = (await res.json()) as {
+        data?: { issueArchive?: { success: boolean } };
+        errors?: Array<{ message: string }>;
+      };
+      if (j.errors?.length) throw new Error(j.errors.map((e) => e.message).join("; "));
+      if (!j.data?.issueArchive?.success) {
+        throw new Error("Linear reported failure archiving the issue.");
+      }
+      return;
+    }
     default: {
       const exhaustive: never = op;
       throw new Error(`Unknown reverse op: ${JSON.stringify(exhaustive)}`);
     }
   }
+}
+
+const SLACK_API = "https://slack.com/api";
+
+/** Resolve the user's active access token for a provider, mirroring how the
+ * ring-3 tools authenticate. Owner-scoped; picks the oldest connection (the
+ * primary), matching the tool handlers. */
+async function providerToken(
+  userId: string,
+  provider: "slack" | "gcal" | "linear",
+  supabase: Supa
+): Promise<string> {
+  const { data: conn } = await supabase
+    .from("connected_accounts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("provider", provider)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!conn) throw new Error(`No ${provider} account connected.`);
+  return getActiveAccessToken(conn.id);
+}
+
+async function slackPost(
+  method: string,
+  token: string,
+  body: Record<string, unknown>
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${SLACK_API}/${method}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json; charset=utf-8",
+    },
+    body: JSON.stringify(body),
+  });
+  return (await res.json()) as { ok: boolean; error?: string };
 }

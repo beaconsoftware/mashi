@@ -103,8 +103,9 @@ export interface PostRunnerOpts {
   emitUndoable?: (opts: {
     token: string;
     summary: string;
-    expiresAt: string;
+    expiresAt?: string;
     toolName: string;
+    recallable?: boolean;
   }) => void;
 }
 

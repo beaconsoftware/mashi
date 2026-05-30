@@ -142,6 +142,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P2.b** Conversation control (D2, D3, D4) · MERGED (#150)
 - [x] **P3.a** Image paste + file upload (B1) · MERGED (#151)
 - [x] **P3.b** @-mentions in the composer (B2) · MERGED (#152)
+- [x] **P4.a** Approval card weight + inline diff (E2, E3) · MERGED (#153)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
 `thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The batch
@@ -189,7 +190,7 @@ caught immediately.
   > nested args + inline diff, all frontend + a thin before-snapshot read) is separable from
   > the policy/safety chunk (a new policy table + settings UI + provider-specific recall/undo
   > + ring reclassification). Internal deps: E3→E2; E1→E5; E1+E3→E4.
-  - [ ] **4 · P4.a · Approval card weight + diff** · covers E2, E3 · deps: none · IN REVIEW (#153) · PR: #153
+  - [x] **4 · P4.a · Approval card weight + diff** · covers E2, E3 · deps: none · MERGED (#153) · PR: #153
     > Approval-card rework (E3): action weight (`approvalMetaFor`) so an irreversible SEND
     > reads destructive + `.mashi-glow-focus` while a draft / reaction reads light; multi-line
     > body editing; nested-object / array-element editing via `flattenEditable` / `applyEdits`
@@ -197,7 +198,7 @@ caught immediately.
     > not a red error. Inline before/after diff (E2) for update tools, fed by an optional
     > `approvalContext` before-snapshot on the tool def (migration `045_agent_approval_context.sql`
     > adds `agent_approvals.context`). Pure module unit-tested (`test:approval-meta`, 42 asserts).
-  - [ ] **4 · P4.b · Per-tool policy + recall/undo** · covers E1, E5, E4 · deps: P4.a · TODO · PR: -
+  - [ ] **4 · P4.b · Per-tool policy + recall/undo** · covers E1, E5, E4 · deps: P4.a · IN REVIEW (#154) · PR: #154
     > Per-tool approval policy table + settings UI (E1: always-allow / ask / never, narrowly
     > scoped), ring reclassification (E5: draft_email / react_with_emoji lighter gate, needs
     > E1), post-send recall/undo for ring-3 where the provider allows it (E4: Slack delete,

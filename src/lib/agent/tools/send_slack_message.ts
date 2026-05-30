@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "@/lib/agent/types";
 import { getActiveAccessToken } from "@/lib/oauth/flow";
+import type { ReverseOp } from "@/lib/agent/undo";
 
 const args = z.object({
   channel: z
@@ -26,7 +27,15 @@ const SLACK_API = "https://slack.com/api";
  */
 export const send_slack_message: ToolDefinition<
   Args,
-  { ok: boolean; ts?: string; channel?: string; error?: string }
+  {
+    ok: boolean;
+    ts?: string;
+    channel?: string;
+    error?: string;
+    /** E4: peeled off before the model sees it; powers the post-send recall
+     * strip (chat.delete within the undo window). */
+    _undo?: { op: ReverseOp; summary: string };
+  }
 > = {
   name: "send_slack_message",
   description:
@@ -68,6 +77,19 @@ export const send_slack_message: ToolDefinition<
     if (!j.ok) {
       return { ok: false, error: `Slack send failed: ${j.error ?? "unknown"}` };
     }
-    return { ok: true, ts: j.ts, channel: j.channel };
+    const channel = j.channel ?? input.channel;
+    return {
+      ok: true,
+      ts: j.ts,
+      channel,
+      ...(j.ts
+        ? {
+            _undo: {
+              op: { kind: "recall_slack_message", channel, ts: j.ts },
+              summary: "Message posted to Slack.",
+            },
+          }
+        : {}),
+    };
   },
 };

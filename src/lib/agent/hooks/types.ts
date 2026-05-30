@@ -89,12 +89,14 @@ export interface PostToolUseHook {
     ok: boolean;
     ring: ToolRing;
     ctx: ToolContext;
-    /** Emitted by ring2-audit when the tool returned an _undo payload. */
+    /** Emitted by ring2-audit when the tool returned an _undo payload, or
+     * (E4) a non-recallable ring-3 send note. */
     emitUndoable?: (opts: {
       token: string;
       summary: string;
-      expiresAt: string;
+      expiresAt?: string;
       toolName: string;
+      recallable?: boolean;
     }) => void;
   }) => Promise<void>;
 }

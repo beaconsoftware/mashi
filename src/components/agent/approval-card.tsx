@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ import {
   type DiffRow,
   type EditableLeaf,
 } from "@/lib/agent/approval-meta";
+import { isAlwaysAllowEligible, rememberScopeLabel } from "@/lib/agent/policy";
 
 export interface PendingApproval {
   id: string;
@@ -116,6 +118,18 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
     Object.fromEntries(leaves.map((l) => [l.key, l.value]))
   );
 
+  // E1: inline "always allow" — eligible for everything except irreversible
+  // sends (an email / Slack post / Linear comment is never waved through).
+  const canRemember = useMemo(
+    () => isAlwaysAllowEligible(approval.name),
+    [approval.name]
+  );
+  const rememberSuffix = useMemo(
+    () => rememberScopeLabel(approval.name, approval.args),
+    [approval.name, approval.args]
+  );
+  const [remember, setRemember] = useState(false);
+
   // E2: before/after diff rows for update tools that shipped a snapshot.
   const diffRows = useMemo<DiffRow[] | null>(() => {
     if (!meta.isUpdate) return null;
@@ -143,6 +157,7 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
         body: JSON.stringify({
           decision,
           edited_args: editedArgs,
+          remember: decision === "approve" && canRemember ? remember : undefined,
         }),
       });
       const body = (await res.json().catch(() => null)) as {
@@ -235,6 +250,21 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
         <div className="mt-1.5 rounded border border-destructive/40 bg-destructive/15 px-2 py-1 text-[11px] text-destructive">
           {error}
         </div>
+      )}
+
+      {mode === "idle" && canRemember && (
+        <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Checkbox
+            checked={remember}
+            onCheckedChange={(v) => setRemember(v === true)}
+            disabled={submitting}
+            className="size-3.5"
+          />
+          <span>
+            Always allow {meta.verb.toLowerCase()} {meta.noun}
+            {rememberSuffix} — skip this card next time
+          </span>
+        </label>
       )}
 
       <div className="mt-2 flex items-center gap-1.5">

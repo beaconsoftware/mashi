@@ -34,6 +34,7 @@ import {
 import { useCursorContext } from "@/lib/agent/cursor-context";
 import { deriveSources, type SourceDescriptor } from "@/lib/agent/provenance";
 import {
+  isBlockedResult,
   isCancelledResult,
   isExpiredResult,
 } from "@/lib/agent/approval-meta";
@@ -625,8 +626,9 @@ export function ThreadView({
     } else if (d.kind === "approval-resolved") {
       setPendingApprovals((prev) => prev.filter((p) => p.id !== d.id));
     } else if (d.kind === "undoable") {
-      // Ring 2 write landed. Surface the strip and refresh any board
-      // queries so the optimistic mutation paints through immediately.
+      // Ring 2 write landed, or (E4) a ring-3 send/create with a recall
+      // window or a non-recallable note. Surface the strip and refresh any
+      // board queries so the optimistic mutation paints through immediately.
       setUndoables((prev) => [
         ...prev,
         {
@@ -634,6 +636,7 @@ export function ThreadView({
           summary: d.summary,
           expiresAt: d.expiresAt,
           toolName: d.toolName,
+          recallable: d.recallable,
         },
       ]);
       queryClient.invalidateQueries({ queryKey: ["s2d_items"] });
@@ -940,12 +943,14 @@ function PersistedMessageRow({
             {message.tool_calls!.map((tc) => {
               const result = resultByCallId.get(tc.id);
               const parsedOutput = result ? parseToolResult(result.content) : null;
-              // E3: a user-cancelled / expired ring-3 call reads as a neutral
-              // "Cancelled", not an alarming red error (the model still saw
-              // is_error=true so it knows the action didn't run).
+              // E3/E1: a user-cancelled / expired call, or one blocked by the
+              // user's own "never" policy, reads as a neutral "Cancelled", not
+              // an alarming red error (the model still saw is_error=true so it
+              // knows the action didn't run).
               const cancelled =
                 isCancelledResult(parsedOutput) ||
-                isExpiredResult(parsedOutput);
+                isExpiredResult(parsedOutput) ||
+                isBlockedResult(parsedOutput);
               const state: ToolPartState = result
                 ? cancelled
                   ? "output-cancelled"
@@ -1054,10 +1059,12 @@ function LiveTurnRows({
       {hasToolCalls && (
         <div className="space-y-1.5">
           {liveToolCalls.map((tc) => {
-            // E3: neutral "Cancelled" outcome for a user-cancelled / expired
-            // ring-3 call instead of a red error.
+            // E3/E1: neutral "Cancelled" outcome for a user-cancelled /
+            // expired / policy-blocked ring-3 call instead of a red error.
             const cancelled =
-              isCancelledResult(tc.result) || isExpiredResult(tc.result);
+              isCancelledResult(tc.result) ||
+              isExpiredResult(tc.result) ||
+              isBlockedResult(tc.result);
             const state: ToolPartState =
               tc.ok === undefined
                 ? "input-available"
