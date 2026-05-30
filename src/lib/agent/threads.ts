@@ -58,6 +58,10 @@ export interface AgentMessageRow {
    * cancelled, A9 truncated, A6 budget_exhausted). NULL for healthy
    * messages. */
   metadata: Record<string, unknown> | null;
+  /** P2.b: soft-delete marker for Regenerate/Edit-and-resend truncation.
+   * Rows are kept for auditability but excluded from replay, the thread
+   * view, and search. NULL for live messages. */
+  deleted_at: string | null;
 }
 
 type Supa = SupabaseClient;
@@ -139,7 +143,10 @@ export async function loadThread(opts: {
     // tiebreaker so same-millisecond inserts never replay out of order.
     .order("created_at", { ascending: true })
     .order("seq", { ascending: true })
-    .limit(Math.min(Math.max(opts.limit ?? 100, 1), 500));
+    .limit(Math.min(Math.max(opts.limit ?? 100, 1), 500))
+    // P2.b: never replay / show truncated (regenerated or edited-away)
+    // turns. They remain in the table for auditability.
+    .is("deleted_at", null);
   if (!opts.includeSuperseded) {
     query = query.is("superseded_by_summary_at", null);
   }
@@ -239,6 +246,87 @@ export async function insertItemThreadSystemNote(opts: {
     content: opts.text,
     supabase,
   });
+}
+
+/**
+ * P2.b — Regenerate (D2) / Edit-and-resend (D3) support.
+ *
+ * Both re-run a turn from an earlier user message. The shared shape is:
+ * pick an anchor user message, discard (soft-delete) every live row after
+ * it, then re-run the loop without appending a fresh user message (the
+ * anchor is already the last live row). This loads the live (non-deleted,
+ * non-system-summary-absorbed irrelevant) rows so the caller can find the
+ * anchor and inspect what would be discarded.
+ */
+export async function loadLiveMessagesForRerun(opts: {
+  userId: string;
+  threadId: string;
+  supabase?: Supa;
+}): Promise<AgentMessageRow[]> {
+  const supabase = opts.supabase ?? createSupabaseServiceClient();
+  const res = await supabase
+    .from("agent_messages")
+    .select("*")
+    .eq("user_id", opts.userId)
+    .eq("thread_id", opts.threadId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .order("seq", { ascending: true });
+  return (res.data as AgentMessageRow[] | null) ?? [];
+}
+
+/**
+ * Soft-delete every live message in a thread whose `seq` is greater than
+ * `afterSeq`. Used by Regenerate (discard the trailing assistant + tool
+ * rows) and Edit-and-resend (discard everything after the edited user
+ * turn). Append-only + monotonic seq means seq > anchor captures exactly
+ * the rows inserted after the anchor. Rows are kept for auditability.
+ */
+export async function truncateThreadAfterSeq(opts: {
+  userId: string;
+  threadId: string;
+  afterSeq: number;
+  supabase?: Supa;
+}): Promise<void> {
+  const supabase = opts.supabase ?? createSupabaseServiceClient();
+  await supabase
+    .from("agent_messages")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("user_id", opts.userId)
+    .eq("thread_id", opts.threadId)
+    .is("deleted_at", null)
+    .gt("seq", opts.afterSeq);
+}
+
+/**
+ * Edit a prior user message's content in place (D3). Scoped by user_id +
+ * thread_id so a forged messageId from another thread can't be written.
+ * Returns true if a row was updated.
+ */
+export async function updateUserMessageContent(opts: {
+  userId: string;
+  threadId: string;
+  messageId: string;
+  content: string;
+  cursorContext?: unknown;
+  supabase?: Supa;
+}): Promise<boolean> {
+  const supabase = opts.supabase ?? createSupabaseServiceClient();
+  const patch: Record<string, unknown> = { content: opts.content };
+  if (opts.cursorContext !== undefined) {
+    patch.cursor_context = opts.cursorContext;
+  }
+  const res = await supabase
+    .from("agent_messages")
+    .update(patch)
+    .eq("user_id", opts.userId)
+    .eq("thread_id", opts.threadId)
+    .eq("id", opts.messageId)
+    .eq("role", "user")
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+  return !!res.data;
 }
 
 /**

@@ -32,6 +32,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSpotlightModal } from "@/components/spotlight/spotlight-context";
 import { SpotlightSearchPanel } from "@/components/spotlight/spotlight-modal";
+import type { SpotlightHit } from "@/hooks/use-spotlight";
 import { ThreadView } from "@/components/agent/thread-view";
 import { useAgentThread } from "@/store/agent-thread-store";
 import { AgentComposer } from "@/components/agent/composer";
@@ -74,6 +75,24 @@ export function SpotlightAgent() {
       // Slight delay so Radix's Dialog close animation doesn't race
       // with the Sheet open animation.
       setTimeout(() => openFor(itemId), 120);
+    },
+    [setOpen, openFor]
+  );
+
+  // D4: open a thread picked from the Search tab's Conversations group.
+  // Item-bound threads open the persistent Ask Mashi sheet (Spotlight
+  // closes); orphan threads resume right here in the Ask tab.
+  const handleConversation = useCallback(
+    (hit: SpotlightHit) => {
+      const thread = hit.thread;
+      if (!thread) return;
+      if (thread.itemId) {
+        setOpen(false);
+        setTimeout(() => openFor(thread.itemId!), 120);
+      } else {
+        setOrphanThreadId(thread.threadId);
+        setTab("ask");
+      }
     },
     [setOpen, openFor]
   );
@@ -157,7 +176,10 @@ export function SpotlightAgent() {
             </div>
           </TabsContent>
           <TabsContent value="search" className="m-0">
-            <SpotlightSearchPanel onPicked={() => setOpen(false)} />
+            <SpotlightSearchPanel
+              onPicked={() => setOpen(false)}
+              onConversation={handleConversation}
+            />
           </TabsContent>
         </Tabs>
       </DialogContent>

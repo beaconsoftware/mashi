@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, RotateCcw, Sparkles } from "lucide-react";
 import {
   Conversation,
   ConversationContent,
@@ -35,6 +35,9 @@ import { useCursorContext } from "@/lib/agent/cursor-context";
 import { deriveSources, type SourceDescriptor } from "@/lib/agent/provenance";
 import { CopyButton } from "@/components/agent/copy-button";
 import { MessageSources } from "@/components/agent/message-sources";
+import { ThreadExport } from "@/components/agent/thread-export";
+import { EditableUserMessage } from "@/components/agent/editable-user-message";
+import { Button } from "@/components/ui/button";
 import { AgentComposer } from "@/components/agent/composer";
 import { UndoStrip, type UndoableAction } from "@/components/agent/undo-strip";
 import {
@@ -306,7 +309,15 @@ export function ThreadView({
     return () => abortRef.current?.abort();
   }, []);
 
-  async function streamAgentTurn(url: string, body: unknown) {
+  async function streamAgentTurn(
+    url: string,
+    body: unknown,
+    // P2.b: fired once the server accepts the turn (200 + stream). Regenerate
+    // and Edit use it to optimistically drop the discarded rows only after
+    // the re-run is accepted, so a guard rejection (409) leaves the thread
+    // untouched instead of flashing rows out and back.
+    onAccepted?: () => void
+  ) {
     if (streaming) return;
     setStreaming(true);
     setLiveText("");
@@ -344,11 +355,18 @@ export function ThreadView({
         return;
       }
       if (!res.ok || !res.body) {
-        setError(`Couldn't reach Mashi (${res.status}).`);
+        // Surface the server's message when it sent one (e.g. the D2/D3
+        // committed-write guard), else a generic reachability note.
+        const payload = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        setError(payload?.message ?? `Couldn't reach Mashi (${res.status}).`);
         setStreaming(false);
         setPendingUserMessage(null);
         return;
       }
+      // Accepted: now safe to apply any optimistic truncation.
+      onAccepted?.();
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
@@ -413,6 +431,66 @@ export function ThreadView({
       mode: activeMode,
     });
   }
+
+  // P2.b: optimistically drop every cached message after `anchorId` (and
+  // optionally rewrite the anchor's content for an edit), so the discarded
+  // turn disappears the moment a re-run is accepted instead of lingering
+  // beside the new streaming answer. The post-stream refetch reconciles
+  // against the server's durable rows.
+  function optimisticTruncate(anchorId: string, editedContent?: string) {
+    queryClient.setQueryData<ThreadData>(queryKey, (prev) => {
+      if (!prev) return prev;
+      const idx = prev.messages.findIndex((m) => m.id === anchorId);
+      if (idx < 0) return prev;
+      const kept = prev.messages.slice(0, idx + 1).map((m, i) =>
+        i === idx && editedContent !== undefined
+          ? { ...m, content: editedContent }
+          : m
+      );
+      return { ...prev, messages: kept };
+    });
+  }
+
+  // D2: re-run the last turn from the prior user message. The server
+  // truncates the trailing assistant + tool rows and re-streams; it refuses
+  // (409) if that turn already took a write action.
+  async function regenerate() {
+    if (streaming) return;
+    const msgs = data?.messages ?? [];
+    let anchorId: string | null = null;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "user") {
+        anchorId = msgs[i].id;
+        break;
+      }
+    }
+    await streamAgentTurn(
+      `${baseEndpoint}/regenerate`,
+      { cursor, mode: activeMode },
+      anchorId ? () => optimisticTruncate(anchorId!) : undefined
+    );
+  }
+
+  // D3: edit a prior user message and re-run from there.
+  async function editAndResend(messageId: string, content: string) {
+    if (streaming) return;
+    await streamAgentTurn(
+      `${baseEndpoint}/edit`,
+      { messageId, content, cursor, mode: activeMode },
+      () => optimisticTruncate(messageId, content)
+    );
+  }
+
+  // Regenerate is available when the thread is idle and its last live turn
+  // is an assistant answer (nothing to redo on an empty thread or right
+  // after a user message that hasn't been answered).
+  const lastRole = data?.messages.at(-1)?.role;
+  const canRegenerate =
+    !streaming &&
+    !pendingUserMessage &&
+    followUpsToRender.length === 0 &&
+    pendingApprovals.length === 0 &&
+    lastRole === "assistant";
 
   // Auto-fire the first message when ThreadView is handed one. Used by
   // the Spotlight Ask Mashi flow: AskMashiTab creates the orphan row,
@@ -564,7 +642,17 @@ export function ThreadView({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-1">
+        {(data?.messages.length ?? 0) > 0 && data?.thread && (
+          <ThreadExport
+            thread={{
+              id: data.thread.id,
+              title: data.thread.title,
+              created_at: data.thread.created_at ?? null,
+            }}
+            messages={data.messages}
+          />
+        )}
         <ModeToggle
           itemId={itemId}
           threadId={threadId}
@@ -612,8 +700,24 @@ export function ThreadView({
               key={m.id}
               message={m}
               resultByCallId={resultByCallId}
+              streaming={streaming}
+              onEditUser={editAndResend}
             />
           ))}
+          {canRegenerate && (
+            <div className="flex justify-start">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={regenerate}
+                className="mashi-press h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Regenerate
+              </Button>
+            </div>
+          )}
           {pendingUserMessage && (
             <Message from="user">
               <MessageContent>
@@ -711,14 +815,31 @@ export function ThreadView({
 function PersistedMessageRow({
   message,
   resultByCallId,
+  streaming,
+  onEditUser,
 }: {
   message: AgentMessageRow;
   resultByCallId: Map<
     string,
     { tool_use_id: string; content: string; is_error: boolean }
   >;
+  /** True while a turn is streaming — disables the edit affordance. */
+  streaming?: boolean;
+  /** D3: edit a prior user message and re-run from there. */
+  onEditUser?: (messageId: string, content: string) => void;
 }) {
   if (message.role === "user") {
+    // D3: every prior user turn is editable. Editing re-runs the
+    // conversation from that message (the server truncates after it).
+    if (onEditUser && message.content) {
+      return (
+        <EditableUserMessage
+          content={message.content}
+          disabled={!!streaming}
+          onResend={(next) => onEditUser(message.id, next)}
+        />
+      );
+    }
     return (
       <Message from="user">
         <MessageContent>
