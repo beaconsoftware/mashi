@@ -198,7 +198,7 @@ caught immediately.
     > not a red error. Inline before/after diff (E2) for update tools, fed by an optional
     > `approvalContext` before-snapshot on the tool def (migration `045_agent_approval_context.sql`
     > adds `agent_approvals.context`). Pure module unit-tested (`test:approval-meta`, 42 asserts).
-  - [ ] **4 · P4.b · Per-tool policy + recall/undo** · covers E1, E5, E4 · deps: P4.a · IN REVIEW (#PENDING) · PR: #PENDING
+  - [ ] **4 · P4.b · Per-tool policy + recall/undo** · covers E1, E5, E4 · deps: P4.a · IN REVIEW (#154) · PR: #154
     > Per-tool approval policy table + settings UI (E1: always-allow / ask / never, narrowly
     > scoped), ring reclassification (E5: draft_email / react_with_emoji lighter gate, needs
     > E1), post-send recall/undo for ring-3 where the provider allows it (E4: Slack delete,
