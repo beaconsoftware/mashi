@@ -4,7 +4,8 @@ import { anthropic, MODELS } from "@/lib/anthropic/client";
 import { sanitizeForAITells } from "@/lib/anthropic/sanitize";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { TOOL_REGISTRY } from "@/lib/agent/registry";
-import { appendMessage, loadThread } from "@/lib/agent/threads";
+import { appendMessage, loadThread, releaseThreadTurn } from "@/lib/agent/threads";
+import { messagesToReplay } from "@/lib/agent/replay";
 import type { AnyToolDefinition, CursorContext, ToolRing } from "@/lib/agent/types";
 import { serializeCursor } from "@/lib/agent/cursor-serialize";
 import type { ReverseOp } from "@/lib/agent/undo";
@@ -104,6 +105,13 @@ export interface RunAgentTurnOpts {
    * thread row says (act if not specified).
    */
   mode?: AgentMode;
+  /**
+   * A1 turn lock: the claim token the route obtained via claimThreadTurn
+   * before starting this turn. When present, the loop releases the lock
+   * in a finally so the thread frees up the moment the turn ends (or
+   * throws). Absent for callers that don't take the lock.
+   */
+  turnId?: string;
 }
 
 interface AnthropicToolDef {
@@ -202,87 +210,38 @@ function buildSystemPrompt(opts: {
   return lines.join("\n");
 }
 
-interface ReplayBlock {
-  role: "user" | "assistant";
-  content: Anthropic.Messages.MessageParam["content"];
-}
-
-function messagesToReplay(
-  rows: Array<{
-    role: string;
-    content: string | null;
-    tool_calls: unknown;
-    tool_results: unknown;
-  }>
-): ReplayBlock[] {
-  // Reconstruct the Anthropic-shaped message list from persisted rows.
-  // - role=user  → content text
-  // - role=assistant with tool_calls → array of text + tool_use blocks
-  // - role=tool                       → user message with tool_result blocks
-  // - role=system                     → skip; system prompt is rebuilt fresh
-  const out: ReplayBlock[] = [];
-  for (const row of rows) {
-    if (row.role === "system") continue;
-    if (row.role === "user") {
-      if (row.content && row.content.trim().length > 0) {
-        out.push({ role: "user", content: row.content });
-      }
-      continue;
-    }
-    if (row.role === "assistant") {
-      const blocks: Array<
-        | { type: "text"; text: string }
-        | { type: "tool_use"; id: string; name: string; input: unknown }
-      > = [];
-      if (row.content && row.content.length > 0) {
-        blocks.push({ type: "text", text: row.content });
-      }
-      if (Array.isArray(row.tool_calls)) {
-        for (const tc of row.tool_calls as Array<{
-          id: string;
-          name: string;
-          input: unknown;
-        }>) {
-          blocks.push({
-            type: "tool_use",
-            id: tc.id,
-            name: tc.name,
-            input: tc.input,
-          });
-        }
-      }
-      if (blocks.length > 0) {
-        out.push({
-          role: "assistant",
-          content: blocks as unknown as ReplayBlock["content"],
-        });
-      }
-      continue;
-    }
-    if (row.role === "tool") {
-      if (!Array.isArray(row.tool_results)) continue;
-      const blocks = (row.tool_results as Array<{
-        tool_use_id: string;
-        content: string;
-        is_error?: boolean;
-      }>).map((r) => ({
-        type: "tool_result" as const,
-        tool_use_id: r.tool_use_id,
-        content: r.content,
-        is_error: r.is_error ?? false,
-      }));
-      out.push({
-        role: "user",
-        content: blocks as unknown as ReplayBlock["content"],
-      });
-    }
-  }
-  return out;
-}
-
 export async function runAgentTurn(opts: RunAgentTurnOpts): Promise<void> {
   const supabase = createSupabaseServiceClient();
 
+  try {
+    await runAgentTurnInner(opts, supabase);
+  } finally {
+    // A1: release the turn lock the moment the turn ends, whether it
+    // completed, errored, or threw. Only clears the lock if we still own
+    // it (releaseThreadTurn checks the token), so a TTL-reclaim by a
+    // later turn is never clobbered.
+    if (opts.turnId) {
+      try {
+        await releaseThreadTurn({
+          userId: opts.userId,
+          threadId: opts.threadId,
+          turnId: opts.turnId,
+          supabase,
+        });
+      } catch (err) {
+        console.warn(
+          "[agent] failed to release turn lock:",
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
+  }
+}
+
+async function runAgentTurnInner(
+  opts: RunAgentTurnOpts,
+  supabase: ReturnType<typeof createSupabaseServiceClient>
+): Promise<void> {
   // Persist the user message before we start streaming so a crash
   // mid-stream still leaves a recoverable thread.
   await appendMessage({

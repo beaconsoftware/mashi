@@ -120,7 +120,7 @@ part of cancellation), so it has no own row. `B2` is optional, kept low priority
 ### Bootstrap (landed outside the numbered loop)
 
 - [x] **B0a** Tracker doc + motion/liveness doctrine on `main` · MERGED (#142)
-- [ ] **B0b** `audit:motion` script + wired into `pnpm verify` and CI · IN REVIEW (#143)
+- [x] **B0b** `audit:motion` script + wired into `pnpm verify` and CI · MERGED (#143)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
 `thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The PR
@@ -130,7 +130,7 @@ caught immediately.
 
 ### Sprint 1: foundation + flagged fixes
 
-- [ ] **1 · A1** Per-thread turn lock + ordered replay · deps: none · TODO · PR: -
+- [ ] **1 · A1** Per-thread turn lock + ordered replay · deps: none · IN REVIEW (#144) · PR: #144
 - [ ] **2 · A2** Route loop through `trackedStream` · deps: none · TODO · PR: -
 - [ ] **3 · A7** Model/pricing drift guard · deps: none · TODO · PR: -
 - [ ] **4 · A3** Cancellation + Stop button · deps: A1 · TODO · PR: -

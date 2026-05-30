@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runAgentTurn, type AgentDelta } from "@/lib/agent/loop";
-import { getOrCreateThreadForItem } from "@/lib/agent/threads";
+import { claimThreadTurn, getOrCreateThreadForItem } from "@/lib/agent/threads";
 import type { CursorContext } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
@@ -79,6 +79,20 @@ export async function POST(
     itemId,
   });
 
+  // A1: claim the single in-flight turn slot before streaming. If another
+  // tab / double-send is mid-turn, refuse with 409 rather than interleave
+  // message rows and corrupt the replay history.
+  const turnId = await claimThreadTurn({ userId, threadId: thread.id });
+  if (!turnId) {
+    return new Response(
+      JSON.stringify({
+        error: "turn_in_progress",
+        message: "Mashi is still working on this thread in another tab.",
+      }),
+      { status: 409, headers: { "content-type": "application/json" } }
+    );
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -113,6 +127,7 @@ export async function POST(
           // Phase 5: ring 3 (write_world) gated by the approval card.
           toolRings: ["read", "write_mashi", "write_world"],
           mode: parsed.data.mode,
+          turnId,
         });
       } catch (err) {
         enqueue({

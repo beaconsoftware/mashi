@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -26,6 +27,12 @@ export interface AgentThreadRow {
   created_at: string;
   /** Quality Phase 3 plan/act mode. Default 'act' at the DB layer. */
   mode: "plan" | "act";
+  /** A1 turn lock: claim token for the single in-flight turn, or null
+   * when the thread is free. */
+  active_turn_id: string | null;
+  /** A1 turn lock: when the active turn claimed the thread. Drives the
+   * claim TTL so a crashed turn can't wedge the thread forever. */
+  active_turn_started_at: string | null;
 }
 
 export interface AgentMessageRow {
@@ -44,6 +51,9 @@ export interface AgentMessageRow {
   // subsequent turns. NULL for any message still in active replay.
   superseded_by_summary_at: string | null;
   created_at: string;
+  /** A1: monotonic per-insert sequence. Deterministic tiebreaker behind
+   * created_at so replay is totally ordered. */
+  seq: number;
 }
 
 type Supa = SupabaseClient;
@@ -121,7 +131,10 @@ export async function loadThread(opts: {
     .select("*")
     .eq("user_id", opts.userId)
     .eq("thread_id", opts.threadId)
+    // A1: created_at is the primary order; seq is the deterministic
+    // tiebreaker so same-millisecond inserts never replay out of order.
     .order("created_at", { ascending: true })
+    .order("seq", { ascending: true })
     .limit(Math.min(Math.max(opts.limit ?? 100, 1), 500));
   if (!opts.includeSuperseded) {
     query = query.is("superseded_by_summary_at", null);
@@ -217,4 +230,67 @@ export async function insertItemThreadSystemNote(opts: {
     content: opts.text,
     supabase,
   });
+}
+
+/**
+ * A1 turn lock — TTL matching the route maxDuration (300s). A turn that
+ * holds the lock longer than this is presumed crashed and a new turn may
+ * reclaim the thread.
+ */
+export const TURN_LOCK_TTL_SECONDS = 300;
+
+/**
+ * Claim the single in-flight turn slot for a thread. Returns a fresh
+ * turn id on success, or null if another turn already holds the lock and
+ * it hasn't gone stale.
+ *
+ * The claim is a single conditional UPDATE: it only matches a row whose
+ * lock is free (active_turn_id IS NULL) OR stale (claimed longer ago than
+ * the TTL). Postgres row-locks the UPDATE, so two concurrent claims
+ * serialize — the loser re-evaluates the WHERE against the winner's
+ * just-written non-null, non-stale lock and updates zero rows. Exactly
+ * one claim wins; the other gets null and the route 409s.
+ */
+export async function claimThreadTurn(opts: {
+  userId: string;
+  threadId: string;
+  ttlSeconds?: number;
+  supabase?: Supa;
+}): Promise<string | null> {
+  const supabase = opts.supabase ?? createSupabaseServiceClient();
+  const turnId = randomUUID();
+  const ttl = opts.ttlSeconds ?? TURN_LOCK_TTL_SECONDS;
+  const staleCutoff = new Date(Date.now() - ttl * 1000).toISOString();
+  const res = await supabase
+    .from("agent_threads")
+    .update({
+      active_turn_id: turnId,
+      active_turn_started_at: new Date().toISOString(),
+    })
+    .eq("id", opts.threadId)
+    .eq("user_id", opts.userId)
+    .or(`active_turn_id.is.null,active_turn_started_at.lt.${staleCutoff}`)
+    .select("id")
+    .maybeSingle();
+  return res.data ? turnId : null;
+}
+
+/**
+ * Release a turn lock. Only clears the lock if we still own it (the
+ * active_turn_id still equals our token), so a turn that already lost
+ * the lock to a TTL-reclaim doesn't clobber its successor.
+ */
+export async function releaseThreadTurn(opts: {
+  userId: string;
+  threadId: string;
+  turnId: string;
+  supabase?: Supa;
+}): Promise<void> {
+  const supabase = opts.supabase ?? createSupabaseServiceClient();
+  await supabase
+    .from("agent_threads")
+    .update({ active_turn_id: null, active_turn_started_at: null })
+    .eq("id", opts.threadId)
+    .eq("user_id", opts.userId)
+    .eq("active_turn_id", opts.turnId);
 }

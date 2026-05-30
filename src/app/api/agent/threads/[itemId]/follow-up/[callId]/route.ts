@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runAgentTurn, type AgentDelta } from "@/lib/agent/loop";
-import { getOrCreateThreadForItem } from "@/lib/agent/threads";
+import { claimThreadTurn, getOrCreateThreadForItem } from "@/lib/agent/threads";
 import type { CursorContext } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
@@ -78,6 +78,19 @@ export async function POST(
     itemId,
   });
 
+  // A1: claim the single in-flight turn slot before streaming (see the
+  // item-bound /messages route for rationale).
+  const turnId = await claimThreadTurn({ userId, threadId: thread.id });
+  if (!turnId) {
+    return new Response(
+      JSON.stringify({
+        error: "turn_in_progress",
+        message: "Mashi is still working on this thread in another tab.",
+      }),
+      { status: 409, headers: { "content-type": "application/json" } }
+    );
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -99,6 +112,7 @@ export async function POST(
           cursor: parsed.data.cursor as CursorContext,
           onDelta: enqueue,
           toolRings: ["read", "write_mashi", "write_world"],
+          turnId,
         });
       } catch (err) {
         enqueue({
