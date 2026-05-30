@@ -171,7 +171,7 @@ caught immediately.
   > Image paste + file upload (B1) is the substantive piece; @-mentions (B2) is optional and
   > only worthwhile "if it falls out cheaply." It doesn't, a mention typeahead needs its own
   > composer rework, so it's split into its own sub-row rather than jammed into B1's diff.
-  - [ ] **3 · P3.a · Image paste + file upload** · covers B1 · deps: none (A2 merged) · IN REVIEW (#PENDING) · PR: #PENDING
+  - [ ] **3 · P3.a · Image paste + file upload** · covers B1 · deps: none (A2 merged) · IN REVIEW (#151) · PR: #151
     > Paste / drag-drop / paperclip → upload images, PDFs, and text/CSV to an owner-scoped
     > `agent-attachments` Storage bucket (RLS by uid prefix); descriptors ride with the
     > message, persist on the user row, and resolve to Anthropic image/document content
