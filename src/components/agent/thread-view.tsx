@@ -283,6 +283,22 @@ export function ThreadView({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
+      if (res.status === 409) {
+        // A1: another turn already holds this thread's lock (a second
+        // tab, or a double-send). Non-destructive: surface a calm note
+        // and leave whatever is already on screen untouched. Nothing was
+        // persisted, so the user can resend once the other turn settles.
+        const payload = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        setError(
+          payload?.message ??
+            "Mashi is still working on this thread in another tab."
+        );
+        setStreaming(false);
+        setPendingUserMessage(null);
+        return;
+      }
       if (!res.ok || !res.body) {
         setError(`Couldn't reach Mashi (${res.status}).`);
         setStreaming(false);

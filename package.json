@@ -14,6 +14,7 @@
     "test:visual": "playwright test --config=playwright.config.ts",
     "test:visual:update": "playwright test --config=playwright.config.ts --update-snapshots",
     "test:hooks": "tsx src/lib/agent/hooks/__tests__/runner.test.ts",
+    "test:replay": "tsx src/lib/agent/__tests__/replay.test.ts",
     "embed-tools": "tsx scripts/embed-tools.ts",
     "check:embeddings": "tsx scripts/embed-tools.ts --check",
     "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm audit:motion && pnpm check:embeddings"
