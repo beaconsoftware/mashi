@@ -21,7 +21,13 @@
 
 import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, MessageSquareText, Search, Sparkles } from "lucide-react";
+import {
+  Loader2,
+  ListChecks,
+  MessageSquareText,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -40,8 +46,9 @@ import type { AttachmentDescriptor } from "@/lib/agent/attachments";
 import type { AgentReference } from "@/lib/agent/references";
 import { Button } from "@/components/ui/button";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import { PlaybooksTab } from "@/components/agent/playbooks-tab";
 
-type SpotlightTab = "ask" | "search";
+type SpotlightTab = "ask" | "search" | "playbooks";
 
 // I6: the Spotlight empty state shows real, clickable suggestion chips
 // (consistent with the item-bound thread), not a single italic example.
@@ -61,6 +68,10 @@ export function SpotlightAgent() {
   const [orphanThreadId, setOrphanThreadId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  // F2 (P6.b): a composed playbook prompt waiting to seed a fresh thread.
+  // Set when the user runs a playbook, consumed as ThreadView's initial
+  // message once the orphan thread exists.
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
   // When the agent binds the orphan to an item, swap the ThreadView
   // over to the item-bound endpoint by setting this and dropping the
   // dialog after a brief beat so the persistent Ask Mashi sheet can
@@ -74,8 +85,52 @@ export function SpotlightAgent() {
     setOrphanThreadId(null);
     setCreating(false);
     setCreateError(null);
+    setSeedMessage(null);
     setTab("ask");
   }, []);
+
+  // Create the lazy orphan thread (shared by the Ask composer's first send
+  // and the Playbooks "Run" action). Returns the new thread id or null.
+  const createOrphan = useCallback(async () => {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const res = await fetch("/api/agent/threads/orphan", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `create ${res.status}`);
+      }
+      const json = (await res.json()) as { thread: { id: string } };
+      setOrphanThreadId(json.thread.id);
+      return json.thread.id;
+    } catch (err) {
+      setCreateError(
+        err instanceof Error ? err.message : "Couldn't open a new chat."
+      );
+      return null;
+    } finally {
+      setCreating(false);
+    }
+  }, []);
+
+  // F2: run a playbook — open a seeded orphan thread on the Ask tab. The
+  // composed prompt becomes ThreadView's initial message, which fires the
+  // turn (ring-3 steps still pause for approval as usual).
+  const handleRunPlaybook = useCallback(
+    async (prompt: string) => {
+      setSeedMessage(prompt);
+      const id = await createOrphan();
+      if (!id) {
+        setSeedMessage(null);
+        return;
+      }
+      setTab("ask");
+    },
+    [createOrphan]
+  );
 
   const handleItemBound = useCallback(
     (itemId: string) => {
@@ -101,6 +156,8 @@ export function SpotlightAgent() {
         setOpen(false);
         setTimeout(() => openFor(thread.itemId!), 120);
       } else {
+        // Resuming an existing thread — never carry a stale playbook seed.
+        setSeedMessage(null);
         setOrphanThreadId(thread.threadId);
         setTab("ask");
       }
@@ -142,6 +199,10 @@ export function SpotlightAgent() {
                 <Search className="h-3 w-3" />
                 Search
               </TabsTrigger>
+              <TabsTrigger value="playbooks" className="px-2 text-xs">
+                <ListChecks className="h-3 w-3" />
+                Playbooks
+              </TabsTrigger>
             </TabsList>
             <span className="font-mono text-[10px] text-muted-foreground/80">
               ⌘K
@@ -153,35 +214,12 @@ export function SpotlightAgent() {
                 threadId={orphanThreadId}
                 creating={creating}
                 error={createError}
-                onResumeOrphan={(id) => setOrphanThreadId(id)}
-                onCreate={async () => {
-                  setCreating(true);
-                  setCreateError(null);
-                  try {
-                    const res = await fetch("/api/agent/threads/orphan", {
-                      method: "POST",
-                      credentials: "include",
-                    });
-                    if (!res.ok) {
-                      const body = await res.json().catch(() => ({}));
-                      throw new Error(body?.error ?? `create ${res.status}`);
-                    }
-                    const json = (await res.json()) as {
-                      thread: { id: string };
-                    };
-                    setOrphanThreadId(json.thread.id);
-                    return json.thread.id;
-                  } catch (err) {
-                    setCreateError(
-                      err instanceof Error
-                        ? err.message
-                        : "Couldn't open a new chat."
-                    );
-                    return null;
-                  } finally {
-                    setCreating(false);
-                  }
+                seedMessage={seedMessage}
+                onResumeOrphan={(id) => {
+                  setSeedMessage(null);
+                  setOrphanThreadId(id);
                 }}
+                onCreate={createOrphan}
                 onItemBound={handleItemBound}
               />
             </div>
@@ -191,6 +229,11 @@ export function SpotlightAgent() {
               onPicked={() => setOpen(false)}
               onConversation={handleConversation}
             />
+          </TabsContent>
+          <TabsContent value="playbooks" className="m-0">
+            <div className="flex h-[60vh] min-h-0 flex-col bg-card p-3">
+              <PlaybooksTab onRun={handleRunPlaybook} running={creating} />
+            </div>
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -218,6 +261,7 @@ function AskMashiTab({
   threadId,
   creating,
   error,
+  seedMessage,
   onCreate,
   onItemBound,
   onResumeOrphan,
@@ -225,6 +269,8 @@ function AskMashiTab({
   threadId: string | null;
   creating: boolean;
   error: string | null;
+  /** F2: a composed playbook prompt to send as the thread's first message. */
+  seedMessage?: string | null;
   onCreate: () => Promise<string | null>;
   onItemBound: (itemId: string) => void;
   onResumeOrphan: (threadId: string) => void;
@@ -273,7 +319,7 @@ function AskMashiTab({
         threadId={threadId}
         key={threadId}
         onItemBound={onItemBound}
-        initialMessage={pendingFirstMessage ?? undefined}
+        initialMessage={pendingFirstMessage ?? seedMessage ?? undefined}
         initialAttachments={pendingFirstAttachments}
         initialReferences={pendingFirstReferences}
       />

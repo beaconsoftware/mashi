@@ -147,6 +147,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P5.a** Design-system adoption pass (H1, I1-I7, J4, J5) · MERGED (#155)
 - [x] **P5.b** Component identity redesign + observability (I8, I9, J1, J3) · MERGED (#157)
 - [x] **P5.c** Feel parity — cadence + scroll + perf + optimistic (K1-K5) · MERGED (#158)
+- [x] **P6.a** Agent-proposed MASHI.md memory (F1) · MERGED (#159)
 
 `audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
 that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
@@ -243,7 +244,7 @@ motion is caught immediately.
   > a clean diff; the L1-L4 aliveness cluster is its own frontend-functional sub-row (L4 needs
   > F1's memory moment, so it follows P6.a); G2 is XL-behind-a-flag and stands alone. `MERGED`
   > only when every sub-row is.
-  - [ ] **6 · P6.a · Agent-proposed memory (F1)** · covers F1 · deps: P1, P4, P5 · IN REVIEW (#159) · PR: #159
+  - [x] **6 · P6.a · Agent-proposed memory (F1)** · covers F1 · deps: P1, P4, P5 · MERGED (#159) · PR: #159
     > `propose_memory` ring-2 (write_mashi) tool that OFFERS to append a durable fact to
     > MASHI.md. Routes through the existing approval card as a LIGHT confirm (reuses E3) via a
     > new `requiresApproval` opt-in on the tool def + generalized approval hook; the append is
@@ -251,10 +252,13 @@ motion is caught immediately.
     > (`restore_mashi_md` reverse op). Always-on in act mode (CORE_TOOLS) so offers are
     > reliable; the loop already re-reads MASHI.md every turn, so an accepted fact is present
     > next turn. No migration (uses existing `user_profile.mashi_md` + `agent_actions`).
-  - [ ] **6 · P6.b · Playbooks (F2)** · covers F2 · deps: P6.a · TODO · PR: -
+  - [ ] **6 · P6.b · Playbooks (F2)** · covers F2 · deps: P6.a · IN REVIEW (#160) · PR: #160
     > A small library of user-triggerable, parameterized, multi-step playbooks the agent runs
     > step by step with the normal approval gates; a trigger surface in Spotlight. Pairs with
-    > G1 (X2). New table + migration.
+    > G1 (X2). New table + migration (`047_agent_playbooks.sql`). Built-ins live in code
+    > (`BUILTIN_PLAYBOOKS`); user playbooks persist to the owner-scoped `agent_playbooks`
+    > table. Triggering composes a single user-turn plan prompt (pure `playbooks.ts`,
+    > `test:playbooks`) and seeds an orphan thread — no loop change, ring-3 steps still gate.
   - [ ] **6 · P6.c · Aliveness phase 1 (L1, L2, L3, L4)** · covers L1, L2, L3, L4 · deps: P6.a · TODO · PR: -
     > Interactive/generative tool-result components (L1, needs I9 + E3, both merged), slash
     > commands + keyboard-first (L2, shares B2's typeahead), contextual quick-action chips (L3),
