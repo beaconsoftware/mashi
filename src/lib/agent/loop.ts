@@ -9,6 +9,8 @@ import { appendMessage, loadThread, releaseThreadTurn } from "@/lib/agent/thread
 import { messagesToReplay } from "@/lib/agent/replay";
 import { resolveAttachmentRefs } from "@/lib/agent/attachments-server";
 import type { AttachmentDescriptor } from "@/lib/agent/attachments";
+import type { AgentReference } from "@/lib/agent/references";
+import { canonicalizeItemReferences } from "@/lib/agent/references-server";
 import type { AnyToolDefinition, CursorContext, ToolRing } from "@/lib/agent/types";
 import { serializeCursor } from "@/lib/agent/cursor-serialize";
 import type { ReverseOp } from "@/lib/agent/undo";
@@ -191,6 +193,15 @@ export interface RunAgentTurnOpts {
    * anchor row already carries its attachments.
    */
   attachments?: AttachmentDescriptor[];
+  /**
+   * B2 (P3): pinned @-mention references the user attached to this turn
+   * (board items picked from the composer typeahead). Re-validated against
+   * the user's own s2d_items, persisted on the user row, and replayed as a
+   * short "already resolved" note so the model skips resolve_reference.
+   * Ignored on re-runs (appendUserMessage=false) since the anchor row
+   * already carries its references.
+   */
+  references?: AgentReference[];
 }
 
 interface AnthropicToolDef {
@@ -248,6 +259,9 @@ function buildSystemPrompt(opts: {
   );
   lines.push(
     "Reference resolution: if the user names an item without a ticket id (e.g. 'the brand spend thing'), call resolve_reference first. If 0 candidates come back, ask the user to be more specific. If exactly 1 candidate with confidence >= 0.8, proceed with that item. If multiple candidates or any low-confidence result, list the candidates back to the user and let them pick before acting."
+  );
+  lines.push(
+    "Pinned references: when a user message begins with a bracketed 'Pinned references' note, the user explicitly picked those items in the composer. Treat them as already resolved, act on them directly by their item id / MASH-N, and do NOT call resolve_reference for them."
   );
   lines.push(
     "Before any write tool, you MUST be able to name (a) the exact target entity by its ID, (b) the user's intent in one sentence, (c) the success criterion. If any is uncertain, call ask_followup_question with 2-5 specific options. Do not call any tool to find out what the user meant — ask."
@@ -326,6 +340,14 @@ async function runAgentTurnInner(
   // (regenerate / edit-and-resend) skip this: the anchor user row already
   // exists and is the last live message after the route's truncation.
   if (opts.appendUserMessage !== false) {
+    // B2: canonicalize pinned references against the user's own s2d_items
+    // before persisting, so a forged / stale / cross-user id is dropped and
+    // the stored label/ticket are the DB's, never client-supplied prose.
+    const references = await canonicalizeItemReferences({
+      references: opts.references,
+      userId: opts.userId,
+      supabase,
+    });
     await appendMessage({
       userId: opts.userId,
       threadId: opts.threadId,
@@ -333,6 +355,7 @@ async function runAgentTurnInner(
       content: opts.userMessage,
       cursorContext: opts.cursor,
       attachments: opts.attachments,
+      references,
       supabase,
     });
   }

@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runAgentTurn, type AgentDelta } from "@/lib/agent/loop";
 import { claimThreadTurn } from "@/lib/agent/threads";
 import { MAX_FILES, sanitizeAttachments } from "@/lib/agent/attachments";
+import { MAX_REFERENCES, sanitizeReferences } from "@/lib/agent/references";
 import type { CursorContext } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
@@ -46,10 +47,19 @@ const attachmentSchema = z.object({
   size: z.number().int().nonnegative(),
 });
 
+// B2 (P3): see the item-bound route. Loop canonicalizes ids server-side.
+const referenceSchema = z.object({
+  kind: z.literal("item"),
+  id: z.string().min(1).max(128),
+  label: z.string().max(256).optional(),
+  ticketNumber: z.number().int().nullable().optional(),
+});
+
 const bodySchema = z
   .object({
     message: z.string().max(8_000).default(""),
     attachments: z.array(attachmentSchema).max(MAX_FILES).optional(),
+    references: z.array(referenceSchema).max(MAX_REFERENCES).optional(),
     cursor: cursorSchema,
     // Quality Phase 3+: caller-asserted plan/act mode. See the item-bound
     // route for the rationale. Optional — falls back to the persisted
@@ -97,6 +107,8 @@ export async function POST(
   const attachments = sanitizeAttachments(parsed.data.attachments, {
     expectedPrefix: userId,
   });
+  // B2: shape-sanitize references; the loop canonicalizes ids server-side.
+  const references = sanitizeReferences(parsed.data.references);
 
   // A1: claim the single in-flight turn slot before streaming (see the
   // item-bound route for rationale).
@@ -131,6 +143,7 @@ export async function POST(
           userMessage: parsed.data.message,
           cursor: parsed.data.cursor as CursorContext,
           attachments,
+          references,
           onDelta: enqueue,
           toolRings: ["read", "write_mashi", "write_world"],
           mode: parsed.data.mode,

@@ -140,6 +140,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P1** Foundation hardening (A3, A4, A5, A6, A8, A9) · MERGED (#148)
 - [x] **P2.a** Output trust + rendering (C1, C2, C3, C4, C5) · MERGED (#149)
 - [x] **P2.b** Conversation control (D2, D3, D4) · MERGED (#150)
+- [x] **P3.a** Image paste + file upload (B1) · MERGED (#151)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
 `thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The batch
@@ -171,13 +172,13 @@ caught immediately.
   > Image paste + file upload (B1) is the substantive piece; @-mentions (B2) is optional and
   > only worthwhile "if it falls out cheaply." It doesn't, a mention typeahead needs its own
   > composer rework, so it's split into its own sub-row rather than jammed into B1's diff.
-  - [ ] **3 · P3.a · Image paste + file upload** · covers B1 · deps: none (A2 merged) · IN REVIEW (#151) · PR: #151
+  - [x] **3 · P3.a · Image paste + file upload** · covers B1 · deps: none (A2 merged) · MERGED (#151) · PR: #151
     > Paste / drag-drop / paperclip → upload images, PDFs, and text/CSV to an owner-scoped
     > `agent-attachments` Storage bucket (RLS by uid prefix); descriptors ride with the
     > message, persist on the user row, and resolve to Anthropic image/document content
     > blocks before the model call. New migration `043_agent_attachments.sql` (column + bucket
     > + RLS). Pure module + replay emission unit-tested (`test:attachments`).
-  - [ ] **3 · P3.b · @-mentions in the composer** · covers B2 · deps: P3.a · TODO · PR: -
+  - [ ] **3 · P3.b · @-mentions in the composer** · covers B2 · deps: P3.a · IN REVIEW (#PENDING) · PR: #PENDING
     > Optional. `@`-typeahead over items/people/threads that pins a structured reference,
     > skipping the server-side `resolve_reference` round-trip. Needs a mention plugin over
     > the composer (light contenteditable / overlay), so it's deliberately deferred out of

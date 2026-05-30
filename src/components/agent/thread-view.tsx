@@ -40,7 +40,9 @@ import { EditableUserMessage } from "@/components/agent/editable-user-message";
 import { Button } from "@/components/ui/button";
 import { AgentComposer } from "@/components/agent/composer";
 import { StoredAttachmentList } from "@/components/agent/attachment-chip";
+import { ReferenceChipList } from "@/components/agent/reference-chip";
 import type { AttachmentDescriptor } from "@/lib/agent/attachments";
+import type { AgentReference } from "@/lib/agent/references";
 import { UndoStrip, type UndoableAction } from "@/components/agent/undo-strip";
 import {
   ApprovalCard,
@@ -80,6 +82,8 @@ interface AgentMessageRow {
   } | null;
   /** B1 (P3): attachments on a user row. */
   attachments?: AttachmentDescriptor[] | null;
+  /** B2 (P3): pinned @-mention references on a user row. */
+  pinned_references?: AgentReference[] | null;
 }
 
 /** A4/A6/A9 non-fatal, turn-level note rendered inline below the live turn. */
@@ -142,6 +146,7 @@ export function ThreadView({
   onItemBound,
   initialMessage,
   initialAttachments,
+  initialReferences,
 }: {
   itemId?: string;
   threadId?: string;
@@ -159,6 +164,9 @@ export function ThreadView({
   /** B1 (P3): attachments to send with the first message (Spotlight Ask
    * flow uploads them in its composer before the thread row exists). */
   initialAttachments?: AttachmentDescriptor[];
+  /** B2 (P3): pinned references to send with the first message (Spotlight
+   * Ask flow pins them in its composer before the thread row exists). */
+  initialReferences?: AgentReference[];
 }) {
   if (!itemId && !threadId) {
     throw new Error("ThreadView requires either itemId or threadId");
@@ -210,6 +218,7 @@ export function ThreadView({
   const [pendingUserMessage, setPendingUserMessage] = useState<{
     text: string;
     attachments?: AttachmentDescriptor[];
+    references?: AgentReference[];
   } | null>(null);
   const [undoables, setUndoables] = useState<UndoableAction[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
@@ -429,15 +438,20 @@ export function ThreadView({
     }
   }
 
-  async function send(message: string, attachments?: AttachmentDescriptor[]) {
+  async function send(
+    message: string,
+    attachments?: AttachmentDescriptor[],
+    references?: AgentReference[]
+  ) {
     // B1: a turn is valid with text, attachments, or both.
     if ((!message.trim() && !(attachments?.length ?? 0)) || streaming) return;
     // Render the user message immediately so the composer-clear ↔
     // refetch-arrive gap doesn't blink the message out of existence.
-    setPendingUserMessage({ text: message, attachments });
+    setPendingUserMessage({ text: message, attachments, references });
     await streamAgentTurn(`${baseEndpoint}/messages`, {
       message,
       attachments,
+      references,
       cursor,
       mode: activeMode,
     });
@@ -518,7 +532,7 @@ export function ThreadView({
     const k = threadId ?? itemId ?? "";
     if (!k || firedInitialRef.current === k) return;
     firedInitialRef.current = k;
-    void send(initialMessage ?? "", initialAttachments);
+    void send(initialMessage ?? "", initialAttachments, initialReferences);
     // `send` closes over streaming + activeMode + cursor by design — we
     // only want this to fire once per thread when the initial message
     // first arrives, so we don't include it in deps.
@@ -734,6 +748,13 @@ export function ThreadView({
           )}
           {pendingUserMessage && (
             <div className="space-y-1.5">
+              {pendingUserMessage.references &&
+                pendingUserMessage.references.length > 0 && (
+                  <ReferenceChipList
+                    references={pendingUserMessage.references}
+                    className="justify-end"
+                  />
+                )}
               {pendingUserMessage.attachments &&
                 pendingUserMessage.attachments.length > 0 && (
                   <StoredAttachmentList
@@ -854,6 +875,9 @@ function PersistedMessageRow({
 }) {
   if (message.role === "user") {
     const atts = Array.isArray(message.attachments) ? message.attachments : [];
+    const refs = Array.isArray(message.pinned_references)
+      ? message.pinned_references
+      : [];
     // D3: every prior user turn is editable. Editing re-runs the
     // conversation from that message (the server truncates after it).
     const body =
@@ -870,11 +894,14 @@ function PersistedMessageRow({
           </MessageContent>
         </Message>
       ) : null;
-    if (atts.length === 0) return body;
-    // B1: render attachment chips above the (optional) message body.
+    if (atts.length === 0 && refs.length === 0) return body;
+    // B1/B2: render reference + attachment chips above the (optional) body.
     return (
       <div className="space-y-1.5">
-        <StoredAttachmentList attachments={atts} />
+        {refs.length > 0 && (
+          <ReferenceChipList references={refs} className="justify-end" />
+        )}
+        {atts.length > 0 && <StoredAttachmentList attachments={atts} />}
         {body}
       </div>
     );

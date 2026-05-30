@@ -3,6 +3,11 @@ import {
   attachmentToPlaceholderBlock,
   type AttachmentDescriptor,
 } from "@/lib/agent/attachments";
+import {
+  referencesToPromptText,
+  sanitizeReferences,
+  type AgentReference,
+} from "@/lib/agent/references";
 
 /**
  * Turn-replay reconstruction (A1).
@@ -28,6 +33,10 @@ export function messagesToReplay(
      * placeholder blocks the loop resolves to real image/document
      * blocks before the model call. */
     attachments?: unknown;
+    /** B2 (P3): pinned @-mention references on a user row. Prepended to
+     * the user message as a short "already resolved" note so the model
+     * skips the resolve_reference round-trip. */
+    pinned_references?: unknown;
   }>
 ): ReplayBlock[] {
   // Reconstruct the Anthropic-shaped message list from persisted rows.
@@ -42,20 +51,26 @@ export function messagesToReplay(
       const attachments = Array.isArray(row.attachments)
         ? (row.attachments as AttachmentDescriptor[])
         : [];
-      const hasText = !!row.content && row.content.trim().length > 0;
-      // B1: a user row can carry attachments with or without text. With
-      // attachments, emit an array of placeholder blocks (+ a trailing
-      // text block when present); with text only, keep the plain-string
+      // B2: prepend a short "pinned references, already resolved" note so
+      // the model references the items directly and skips resolve_reference.
+      const refs: AgentReference[] = sanitizeReferences(row.pinned_references);
+      const refNote = referencesToPromptText(refs);
+      const text = row.content && row.content.trim().length > 0 ? row.content : "";
+      const body = refNote ? (text ? `${refNote}\n\n${text}` : refNote) : text;
+      const hasBody = body.trim().length > 0;
+      // B1: a user row can carry attachments with or without a text body.
+      // With attachments, emit an array of placeholder blocks (+ a trailing
+      // text block when present); with a body only, keep the plain-string
       // form (cheaper + unchanged behavior for the common case).
       if (attachments.length > 0) {
         const blocks: unknown[] = attachments.map(attachmentToPlaceholderBlock);
-        if (hasText) blocks.push({ type: "text", text: row.content as string });
+        if (hasBody) blocks.push({ type: "text", text: body });
         out.push({
           role: "user",
           content: blocks as unknown as ReplayBlock["content"],
         });
-      } else if (hasText) {
-        out.push({ role: "user", content: row.content as string });
+      } else if (hasBody) {
+        out.push({ role: "user", content: body });
       }
       continue;
     }

@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runAgentTurn, type AgentDelta } from "@/lib/agent/loop";
 import { claimThreadTurn, getOrCreateThreadForItem } from "@/lib/agent/threads";
 import { MAX_FILES, sanitizeAttachments } from "@/lib/agent/attachments";
+import { MAX_REFERENCES, sanitizeReferences } from "@/lib/agent/references";
 import type { CursorContext } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
@@ -53,12 +54,24 @@ const attachmentSchema = z.object({
   size: z.number().int().nonnegative(),
 });
 
+// B2 (P3): @-mention references the composer pinned. Shape-validated here;
+// the loop re-validates each id against the user's own s2d_items and rebuilds
+// the canonical label/ticket before persisting (so forged ids + arbitrary
+// client prose never reach the model).
+const referenceSchema = z.object({
+  kind: z.literal("item"),
+  id: z.string().min(1).max(128),
+  label: z.string().max(256).optional(),
+  ticketNumber: z.number().int().nullable().optional(),
+});
+
 const bodySchema = z
   .object({
     // B1: message is optional when attachments are present ("summarize
     // this" with just a screenshot). The refine below requires at least one.
     message: z.string().max(8_000).default(""),
     attachments: z.array(attachmentSchema).max(MAX_FILES).optional(),
+    references: z.array(referenceSchema).max(MAX_REFERENCES).optional(),
     cursor: cursorSchema,
     // Quality Phase 3+: caller-asserted plan/act mode. The mode toggle
     // PATCHes the thread row but the user's intent can be ahead of the
@@ -101,6 +114,9 @@ export async function POST(
   const attachments = sanitizeAttachments(parsed.data.attachments, {
     expectedPrefix: userId,
   });
+  // B2: shape-sanitize references; the loop canonicalizes the ids against
+  // the user's own s2d_items before persisting.
+  const references = sanitizeReferences(parsed.data.references);
 
   const thread = await getOrCreateThreadForItem({
     userId,
@@ -152,6 +168,7 @@ export async function POST(
           userMessage: parsed.data.message,
           cursor: parsed.data.cursor as CursorContext,
           attachments,
+          references,
           onDelta: enqueue,
           // Phase 5: ring 3 (write_world) gated by the approval card.
           toolRings: ["read", "write_mashi", "write_world"],
