@@ -141,6 +141,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P2.a** Output trust + rendering (C1, C2, C3, C4, C5) · MERGED (#149)
 - [x] **P2.b** Conversation control (D2, D3, D4) · MERGED (#150)
 - [x] **P3.a** Image paste + file upload (B1) · MERGED (#151)
+- [x] **P3.b** @-mentions in the composer (B2) · MERGED (#152)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
 `thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The batch
@@ -178,15 +179,29 @@ caught immediately.
     > message, persist on the user row, and resolve to Anthropic image/document content
     > blocks before the model call. New migration `043_agent_attachments.sql` (column + bucket
     > + RLS). Pure module + replay emission unit-tested (`test:attachments`).
-  - [ ] **3 · P3.b · @-mentions in the composer** · covers B2 · deps: P3.a · IN REVIEW (#152) · PR: #152
+  - [x] **3 · P3.b · @-mentions in the composer** · covers B2 · deps: P3.a · MERGED (#152) · PR: #152
     > Optional. `@`-typeahead over items/people/threads that pins a structured reference,
     > skipping the server-side `resolve_reference` round-trip. Needs a mention plugin over
     > the composer (light contenteditable / overlay), so it's deliberately deferred out of
     > B1. Builds on P3.a's composer.
-- [ ] **4 · P4 · Approvals + safety** · covers E1, E2, E3, E4, E5 · deps: none · TODO · PR: -
-  > Per-tool approval policy (E1), approval card weight + body + nested args (E3), inline
-  > diff/preview (E2), post-send recall/undo for ring-3 (E4), ring classification review
-  > (E5). Internal E3→E2; E1+E3→E4; E1→E5.
+- **4 · P4 · Approvals + safety** · covers E1, E2, E3, E4, E5 · deps: none · split into P4.a + P4.b
+  > Split because the work is L-effort: a cohesive approval-card chunk (card weight + body +
+  > nested args + inline diff, all frontend + a thin before-snapshot read) is separable from
+  > the policy/safety chunk (a new policy table + settings UI + provider-specific recall/undo
+  > + ring reclassification). Internal deps: E3→E2; E1→E5; E1+E3→E4.
+  - [ ] **4 · P4.a · Approval card weight + diff** · covers E2, E3 · deps: none · IN REVIEW (#153) · PR: #153
+    > Approval-card rework (E3): action weight (`approvalMetaFor`) so an irreversible SEND
+    > reads destructive + `.mashi-glow-focus` while a draft / reaction reads light; multi-line
+    > body editing; nested-object / array-element editing via `flattenEditable` / `applyEdits`
+    > (no more "non-editable" drops); a user-cancelled call renders as a neutral "Cancelled",
+    > not a red error. Inline before/after diff (E2) for update tools, fed by an optional
+    > `approvalContext` before-snapshot on the tool def (migration `045_agent_approval_context.sql`
+    > adds `agent_approvals.context`). Pure module unit-tested (`test:approval-meta`, 42 asserts).
+  - [ ] **4 · P4.b · Per-tool policy + recall/undo** · covers E1, E5, E4 · deps: P4.a · TODO · PR: -
+    > Per-tool approval policy table + settings UI (E1: always-allow / ask / never, narrowly
+    > scoped), ring reclassification (E5: draft_email / react_with_emoji lighter gate, needs
+    > E1), post-send recall/undo for ring-3 where the provider allows it (E4: Slack delete,
+    > GCal delete, Linear archive; honest "cannot recall" otherwise — needs E1 + E3 from P4.a).
 - [ ] **5 · P5 · Polish, feel + a11y** · covers H1, I1-I9, J1, J3, J4, J5, K1-K5 · deps: P1, P2 · TODO · PR: -
   > The big polish batch: sprint chat height (H1); all of Epic I motion/type/composer/
   > translucency/reasoning/tool-card (I1-I9); usage view (J1), replay (J3), a11y (J4),

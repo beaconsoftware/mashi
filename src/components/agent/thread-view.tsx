@@ -33,6 +33,10 @@ import {
 } from "@/components/ai-elements/suggestion";
 import { useCursorContext } from "@/lib/agent/cursor-context";
 import { deriveSources, type SourceDescriptor } from "@/lib/agent/provenance";
+import {
+  isCancelledResult,
+  isExpiredResult,
+} from "@/lib/agent/approval-meta";
 import { CopyButton } from "@/components/agent/copy-button";
 import { MessageSources } from "@/components/agent/message-sources";
 import { ThreadExport } from "@/components/agent/thread-export";
@@ -615,6 +619,7 @@ export function ThreadView({
           name: d.name,
           args: (d.args as Record<string, unknown>) ?? {},
           expiresAt: d.expiresAt,
+          context: d.context,
         },
       ]);
     } else if (d.kind === "approval-resolved") {
@@ -934,18 +939,26 @@ function PersistedMessageRow({
           <div className="space-y-1.5">
             {message.tool_calls!.map((tc) => {
               const result = resultByCallId.get(tc.id);
-              const state: ToolPartState = result
-                ? result.is_error
-                  ? "output-error"
-                  : "output-available"
-                : "input-available";
               const parsedOutput = result ? parseToolResult(result.content) : null;
+              // E3: a user-cancelled / expired ring-3 call reads as a neutral
+              // "Cancelled", not an alarming red error (the model still saw
+              // is_error=true so it knows the action didn't run).
+              const cancelled =
+                isCancelledResult(parsedOutput) ||
+                isExpiredResult(parsedOutput);
+              const state: ToolPartState = result
+                ? cancelled
+                  ? "output-cancelled"
+                  : result.is_error
+                    ? "output-error"
+                    : "output-available"
+                : "input-available";
               return (
                 <Tool key={tc.id} defaultOpen={false}>
                   <ToolHeader toolName={tc.name} state={state} />
                   <ToolContent>
                     <ToolInput input={tc.input} />
-                    {result && (
+                    {result && !cancelled && (
                       <ToolOutput
                         output={parsedOutput}
                         errorText={result.is_error ? result.content : null}
@@ -1041,18 +1054,24 @@ function LiveTurnRows({
       {hasToolCalls && (
         <div className="space-y-1.5">
           {liveToolCalls.map((tc) => {
+            // E3: neutral "Cancelled" outcome for a user-cancelled / expired
+            // ring-3 call instead of a red error.
+            const cancelled =
+              isCancelledResult(tc.result) || isExpiredResult(tc.result);
             const state: ToolPartState =
               tc.ok === undefined
                 ? "input-available"
-                : tc.ok
-                  ? "output-available"
-                  : "output-error";
+                : cancelled
+                  ? "output-cancelled"
+                  : tc.ok
+                    ? "output-available"
+                    : "output-error";
             return (
               <Tool key={tc.id} defaultOpen={false}>
                 <ToolHeader toolName={tc.name} state={state} />
                 <ToolContent>
                   <ToolInput input={tc.args} />
-                  {tc.ok !== undefined && (
+                  {tc.ok !== undefined && !cancelled && (
                     <ToolOutput
                       output={tc.result}
                       errorText={tc.ok === false ? tc.error ?? "error" : null}

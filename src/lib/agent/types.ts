@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { createSupabaseServiceClient } from "@/lib/supabase/server";
+import type { ApprovalContext } from "@/lib/agent/approval-meta";
 
 /**
  * Foundations for the Mashi Agent — Phase 1.
@@ -48,6 +49,20 @@ export interface ToolDefinition<TArgs, TResult> {
   ring: ToolRing;
   args: z.ZodType<TArgs>;
   handler: (input: TArgs, ctx: ToolContext) => Promise<TResult>;
+  /**
+   * E2: optional before-snapshot for the approval card. Ring-3 update tools
+   * implement this to read the resource's current values (cheaply, from the
+   * local mirror) so the approval card can diff them against the proposed
+   * `patch`. Runs in the ring-3 approval hook BEFORE the row is created, so
+   * keep it light and best-effort — return `null` if nothing useful can be
+   * read, and never throw (the hook swallows failures rather than blocking
+   * the approval). Owner-scoping is the caller's responsibility: filter by
+   * `ctx.userId` exactly as the handler does.
+   */
+  approvalContext?: (
+    input: TArgs,
+    ctx: ToolContext
+  ) => Promise<ApprovalContext | null>;
 }
 
 /** Helper for any-typed registry entries. The registry has to be

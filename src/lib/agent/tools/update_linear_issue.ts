@@ -44,6 +44,31 @@ export const update_linear_issue: ToolDefinition<
     "PATCH a Linear issue via issueUpdate (title, description, state_id, assignee_id, priority, project_id). Pause-and-approve: the call surfaces the approval card; the change fires only after the user clicks Approve. id is the Linear UUID (external_id), NOT the human identifier like 'ENG-123'.\n\nUse when: the user explicitly asks to move / reassign / re-prioritize a Linear issue. Example: { id: '…uuid…', patch: { state_id: '…uuid…', priority: 1 } }.\n\nDo NOT use to comment (call comment_on_linear_issue). Do NOT use to create (call create_linear_issue). Do NOT pass the human identifier as id — Linear's API requires the UUID. Use get_linear_issue / search_linear to ground the id and any reference UUIDs.\n\nReturns: { ok, identifier } on success; { ok: false, error } when no Linear connection exists, the id is unknown, or the mutation fails.",
   ring: "write_world",
   args,
+  // E2: best-effort before-snapshot for the approval card, read from the
+  // local linear_issues mirror. Only directly-comparable fields (title,
+  // description, priority) are surfaced — state_id / assignee_id / project_id
+  // are opaque UUIDs whose mirror equivalents are human names, so diffing
+  // them would compare apples to oranges. Never throws.
+  approvalContext: async (input, ctx) => {
+    try {
+      const { data: row } = await ctx.supabase
+        .from("linear_issues")
+        .select("title, description, priority")
+        .eq("user_id", ctx.userId)
+        .eq("external_id", input.id)
+        .maybeSingle();
+      if (!row) return null;
+      const before: Record<string, unknown> = {};
+      if (input.patch.title !== undefined) before.title = row.title ?? "";
+      if (input.patch.description !== undefined)
+        before.description = row.description ?? "";
+      if (input.patch.priority !== undefined)
+        before.priority = row.priority ?? "";
+      return { before };
+    } catch {
+      return null;
+    }
+  },
   handler: async (input, ctx) => {
     const { data: row } = await ctx.supabase
       .from("linear_issues")

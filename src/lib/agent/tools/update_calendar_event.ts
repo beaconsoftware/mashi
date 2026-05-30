@@ -41,6 +41,42 @@ export const update_calendar_event: ToolDefinition<
     "PATCH fields on an existing Google Calendar event (title, start, end, description, attendees). Pause-and-approve: the call surfaces the approval card; the change fires only after the user clicks Approve. id accepts either the calendar_events.id (UUID) or the provider external_id.\n\nUse when: the user asks to move / rename / re-attendee an event ('push the Maya meeting to Friday', 'add Mihir to the 2pm'). Example: { id: 'gcal_abc123', patch: { start: '2026-06-04T14:00:00-04:00', end: '2026-06-04T14:30:00-04:00' } }.\n\nDo NOT use to create a new event (call create_calendar_event). Do NOT use to fetch an event (call get_calendar_event first to confirm details).\n\nReturns: { ok, event_id } on success; { ok: false, error } when no GCal is connected, the datetimes are invalid, or Google rejects the patch.",
   ring: "write_world",
   args,
+  // E2: best-effort before-snapshot for the approval card, read from the
+  // local calendar_events mirror (cheap, owner-scoped). Only the fields the
+  // patch actually touches are surfaced so the diff lines up. Never throws.
+  approvalContext: async (input, ctx) => {
+    try {
+      const { data: row } = await ctx.supabase
+        .from("calendar_events")
+        .select("title, description, start_at, end_at, attendees")
+        .eq("user_id", ctx.userId)
+        .or(`id.eq.${input.id},external_id.eq.${input.id}`)
+        .limit(1)
+        .maybeSingle();
+      if (!row) return null;
+      const before: Record<string, unknown> = {};
+      if (input.patch.title !== undefined) before.title = row.title ?? "";
+      if (input.patch.description !== undefined)
+        before.description = row.description ?? "";
+      if (input.patch.start !== undefined) before.start = row.start_at ?? "";
+      if (input.patch.end !== undefined) before.end = row.end_at ?? "";
+      if (input.patch.attendees !== undefined) {
+        const raw = (row.attendees ?? []) as unknown[];
+        before.attendees = raw
+          .map((a) =>
+            typeof a === "string"
+              ? a
+              : a && typeof a === "object" && "email" in a
+                ? (a as { email?: string }).email ?? ""
+                : ""
+          )
+          .filter(Boolean);
+      }
+      return { before };
+    } catch {
+      return null;
+    }
+  },
   handler: async (input, ctx) => {
     let externalId: string | null = null;
     let connectionId: string | null = null;

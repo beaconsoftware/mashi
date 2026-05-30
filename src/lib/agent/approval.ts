@@ -28,6 +28,9 @@ interface PendingArgs {
   callId: string;
   toolName: string;
   args: unknown;
+  /** E2: optional before-snapshot (e.g. { before: {...} }) the approval card
+   * diffs against the proposed patch. Persisted alongside the row. */
+  context?: unknown;
   supabase: SupabaseClient;
 }
 
@@ -42,6 +45,7 @@ export async function createPendingApproval(
       call_id: input.callId,
       tool_name: input.toolName,
       args: input.args as object,
+      context: (input.context ?? null) as object | null,
     })
     .select("id, expires_at")
     .single();

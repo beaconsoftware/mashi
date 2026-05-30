@@ -40,6 +40,7 @@ export interface PreRunnerOpts {
     name: string;
     args: unknown;
     expiresAt: string;
+    context?: unknown;
   }) => void;
   emitApprovalResolved?: (opts: {
     id: string;
