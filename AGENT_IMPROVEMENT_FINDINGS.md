@@ -211,7 +211,7 @@ motion. Adding a new interactive file with no motion is caught immediately.
   > feedback, feel-parity gate (K1-K5). Split into three cohesive sub-rows. `MERGED` only
   > when every sub-row is. Drops the `audit:motion` carve-outs as each file goes alive:
   > thread-view + suggestion in P5.a (I2/I3/I6), conversation in P5.c (K2).
-  - [ ] **5 · P5.a · Design-system adoption pass** · covers H1, I1, I2, I3, I4, I5, I6, I7, J4, J5 · deps: P1, P2 · IN REVIEW (#TBD) · PR: -
+  - [ ] **5 · P5.a · Design-system adoption pass** · covers H1, I1, I2, I3, I4, I5, I6, I7, J4, J5 · deps: P1, P2 · IN REVIEW (#155) · PR: #155
     > The className-level polish the doc calls "low-effort, high-ROI": sprint chat height
     > floor (H1); tool-card hover + chevron + expand motion (I1); message entry motion (I2);
     > streaming caret + reasoning entry (I3); metadata type scale (I4); composer text-sm +
