@@ -20,6 +20,7 @@
  */
 
 import { useCallback, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   Loader2,
@@ -41,6 +42,7 @@ import { SpotlightSearchPanel } from "@/components/spotlight/spotlight-modal";
 import type { SpotlightHit } from "@/hooks/use-spotlight";
 import { ThreadView } from "@/components/agent/thread-view";
 import { useAgentThread } from "@/store/agent-thread-store";
+import { useS2DStore } from "@/store/s2d-store";
 import { AgentComposer } from "@/components/agent/composer";
 import type { AttachmentDescriptor } from "@/lib/agent/attachments";
 import type { AgentReference } from "@/lib/agent/references";
@@ -61,6 +63,26 @@ const SPOTLIGHT_SUGGESTIONS = [
 export function SpotlightAgent() {
   const { open, setOpen } = useSpotlightModal();
   const [tab, setTab] = useState<SpotlightTab>("ask");
+  const router = useRouter();
+  const pathname = usePathname();
+  const setSelectedItem = useS2DStore((s) => s.setSelectedItem);
+
+  // L1: open a board item from an interactive tool-result row — dismiss the
+  // Spotlight, route to the board, and select the item so its sheet opens (the
+  // same move the notification hub makes). On /s2d the board is already mounted,
+  // so select immediately; off-board, defer a tick so the sheet has a board.
+  const openBoardItem = useCallback(
+    (id: string) => {
+      setOpen(false);
+      if (pathname !== "/s2d") {
+        router.push("/s2d");
+        setTimeout(() => setSelectedItem(id), 50);
+      } else {
+        setSelectedItem(id);
+      }
+    },
+    [router, pathname, setSelectedItem, setOpen]
+  );
 
   // Orphan thread id — created on first send. Stays null until the
   // user actually types something so empty dialog opens don't create
@@ -221,6 +243,7 @@ export function SpotlightAgent() {
                 }}
                 onCreate={createOrphan}
                 onItemBound={handleItemBound}
+                onOpenItem={openBoardItem}
               />
             </div>
           </TabsContent>
@@ -265,6 +288,7 @@ function AskMashiTab({
   onCreate,
   onItemBound,
   onResumeOrphan,
+  onOpenItem,
 }: {
   threadId: string | null;
   creating: boolean;
@@ -274,6 +298,8 @@ function AskMashiTab({
   onCreate: () => Promise<string | null>;
   onItemBound: (itemId: string) => void;
   onResumeOrphan: (threadId: string) => void;
+  /** L1: open a board item from an interactive tool-result row. */
+  onOpenItem: (itemId: string) => void;
 }) {
   const openFor = useAgentThread((s) => s.openFor);
   const [sending, setSending] = useState(false);
@@ -319,6 +345,7 @@ function AskMashiTab({
         threadId={threadId}
         key={threadId}
         onItemBound={onItemBound}
+        onOpenItem={onOpenItem}
         initialMessage={pendingFirstMessage ?? seedMessage ?? undefined}
         initialAttachments={pendingFirstAttachments}
         initialReferences={pendingFirstReferences}

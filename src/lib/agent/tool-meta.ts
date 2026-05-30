@@ -149,6 +149,67 @@ function asRecord(v: unknown): Record<string, unknown> | null {
 }
 
 /**
+ * L4 — live narration: a short, human, present-tense line for what the agent
+ * is doing while a tool runs ("Searching the board", "Checking your calendar",
+ * "Noting that to remember"), so an in-flight turn reads as present activity
+ * instead of a generic spinner. Pure and name-based: derived at tool_call_start
+ * before the arguments have streamed, so it must not depend on input.
+ *
+ * Most tools read well as the gerund form of their label ("Search the board" →
+ * "Searching the board"); the handful below get a hand-tuned line where the
+ * mechanical transform reads awkwardly. Never throws — an unmapped tool falls
+ * back to the gerund transform, then to a generic "Working".
+ */
+const TOOL_NARRATION: Record<string, string> = {
+  whoami: "Looking up your profile",
+  list_today: "Reviewing today",
+  get_today: "Reviewing today",
+  get_style: "Checking your writing style",
+  context_for_item: "Gathering context",
+  get_message_thread: "Reading the thread",
+  search_messages: "Searching your messages",
+  get_meeting: "Pulling up the meeting",
+  search_meetings: "Searching meetings",
+  get_cursor_context: "Checking what you're viewing",
+  get_current_sprint: "Checking the current sprint",
+  get_thread_summary: "Summarizing the thread",
+  resolve_reference: "Figuring out what you mean",
+  ask_followup_question: "Asking a follow-up",
+  set_plan: "Updating the plan",
+  propose_memory: "Noting that to remember",
+  send_email: "Sending the email",
+  draft_email: "Drafting the email",
+  send_slack_message: "Sending the Slack message",
+  react_with_emoji: "Adding a reaction",
+  create_calendar_event: "Adding it to your calendar",
+  run_sync: "Syncing your accounts",
+};
+
+/** Gerund-ify the first word of a sentence-case label: "Search the board" →
+ * "Searching the board", "Open an item" → "Opening an item". Handles the common
+ * `-e` drop (Update → Updating) and reads fine for the rest. */
+function gerundLabel(label: string): string {
+  const [first, ...rest] = label.split(" ");
+  if (!first) return "Working";
+  const lower = first.toLowerCase();
+  const stem = lower.endsWith("e") && !lower.endsWith("ee")
+    ? `${lower.slice(0, -1)}ing`
+    : `${lower}ing`;
+  const head = stem.charAt(0).toUpperCase() + stem.slice(1);
+  return [head, ...rest].join(" ");
+}
+
+/**
+ * The L4 narration line for a tool. Explicit when we have one, else the gerund
+ * transform of the (possibly humanized) label. Never empty.
+ */
+export function toolNarration(toolName: string): string {
+  const explicit = TOOL_NARRATION[toolName];
+  if (explicit) return explicit;
+  return gerundLabel(toolMeta(toolName).label);
+}
+
+/**
  * A compact "what happened" line for the collapsed card. Returns null when
  * nothing useful can be said (the badge already conveys running / error /
  * cancelled), so the caller renders just the label.

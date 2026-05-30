@@ -7,6 +7,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { TOOL_REGISTRY } from "@/lib/agent/registry";
 import { appendMessage, loadThread, releaseThreadTurn } from "@/lib/agent/threads";
 import { messagesToReplay } from "@/lib/agent/replay";
+import { toolNarration } from "@/lib/agent/tool-meta";
 import { resolveAttachmentRefs } from "@/lib/agent/attachments-server";
 import type { AttachmentDescriptor } from "@/lib/agent/attachments";
 import type { AgentReference } from "@/lib/agent/references";
@@ -66,7 +67,14 @@ function partialTextFromBlocks(
 
 export type AgentDelta =
   | { kind: "text"; text: string }
-  | { kind: "tool_call_start"; id: string; name: string }
+  | {
+      kind: "tool_call_start";
+      id: string;
+      name: string;
+      /** L4: a short, human, present-tense line for what the agent is doing
+       * ("Searching the board"). Name-based — emitted before args stream. */
+      narration?: string;
+    }
   | { kind: "tool_call_args"; id: string; args: unknown }
   | { kind: "tool_call_result"; id: string; ok: boolean; result?: unknown; error?: string }
   | {
@@ -555,6 +563,7 @@ async function runAgentTurnInner(
                 kind: "tool_call_start",
                 id: event.content_block.id,
                 name: event.content_block.name,
+                narration: toolNarration(event.content_block.name),
               });
             }
           } else if (event.type === "content_block_delta") {

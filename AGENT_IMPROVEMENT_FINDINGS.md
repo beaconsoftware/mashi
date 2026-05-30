@@ -148,6 +148,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P5.b** Component identity redesign + observability (I8, I9, J1, J3) · MERGED (#157)
 - [x] **P5.c** Feel parity — cadence + scroll + perf + optimistic (K1-K5) · MERGED (#158)
 - [x] **P6.a** Agent-proposed MASHI.md memory (F1) · MERGED (#159)
+- [x] **P6.b** Playbooks — canned multi-step procedures (F2) · MERGED (#160)
 
 `audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
 that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
@@ -252,17 +253,38 @@ motion is caught immediately.
     > (`restore_mashi_md` reverse op). Always-on in act mode (CORE_TOOLS) so offers are
     > reliable; the loop already re-reads MASHI.md every turn, so an accepted fact is present
     > next turn. No migration (uses existing `user_profile.mashi_md` + `agent_actions`).
-  - [ ] **6 · P6.b · Playbooks (F2)** · covers F2 · deps: P6.a · IN REVIEW (#160) · PR: #160
+  - [x] **6 · P6.b · Playbooks (F2)** · covers F2 · deps: P6.a · MERGED (#160) · PR: #160
     > A small library of user-triggerable, parameterized, multi-step playbooks the agent runs
     > step by step with the normal approval gates; a trigger surface in Spotlight. Pairs with
     > G1 (X2). New table + migration (`047_agent_playbooks.sql`). Built-ins live in code
     > (`BUILTIN_PLAYBOOKS`); user playbooks persist to the owner-scoped `agent_playbooks`
     > table. Triggering composes a single user-turn plan prompt (pure `playbooks.ts`,
     > `test:playbooks`) and seeds an orphan thread — no loop change, ring-3 steps still gate.
-  - [ ] **6 · P6.c · Aliveness phase 1 (L1, L2, L3, L4)** · covers L1, L2, L3, L4 · deps: P6.a · TODO · PR: -
+  - **6 · P6.c · Aliveness phase 1 (L1, L2, L3, L4)** · covers L1, L2, L3, L4 · deps: P6.a · split into P6.c.a + P6.c.b
     > Interactive/generative tool-result components (L1, needs I9 + E3, both merged), slash
     > commands + keyboard-first (L2, shares B2's typeahead), contextual quick-action chips (L3),
-    > live tool narration + presence (L4, needs I8/K1 + F1's memory moment from P6.a).
+    > live tool narration + presence (L4, needs I8/K1 + F1's memory moment from P6.a). Too large
+    > for one clean PR, and the L-internal deps order it (L2/L3 both need L1; L4 is independent),
+    > so it's split: P6.c.a lands the L1 foundation + L4 narration; P6.c.b lands L2 + L3 (both on
+    > L1). `MERGED` only when both sub-rows are.
+    - [ ] **6 · P6.c.a · Interactive tool results + live narration (L1, L4)** · covers L1, L4 · deps: P6.a · IN REVIEW (#PENDING) · PR: #PENDING
+      > L1: a result-type → component registry renders board-item results (search_board,
+      > list_today) as a live list with inline Open / Snooze / Done, and a set_plan result as a
+      > live checklist; unmapped results fall back to the I9 readable card. Inline actions dispatch
+      > a natural-language turn through the normal `send` pipeline, so every action is ring-gated
+      > exactly like a typed one (no loop change, no direct tool calls). L4: a name-based,
+      > present-tense narration line (`toolNarration`, pure, `test:tool-meta`) rides the
+      > `tool_call_start` delta and renders as the running card's subtext ("Searching the board",
+      > "Noting that to remember"). Pure extractors (`deriveActionableItems`, `derivePlanSteps`)
+      > unit-tested via `test:provenance`. No migration. Scoping note: the streaming "checklist
+      > ticks off mid-turn" protocol is deferred to a future sub-row — the set_plan checklist
+      > reflects stored done-state and re-renders across turns, but there is no turn-level
+      > step-progress event yet (inventing one overlaps the playbook execution model).
+    - [ ] **6 · P6.c.b · Slash commands + quick-action chips (L2, L3)** · covers L2, L3 · deps: P6.c.a · TODO · PR: -
+      > L2: slash-command typeahead over the composer (shares B2's mention typeahead) + a
+      > keyboard model over the thread (navigate results, one-key approve/undo). L3: contextual
+      > quick-action chips after a turn, wired to the same dispatch path L1 introduced. Both
+      > depend on L1's interactive surface (P6.c.a).
   - [ ] **6 · P6.d · MCP client behind a flag (G2)** · covers G2 · deps: P6.a · TODO · PR: -
     > XL, staged, behind a flag: an MCP *client* so users can register external MCP servers;
     > their tools map into the ring model (external writes → ring-3 approval) + tool-retrieval
