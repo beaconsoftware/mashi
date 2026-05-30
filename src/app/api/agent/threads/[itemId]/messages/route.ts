@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runAgentTurn, type AgentDelta } from "@/lib/agent/loop";
 import { claimThreadTurn, getOrCreateThreadForItem } from "@/lib/agent/threads";
+import { MAX_FILES, sanitizeAttachments } from "@/lib/agent/attachments";
 import type { CursorContext } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
@@ -40,17 +41,37 @@ const cursorSchema = z.object({
   now: z.string(),
 });
 
-const bodySchema = z.object({
-  message: z.string().min(1).max(8_000),
-  cursor: cursorSchema,
-  // Quality Phase 3+: caller-asserted plan/act mode. The mode toggle
-  // PATCHes the thread row but the user's intent can be ahead of the
-  // PATCH (slow network, replica lag) when they send the next message.
-  // Passing mode in the body honors UI intent for this turn regardless
-  // of whether the row write has landed yet. Optional — falls back to
-  // the persisted thread row in the loop.
-  mode: z.enum(["plan", "act"]).optional(),
+// B1 (P3): attachment descriptors the composer uploaded to Storage. Bytes
+// are never in the body; this is the pointer + metadata. Re-validated
+// against the user prefix below (sanitizeAttachments) so a forged path
+// can't reference another user's object.
+const attachmentSchema = z.object({
+  kind: z.enum(["image", "document"]),
+  storagePath: z.string().min(1).max(512),
+  mime: z.string().min(1).max(128),
+  name: z.string().min(1).max(256),
+  size: z.number().int().nonnegative(),
 });
+
+const bodySchema = z
+  .object({
+    // B1: message is optional when attachments are present ("summarize
+    // this" with just a screenshot). The refine below requires at least one.
+    message: z.string().max(8_000).default(""),
+    attachments: z.array(attachmentSchema).max(MAX_FILES).optional(),
+    cursor: cursorSchema,
+    // Quality Phase 3+: caller-asserted plan/act mode. The mode toggle
+    // PATCHes the thread row but the user's intent can be ahead of the
+    // PATCH (slow network, replica lag) when they send the next message.
+    // Passing mode in the body honors UI intent for this turn regardless
+    // of whether the row write has landed yet. Optional — falls back to
+    // the persisted thread row in the loop.
+    mode: z.enum(["plan", "act"]).optional(),
+  })
+  .refine(
+    (d) => d.message.trim().length > 0 || (d.attachments?.length ?? 0) > 0,
+    { message: "Send a message or attach a file." }
+  );
 
 export async function POST(
   req: NextRequest,
@@ -73,6 +94,13 @@ export async function POST(
 
   const { itemId } = await params;
   const userId = userData.user.id;
+
+  // B1: drop any descriptor whose path isn't under this user's prefix or
+  // fails the mime/size caps, so a forged body can't smuggle in a foreign
+  // or oversized file.
+  const attachments = sanitizeAttachments(parsed.data.attachments, {
+    expectedPrefix: userId,
+  });
 
   const thread = await getOrCreateThreadForItem({
     userId,
@@ -123,6 +151,7 @@ export async function POST(
           userId,
           userMessage: parsed.data.message,
           cursor: parsed.data.cursor as CursorContext,
+          attachments,
           onDelta: enqueue,
           // Phase 5: ring 3 (write_world) gated by the approval card.
           toolRings: ["read", "write_mashi", "write_world"],

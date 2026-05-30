@@ -7,6 +7,8 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { TOOL_REGISTRY } from "@/lib/agent/registry";
 import { appendMessage, loadThread, releaseThreadTurn } from "@/lib/agent/threads";
 import { messagesToReplay } from "@/lib/agent/replay";
+import { resolveAttachmentRefs } from "@/lib/agent/attachments-server";
+import type { AttachmentDescriptor } from "@/lib/agent/attachments";
 import type { AnyToolDefinition, CursorContext, ToolRing } from "@/lib/agent/types";
 import { serializeCursor } from "@/lib/agent/cursor-serialize";
 import type { ReverseOp } from "@/lib/agent/undo";
@@ -181,6 +183,14 @@ export interface RunAgentTurnOpts {
    * `userMessage` is still used for per-turn tool retrieval in that case.
    */
   appendUserMessage?: boolean;
+  /**
+   * B1 (P3): attachments the user sent with this turn (images / PDFs /
+   * text files already uploaded to Storage). Persisted on the user row
+   * and resolved into Anthropic image/document content blocks before the
+   * model call. Ignored on re-runs (appendUserMessage=false) since the
+   * anchor row already carries its attachments.
+   */
+  attachments?: AttachmentDescriptor[];
 }
 
 interface AnthropicToolDef {
@@ -322,6 +332,7 @@ async function runAgentTurnInner(
       role: "user",
       content: opts.userMessage,
       cursorContext: opts.cursor,
+      attachments: opts.attachments,
       supabase,
     });
   }
@@ -397,6 +408,17 @@ async function runAgentTurnInner(
       ] as unknown as Anthropic.Messages.MessageParam["content"],
     });
   }
+
+  // B1 (P3): swap each replayed `mashi_ref` placeholder for a real
+  // image/document content block by downloading the bytes from Storage.
+  // Done once here (not per iteration) so the base64 payload is built a
+  // single time; subsequent tool round-trips only append to messageList.
+  // Re-validates ownership by path prefix and bounds total resolved bytes
+  // per turn (cost guarded further by A6).
+  await resolveAttachmentRefs(messageList, {
+    userId: opts.userId,
+    supabase,
+  });
 
   const maxIters = Math.min(Math.max(opts.maxIterations ?? 6, 1), 12);
   const model = MODELS[opts.modelKey ?? "primary"];

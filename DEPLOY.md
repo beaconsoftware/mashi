@@ -17,6 +17,7 @@ on the way to first colleague signing in.
 | Hosted DB | Supabase project `mashi` (ref `akpbzaivscqvaoapkdwd`, region `us-east-1`) | Migrations 001–012 applied. RLS verified. |
 | Local dev DB | Supabase Docker (`supabase_db_mashi`) | Mirrors production schema; full migration history. |
 | Auth | Supabase Auth + Google OAuth | App is in Google "Testing" mode — each new user must be added as a Test User. |
+| Storage | Supabase Storage bucket `agent-attachments` (private) | Created by migration `043`. Holds agent-composer uploads (images/PDFs/text), owner-only RLS by `${uid}/` path prefix. No public access; served via short-lived signed URLs. |
 
 ## Inviting a new user
 

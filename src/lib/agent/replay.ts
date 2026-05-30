@@ -1,4 +1,8 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import {
+  attachmentToPlaceholderBlock,
+  type AttachmentDescriptor,
+} from "@/lib/agent/attachments";
 
 /**
  * Turn-replay reconstruction (A1).
@@ -20,6 +24,10 @@ export function messagesToReplay(
     content: string | null;
     tool_calls: unknown;
     tool_results: unknown;
+    /** B1 (P3): attachments on a user row. Emitted as `mashi_ref`
+     * placeholder blocks the loop resolves to real image/document
+     * blocks before the model call. */
+    attachments?: unknown;
   }>
 ): ReplayBlock[] {
   // Reconstruct the Anthropic-shaped message list from persisted rows.
@@ -31,8 +39,23 @@ export function messagesToReplay(
   for (const row of rows) {
     if (row.role === "system") continue;
     if (row.role === "user") {
-      if (row.content && row.content.trim().length > 0) {
-        out.push({ role: "user", content: row.content });
+      const attachments = Array.isArray(row.attachments)
+        ? (row.attachments as AttachmentDescriptor[])
+        : [];
+      const hasText = !!row.content && row.content.trim().length > 0;
+      // B1: a user row can carry attachments with or without text. With
+      // attachments, emit an array of placeholder blocks (+ a trailing
+      // text block when present); with text only, keep the plain-string
+      // form (cheaper + unchanged behavior for the common case).
+      if (attachments.length > 0) {
+        const blocks: unknown[] = attachments.map(attachmentToPlaceholderBlock);
+        if (hasText) blocks.push({ type: "text", text: row.content as string });
+        out.push({
+          role: "user",
+          content: blocks as unknown as ReplayBlock["content"],
+        });
+      } else if (hasText) {
+        out.push({ role: "user", content: row.content as string });
       }
       continue;
     }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import type { AttachmentDescriptor } from "@/lib/agent/attachments";
 
 /**
  * Persistence helpers for agent_threads + agent_messages. Server-only;
@@ -62,6 +63,10 @@ export interface AgentMessageRow {
    * Rows are kept for auditability but excluded from replay, the thread
    * view, and search. NULL for live messages. */
   deleted_at: string | null;
+  /** B1 (P3): attachment descriptors on a user row {kind, storagePath,
+   * mime, name, size}. Bytes live in Storage; this is the pointer. NULL
+   * when the message has no attachments. */
+  attachments: AttachmentDescriptor[] | null;
 }
 
 type Supa = SupabaseClient;
@@ -177,6 +182,8 @@ interface AppendMessageInput {
    * cancelled, A9 truncated, A6 budget_exhausted). NULL for healthy
    * messages. */
   metadata?: Record<string, unknown> | null;
+  /** B1 (P3): attachment descriptors on a user row. NULL/empty otherwise. */
+  attachments?: AttachmentDescriptor[] | null;
   supabase?: Supa;
 }
 
@@ -200,6 +207,10 @@ export async function appendMessage(
       tool_results: opts.toolResults ?? null,
       cursor_context: opts.cursorContext ?? null,
       metadata: opts.metadata ?? null,
+      attachments:
+        opts.attachments && opts.attachments.length > 0
+          ? opts.attachments
+          : null,
     })
     .select("*")
     .single();

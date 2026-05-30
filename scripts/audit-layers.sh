@@ -79,6 +79,12 @@ EXCLUDE_FILES=(
   # rendered inside a row-click container where the Radix Select popover
   # would conflict). Migrate when touching this file again.
   "src/components/settings/connections-manager.tsx"
+  # B1 (P3): the agent composer uses a hidden <input type="file"> behind a
+  # paperclip <Button> for attachment picking. shadcn has no file-input
+  # primitive (it isn't a Radix component), so the hidden-input pattern is
+  # the sanctioned approach. The file uses <Button>/<Textarea> from ui/ for
+  # every other control; only the file input is raw.
+  "src/components/agent/composer.tsx"
 )
 
 build_exclude_grep() {

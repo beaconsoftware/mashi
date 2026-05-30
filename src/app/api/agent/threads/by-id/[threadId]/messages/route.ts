@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runAgentTurn, type AgentDelta } from "@/lib/agent/loop";
 import { claimThreadTurn } from "@/lib/agent/threads";
+import { MAX_FILES, sanitizeAttachments } from "@/lib/agent/attachments";
 import type { CursorContext } from "@/lib/agent/types";
 
 export const runtime = "nodejs";
@@ -36,14 +37,29 @@ const cursorSchema = z.object({
   now: z.string(),
 });
 
-const bodySchema = z.object({
-  message: z.string().min(1).max(8_000),
-  cursor: cursorSchema,
-  // Quality Phase 3+: caller-asserted plan/act mode. See the item-bound
-  // route for the rationale. Optional — falls back to the persisted
-  // thread row in the loop.
-  mode: z.enum(["plan", "act"]).optional(),
+// B1 (P3): see the item-bound route for the rationale + prefix re-check.
+const attachmentSchema = z.object({
+  kind: z.enum(["image", "document"]),
+  storagePath: z.string().min(1).max(512),
+  mime: z.string().min(1).max(128),
+  name: z.string().min(1).max(256),
+  size: z.number().int().nonnegative(),
 });
+
+const bodySchema = z
+  .object({
+    message: z.string().max(8_000).default(""),
+    attachments: z.array(attachmentSchema).max(MAX_FILES).optional(),
+    cursor: cursorSchema,
+    // Quality Phase 3+: caller-asserted plan/act mode. See the item-bound
+    // route for the rationale. Optional — falls back to the persisted
+    // thread row in the loop.
+    mode: z.enum(["plan", "act"]).optional(),
+  })
+  .refine(
+    (d) => d.message.trim().length > 0 || (d.attachments?.length ?? 0) > 0,
+    { message: "Send a message or attach a file." }
+  );
 
 export async function POST(
   req: NextRequest,
@@ -77,6 +93,11 @@ export async function POST(
     return new Response("Thread not found", { status: 404 });
   }
 
+  // B1: re-validate attachments against this user's prefix + caps.
+  const attachments = sanitizeAttachments(parsed.data.attachments, {
+    expectedPrefix: userId,
+  });
+
   // A1: claim the single in-flight turn slot before streaming (see the
   // item-bound route for rationale).
   const turnId = await claimThreadTurn({ userId, threadId });
@@ -109,6 +130,7 @@ export async function POST(
           userId,
           userMessage: parsed.data.message,
           cursor: parsed.data.cursor as CursorContext,
+          attachments,
           onDelta: enqueue,
           toolRings: ["read", "write_mashi", "write_world"],
           mode: parsed.data.mode,

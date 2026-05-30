@@ -139,6 +139,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **A7** Model/pricing drift guard · MERGED (#146)
 - [x] **P1** Foundation hardening (A3, A4, A5, A6, A8, A9) · MERGED (#148)
 - [x] **P2.a** Output trust + rendering (C1, C2, C3, C4, C5) · MERGED (#149)
+- [x] **P2.b** Conversation control (D2, D3, D4) · MERGED (#150)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
 `thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The batch
@@ -161,14 +162,26 @@ caught immediately.
     > Citations / source chips (C1), readable tool-result summaries + wrap fix (C2), copy
     > buttons (C3), code highlighting + copy via `@streamdown/code` (C4), markdown 16→14 (C5).
     > All frontend; provenance/summary logic is a pure, unit-tested module (`test:provenance`).
-  - [ ] **2 · P2.b · Conversation control** · covers D2, D3, D4 · deps: P1, P2.a · IN REVIEW (#150) · PR: #150
+  - [x] **2 · P2.b · Conversation control** · covers D2, D3, D4 · deps: P1, P2.a · MERGED (#150) · PR: #150
     > Regenerate last turn (D2, needs A8 from P1), edit-and-resend a prior user turn (D3,
     > shares D2's truncation/re-run path), export thread + cross-thread transcript search
     > (D4, the larger half: a `user_id`-scoped full-text index + a new Search scope). Builds
     > on P2.a's thread-view changes.
-- [ ] **3 · P3 · Input modalities** · covers B1, B2 · deps: none (A2 merged) · TODO · PR: -
-  > Image paste + file upload (B1, may split into B1a/B1b sub-rows), @-mentions in composer
-  > (B2, optional). B1 is the substantive piece; B2 only if it falls out cheaply.
+- **3 · P3 · Input modalities** · covers B1, B2 · deps: none (A2 merged) · split into P3.a + P3.b
+  > Image paste + file upload (B1) is the substantive piece; @-mentions (B2) is optional and
+  > only worthwhile "if it falls out cheaply." It doesn't, a mention typeahead needs its own
+  > composer rework, so it's split into its own sub-row rather than jammed into B1's diff.
+  - [ ] **3 · P3.a · Image paste + file upload** · covers B1 · deps: none (A2 merged) · IN REVIEW (#151) · PR: #151
+    > Paste / drag-drop / paperclip → upload images, PDFs, and text/CSV to an owner-scoped
+    > `agent-attachments` Storage bucket (RLS by uid prefix); descriptors ride with the
+    > message, persist on the user row, and resolve to Anthropic image/document content
+    > blocks before the model call. New migration `043_agent_attachments.sql` (column + bucket
+    > + RLS). Pure module + replay emission unit-tested (`test:attachments`).
+  - [ ] **3 · P3.b · @-mentions in the composer** · covers B2 · deps: P3.a · TODO · PR: -
+    > Optional. `@`-typeahead over items/people/threads that pins a structured reference,
+    > skipping the server-side `resolve_reference` round-trip. Needs a mention plugin over
+    > the composer (light contenteditable / overlay), so it's deliberately deferred out of
+    > B1. Builds on P3.a's composer.
 - [ ] **4 · P4 · Approvals + safety** · covers E1, E2, E3, E4, E5 · deps: none · TODO · PR: -
   > Per-tool approval policy (E1), approval card weight + body + nested args (E3), inline
   > diff/preview (E2), post-send recall/undo for ring-3 (E4), ring classification review
