@@ -24,7 +24,7 @@ interface ModelPricing {
   cache_write: number;
 }
 
-const PRICING: Record<string, ModelPricing> = {
+export const PRICING: Record<string, ModelPricing> = {
   // Opus 4.7 / 4.6
   "claude-opus-4-7":           { input: 15, output: 75, cache_read: 1.5,  cache_write: 18.75 },
   "claude-opus-4-6":           { input: 15, output: 75, cache_read: 1.5,  cache_write: 18.75 },

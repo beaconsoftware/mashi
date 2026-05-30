@@ -131,8 +131,8 @@ caught immediately.
 ### Sprint 1: foundation + flagged fixes
 
 - [x] **1 · A1** Per-thread turn lock + ordered replay · deps: none · MERGED (#144) · PR: #144
-- [ ] **2 · A2** Route loop through `trackedStream` · deps: none · IN REVIEW (#145) · PR: #145
-- [ ] **3 · A7** Model/pricing drift guard · deps: none · TODO · PR: -
+- [x] **2 · A2** Route loop through `trackedStream` · deps: none · MERGED (#145) · PR: #145
+- [ ] **3 · A7** Model/pricing drift guard · deps: none · IN REVIEW (#146) · PR: #146
 - [ ] **4 · A3** Cancellation + Stop button · deps: A1 · TODO · PR: -
 - [ ] **5 · A8** Preserve partial text on error/abort · deps: A1, A3 · TODO · PR: -
 - [ ] **6 · H1** Sprint Focus-card chat height fix · deps: none · TODO · PR: -
