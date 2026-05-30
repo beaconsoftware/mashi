@@ -83,9 +83,17 @@ export const ConversationScrollButton = ({
 
   return (
     !isAtBottom && (
+      // K2: the "jump to latest" affordance. The StickToBottom container pins
+      // to the bottom while content streams and releases the pin the moment the
+      // user scrolls up; this button appears when unpinned and eases the view
+      // back down in one tap. It fades + rises in on appearance (.mashi-enter)
+      // and presses on tap (.mashi-press) so it reads as part of the live
+      // surface, not a sudden flat control. Both short-circuit under
+      // prefers-reduced-motion.
       <Button
+        aria-label="Jump to latest"
         className={cn(
-          "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full dark:bg-background dark:hover:bg-muted",
+          "mashi-enter mashi-press absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full dark:bg-background dark:hover:bg-muted",
           className
         )}
         onClick={handleScrollToBottom}
