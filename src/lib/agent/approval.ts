@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { abortableSleep } from "@/lib/agent/retry";
 
 /**
  * Per-call approval gate for ring-3 (write_world) agent tools.
@@ -114,7 +115,12 @@ export async function awaitApprovalDecision(
       });
       return { kind: "expired" };
     }
-    await new Promise((r) => setTimeout(r, pollMs));
+    // A5: an abortable sleep so a client disconnect / Stop ends the poll
+    // within the abort tick rather than waiting out the full interval.
+    await abortableSleep(pollMs, input.signal);
+    if (input.signal?.aborted) {
+      return { kind: "cancel", reason: "client aborted" };
+    }
   }
 
   await markExpired({

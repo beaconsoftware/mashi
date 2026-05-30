@@ -113,6 +113,8 @@ export async function POST(
           toolRings: ["read", "write_mashi", "write_world"],
           mode: parsed.data.mode,
           turnId,
+          // A3: forward the request abort signal (see the item-bound route).
+          signal: req.signal,
         });
       } catch (err) {
         enqueue({

@@ -35,6 +35,11 @@ export interface ToolContext {
    * write tools (Phase 3+) to write an audit row tied to a
    * conversation. Empty for Phase 1 reads. */
   threadId?: string;
+  /** A3/A5: the in-flight turn's abort signal, when the call originates
+   * from a streaming route. The ring-3 approval hook threads it into its
+   * poll so an abandoned approval (closed tab, Stop) stops polling within
+   * one interval instead of burning the full 270s window. */
+  signal?: AbortSignal;
 }
 
 export interface ToolDefinition<TArgs, TResult> {

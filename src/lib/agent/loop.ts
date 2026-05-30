@@ -17,6 +17,30 @@ import {
   calledToolNamesFromMessages,
   retrieveTools,
 } from "@/lib/agent/retrieve";
+import {
+  MAX_STREAM_RETRIES,
+  abortableSleep,
+  backoffDelayMs,
+  isAbortError,
+  isTransientError,
+  retryAfterMs,
+} from "@/lib/agent/retry";
+import { TurnBudget } from "@/lib/agent/budget";
+
+/** A9: prose-sized default output cap. 1024 truncated drafts mid-sentence. */
+const DEFAULT_MAX_TOKENS = 4096;
+
+/** Sorted partial text accumulated across a stream's text blocks. Used to
+ * preserve what the user saw when a stream errors or is aborted (A8). */
+function partialTextFromBlocks(
+  blocks: Map<number, { type: string; text?: string }>
+): string {
+  return [...blocks.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, b]) => (b.type === "text" ? b.text ?? "" : ""))
+    .filter((t) => t.length > 0)
+    .join("\n");
+}
 
 /**
  * Mashi Agent — read-only loop (Phase 2).
@@ -82,6 +106,19 @@ export type AgentDelta =
       options?: string[];
     }
   | { kind: "done" }
+  | {
+      /**
+       * Non-fatal turn-level note the UI renders inline without killing the
+       * stream. Used by P1 for: A4 transient-retry hiccups ("Connection
+       * hiccup, retrying…"), A9 truncation ("response was cut off"), and A6
+       * budget stops. `level` drives styling; `code` lets the client react
+       * (e.g. show a Retry affordance on a retryable error).
+       */
+      kind: "notice";
+      level: "info" | "warn";
+      message: string;
+      code?: "retrying" | "truncated" | "budget" | "cancelled" | "retryable";
+    }
   | { kind: "error"; message: string };
 
 export type AgentMode = "plan" | "act";
@@ -113,6 +150,28 @@ export interface RunAgentTurnOpts {
    * throws). Absent for callers that don't take the lock.
    */
   turnId?: string;
+  /**
+   * A3 cancellation: the request's abort signal. Checked at every
+   * iteration boundary and forwarded into the Anthropic stream and the
+   * approval poll, so a Stop click / closed tab aborts the upstream model
+   * call and stops approval polling instead of running to completion.
+   */
+  signal?: AbortSignal;
+  /**
+   * A9: per-model-call `max_tokens`. Defaults to a prose-sized cap so
+   * drafts (emails, briefs, Linear bodies) aren't truncated at 1024. A
+   * call that still stops on `max_tokens` is flagged truncated, never
+   * treated as a finished answer.
+   */
+  maxTokens?: number;
+  /**
+   * A6: soft per-turn token budget. The loop accumulates real usage from
+   * each round-trip and stops at the next iteration boundary once crossed.
+   * Defaults generous for interactive; scheduled runs pass a tighter cap.
+   */
+  tokenBudget?: number;
+  /** A6: optional per-turn USD ceiling; whichever ceiling trips first. */
+  costBudget?: number;
 }
 
 interface AnthropicToolDef {
@@ -328,87 +387,214 @@ async function runAgentTurnInner(
 
   const maxIters = Math.min(Math.max(opts.maxIterations ?? 6, 1), 12);
   const model = MODELS[opts.modelKey ?? "primary"];
+  // A9: prose-sized output cap so drafts aren't truncated at 1024.
+  const maxTokens = Math.max(opts.maxTokens ?? DEFAULT_MAX_TOKENS, 1);
+  // A6: soft per-turn budget. Folds in each round-trip's real usage (A2
+  // wired the tracking) and is checked at the iteration boundary, so we
+  // only ever stop between fully-resolved iterations, never mid-tool.
+  const budget = new TurnBudget({
+    maxTokens: opts.tokenBudget,
+    maxCostUsd: opts.costBudget,
+  });
 
   let safety = 0;
   while (safety < maxIters) {
     safety += 1;
 
-    // A2: route every interactive model call through trackedStream so each
-    // round-trip lands a row in ai_usage_log (purpose "agent:turn",
-    // attributed to the user). The interactive loop is the dominant cost
-    // (Opus, up to maxIters calls per user turn); leaving it on the raw
-    // client meant the usage view silently under-reported. trackedStream
-    // returns the same MessageStream the SDK does, so the async-iteration
-    // and finalMessage() calls below are unchanged — it just awaits the
-    // final message internally to log usage as a side effect.
-    const stream = trackedStream(
-      {
-        model,
-        system: systemPrompt,
-        messages: messageList,
-        max_tokens: 1024,
-        tools: anthropicTools as unknown as Anthropic.Messages.Tool[],
-      },
-      "agent:turn",
-      opts.userId
-    );
+    // A3: cancel at the iteration boundary — never mid-tool / mid-approval.
+    // A partial answer from the prior iteration is already persisted; here
+    // there's nothing in flight, so we just end the stream.
+    if (opts.signal?.aborted) {
+      opts.onDelta({ kind: "done" });
+      return;
+    }
 
-    // Live text + tool_use accumulators per content block index.
-    const blockState = new Map<
-      number,
-      | { type: "text"; text: string }
-      | { type: "tool_use"; id: string; name: string; partialJson: string }
-    >();
-
-    try {
-      for await (const event of stream) {
-        if (event.type === "content_block_start") {
-          if (event.content_block.type === "text") {
-            blockState.set(event.index, { type: "text", text: "" });
-          } else if (event.content_block.type === "tool_use") {
-            blockState.set(event.index, {
-              type: "tool_use",
-              id: event.content_block.id,
-              name: event.content_block.name,
-              partialJson: "",
-            });
-            opts.onDelta({
-              kind: "tool_call_start",
-              id: event.content_block.id,
-              name: event.content_block.name,
-            });
-          }
-        } else if (event.type === "content_block_delta") {
-          const state = blockState.get(event.index);
-          if (!state) continue;
-          if (event.delta.type === "text_delta" && state.type === "text") {
-            const sanitized = sanitizeForAITells(event.delta.text);
-            state.text += sanitized;
-            if (sanitized.length > 0) {
-              opts.onDelta({ kind: "text", text: sanitized });
-            }
-          } else if (
-            event.delta.type === "input_json_delta" &&
-            state.type === "tool_use"
-          ) {
-            state.partialJson += event.delta.partial_json;
-          }
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "stream error";
-      opts.onDelta({ kind: "error", message: msg });
+    // A6: stop gracefully once the turn's budget is spent. The prior
+    // iteration persisted its tool_results, so the thread stays coherent
+    // (every tool_use answered). A clear terminal message beats silently
+    // continuing toward an uncapped Opus bill.
+    if (budget.exceeded()) {
+      const note =
+        "I've reached this turn's budget, so I'm stopping here. Ask me to continue if you'd like.";
+      opts.onDelta({
+        kind: "notice",
+        level: "warn",
+        message: note,
+        code: "budget",
+      });
       await appendMessage({
         userId: opts.userId,
         threadId: opts.threadId,
         role: "assistant",
-        content: `[stream error] ${msg}`,
+        content: note,
+        metadata: { budget_exhausted: true },
         supabase,
       });
-      return;
+      break;
     }
 
-    const finalMsg = await stream.finalMessage();
+    // A2: route every interactive model call through trackedStream so each
+    // round-trip lands a row in ai_usage_log (purpose "agent:turn",
+    // attributed to the user). trackedStream returns the same MessageStream
+    // the SDK does, so the async-iteration and finalMessage() calls below
+    // are unchanged — it just awaits the final message internally to log
+    // usage as a side effect. A3 forwards the abort signal so a Stop /
+    // closed tab cancels the upstream request, not just the local reader.
+    //
+    // A4: each model call is wrapped in a bounded retry. A connect-time
+    // transient error (429 / 5xx / network) before any text streams is
+    // retried with jittered backoff; once text has streamed we stop
+    // retrying (don't duplicate output) and preserve the partial (A8).
+    let finalMsg: Anthropic.Messages.Message | null = null;
+    let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let sawText = false;
+      // Live text + tool_use accumulators per content block index. Reset
+      // per attempt so a retry doesn't double-count streamed text.
+      const blockState = new Map<
+        number,
+        | { type: "text"; text: string }
+        | { type: "tool_use"; id: string; name: string; partialJson: string }
+      >();
+      const stream = trackedStream(
+        {
+          model,
+          system: systemPrompt,
+          messages: messageList,
+          max_tokens: maxTokens,
+          tools: anthropicTools as unknown as Anthropic.Messages.Tool[],
+        },
+        "agent:turn",
+        opts.userId,
+        opts.signal ? { signal: opts.signal } : undefined
+      );
+
+      try {
+        for await (const event of stream) {
+          if (event.type === "content_block_start") {
+            if (event.content_block.type === "text") {
+              blockState.set(event.index, { type: "text", text: "" });
+            } else if (event.content_block.type === "tool_use") {
+              blockState.set(event.index, {
+                type: "tool_use",
+                id: event.content_block.id,
+                name: event.content_block.name,
+                partialJson: "",
+              });
+              opts.onDelta({
+                kind: "tool_call_start",
+                id: event.content_block.id,
+                name: event.content_block.name,
+              });
+            }
+          } else if (event.type === "content_block_delta") {
+            const state = blockState.get(event.index);
+            if (!state) continue;
+            if (event.delta.type === "text_delta" && state.type === "text") {
+              const sanitized = sanitizeForAITells(event.delta.text);
+              state.text += sanitized;
+              if (sanitized.length > 0) {
+                sawText = true;
+                opts.onDelta({ kind: "text", text: sanitized });
+              }
+            } else if (
+              event.delta.type === "input_json_delta" &&
+              state.type === "tool_use"
+            ) {
+              state.partialJson += event.delta.partial_json;
+            }
+          }
+        }
+        // Finalize inside the try so an abort during finalize is caught
+        // by the same handler.
+        finalMsg = await stream.finalMessage();
+        break;
+      } catch (err) {
+        // A3: a client abort ends the turn cleanly. Preserve whatever
+        // streamed (A8), mark it cancelled, and never surface an error.
+        if (opts.signal?.aborted || isAbortError(err)) {
+          const partial = partialTextFromBlocks(blockState);
+          await appendMessage({
+            userId: opts.userId,
+            threadId: opts.threadId,
+            role: "assistant",
+            content: partial.length > 0 ? partial : null,
+            metadata: { cancelled: true },
+            supabase,
+          });
+          opts.onDelta({
+            kind: "notice",
+            level: "info",
+            message: "Stopped.",
+            code: "cancelled",
+          });
+          return;
+        }
+        // A4: retry a transient connect error when nothing has streamed
+        // yet and attempts remain. Re-issuing after text has streamed
+        // would duplicate output, so we fall through to A8 in that case.
+        if (
+          isTransientError(err) &&
+          !sawText &&
+          attempt < MAX_STREAM_RETRIES
+        ) {
+          attempt += 1;
+          opts.onDelta({
+            kind: "notice",
+            level: "info",
+            message: "Connection hiccup, retrying…",
+            code: "retrying",
+          });
+          await abortableSleep(
+            retryAfterMs(err) ?? backoffDelayMs(attempt),
+            opts.signal
+          );
+          if (opts.signal?.aborted) {
+            opts.onDelta({
+              kind: "notice",
+              level: "info",
+              message: "Stopped.",
+              code: "cancelled",
+            });
+            return;
+          }
+          continue;
+        }
+        // A8: retries exhausted, error non-transient, or text already
+        // streamed. Persist the partial answer the user saw plus a
+        // non-destructive error annotation instead of a "[stream error]"
+        // marker that discards it. `retryable` lets the UI offer a Retry.
+        const msg = err instanceof Error ? err.message : "stream error";
+        const partial = partialTextFromBlocks(blockState);
+        await appendMessage({
+          userId: opts.userId,
+          threadId: opts.threadId,
+          role: "assistant",
+          content: partial.length > 0 ? partial : null,
+          metadata: { error: msg, retryable: isTransientError(err) },
+          supabase,
+        });
+        opts.onDelta({ kind: "error", message: msg });
+        return;
+      }
+    }
+    if (!finalMsg) return; // unreachable: the inner loop sets it or returns
+
+    // A6: fold this call's real usage into the turn budget.
+    budget.add(model, finalMsg.usage);
+    // A9: a draft that stopped on the token cap is flagged truncated so the
+    // UI can warn; the break below (stop_reason !== "tool_use") already
+    // prevents a truncated call from being treated as a finished action.
+    if (finalMsg.stop_reason === "max_tokens") {
+      opts.onDelta({
+        kind: "notice",
+        level: "warn",
+        message:
+          "That response was cut off at the length limit. Ask me to continue it.",
+        code: "truncated",
+      });
+    }
     // Belt-and-suspenders sanitize: we already strip per-delta above,
     // but a final text block reassembled by the SDK may contain dashes
     // injected from a buffered delta. Strip again for safety.
@@ -437,6 +623,8 @@ async function runAgentTurnInner(
       role: "assistant",
       content: assistantText.length > 0 ? assistantText : null,
       toolCalls: assistantToolCalls.length > 0 ? assistantToolCalls : null,
+      metadata:
+        finalMsg.stop_reason === "max_tokens" ? { truncated: true } : null,
       supabase,
     });
 
@@ -487,6 +675,9 @@ async function runAgentTurnInner(
         supabase,
         origin: "session" as const,
         threadId: opts.threadId,
+        // A3/A5: thread the abort signal so the ring-3 approval poll bails
+        // the moment the turn is cancelled.
+        signal: opts.signal,
       };
       try {
         // Quality Phase 4: pre-tool hook chain. Replaces the inline

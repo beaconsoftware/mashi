@@ -128,6 +128,10 @@ export async function POST(
           toolRings: ["read", "write_mashi", "write_world"],
           mode: parsed.data.mode,
           turnId,
+          // A3: a closed tab / Stop click aborts this request; forward the
+          // signal so the loop cancels the upstream model call and the
+          // approval poll instead of running to completion server-side.
+          signal: req.signal,
         });
       } catch (err) {
         enqueue({

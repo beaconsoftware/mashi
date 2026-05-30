@@ -146,7 +146,7 @@ caught immediately.
 
 ### Batches (the 6-PR collapse)
 
-- [ ] **1 · P1 · Foundation hardening** · covers A3, A4, A5, A6, A8, A9 · deps: none (A1/A2/A7 merged) · TODO · PR: -
+- [ ] **1 · P1 · Foundation hardening** · covers A3, A4, A5, A6, A8, A9 · deps: none (A1/A2/A7 merged) · IN REVIEW (#148) · PR: #148
   > Rest of Epic A: cancellation + Stop button (A3), preserve partial text on abort (A8),
   > retry/backoff/reconnect (A4), approval-poll efficiency + abort (A5), per-turn/per-thread
   > token budget (A6), adaptive `max_tokens` (A9). Internal order: A3 → A8 → A4; A3 → A5;
