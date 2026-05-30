@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Paperclip, Send, Square } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Hash, Paperclip, Send, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useS2DItems } from "@/hooks/use-s2d";
 import { PendingAttachmentChip } from "@/components/agent/attachment-chip";
+import { ReferenceChipList } from "@/components/agent/reference-chip";
 import {
   ATTACHMENT_ACCEPT,
   ATTACHMENT_BUCKET,
@@ -15,6 +22,7 @@ import {
   type AttachmentDescriptor,
   type AttachmentKind,
 } from "@/lib/agent/attachments";
+import { MAX_REFERENCES, type AgentReference } from "@/lib/agent/references";
 
 /**
  * Composer for the agent thread. Enter sends; Shift+Enter inserts a
@@ -27,7 +35,36 @@ import {
  * user's own prefix); the resolved descriptors ride along with the
  * message. Send is blocked while any upload is in flight, and allowed with
  * attachments even when the text is empty ("summarize this").
+ *
+ * B2 (P3): type `@` to open a typeahead over the user's board items. Picking
+ * one strips the `@query` text and pins a reference chip; the structured
+ * references ride along with the message so the agent treats them as already
+ * resolved (skipping the resolve_reference round-trip).
  */
+
+/**
+ * Find an in-progress `@`-mention immediately before the caret. Returns the
+ * query text (after `@`) and the `@`'s index, or null when the caret isn't
+ * inside a mention token (no `@`, whitespace in between, or `@` not at a
+ * word boundary).
+ */
+function findActiveMention(
+  value: string,
+  caret: number
+): { query: string; start: number } | null {
+  for (let i = caret - 1; i >= 0; i -= 1) {
+    const ch = value[i];
+    if (ch === "@") {
+      const before = i === 0 ? "" : value[i - 1];
+      if (i !== 0 && !/\s/.test(before)) return null;
+      const query = value.slice(i + 1, caret);
+      if (/\s/.test(query) || query.length > 60) return null;
+      return { query, start: i };
+    }
+    if (/\s/.test(ch)) return null;
+  }
+  return null;
+}
 
 interface PendingAttachment {
   id: string;
@@ -65,18 +102,32 @@ export function AgentComposer({
   mode = "act",
   /** B1: hide the attach affordance where uploads aren't wanted. */
   allowAttachments = true,
+  /** B2: enable the `@`-mention typeahead over board items. */
+  allowMentions = true,
 }: {
   disabled: boolean;
-  onSend: (text: string, attachments?: AttachmentDescriptor[]) => void;
+  onSend: (
+    text: string,
+    attachments?: AttachmentDescriptor[],
+    references?: AgentReference[]
+  ) => void;
   /** A3 — interrupt the in-flight turn. */
   onStop?: () => void;
   /** Quality Phase 3 — drives placeholder copy. */
   mode?: "plan" | "act";
   allowAttachments?: boolean;
+  allowMentions?: boolean;
 }) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
+  // B2: pinned @-mention references + the in-progress typeahead state.
+  const [references, setReferences] = useState<AgentReference[]>([]);
+  const [mention, setMention] = useState<{ query: string; start: number } | null>(
+    null
+  );
+  const [highlight, setHighlight] = useState(0);
+  const { data: items = [] } = useS2DItems();
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const userIdRef = useRef<string | null>(null);
@@ -120,6 +171,75 @@ export function AgentComposer({
       if (hit?.previewUrl) URL.revokeObjectURL(hit.previewUrl);
       return prev.filter((a) => a.id !== id);
     });
+  }
+
+  // B2: typeahead matches over board items, excluding already-pinned ones.
+  // Ranks ticket-number hits first, then title prefix, then substring; an
+  // empty query (just `@`) shows the most-recent items (the hook already
+  // orders by updated_at desc, and Array.sort is stable).
+  const mentionResults = useMemo(() => {
+    if (!mention) return [] as typeof items;
+    const pinned = new Set(references.map((r) => r.id));
+    const q = mention.query.trim().toLowerCase();
+    const scored: Array<{ it: (typeof items)[number]; score: number }> = [];
+    for (const it of items) {
+      if (pinned.has(it.id)) continue;
+      if (!q) {
+        scored.push({ it, score: 0 });
+        continue;
+      }
+      const title = it.title.toLowerCase();
+      const ticket = it.ticket_number != null ? `mash-${it.ticket_number}` : "";
+      let score = -1;
+      if (ticket && (ticket === q || `${it.ticket_number}` === q)) score = 4;
+      else if (ticket && ticket.startsWith(q)) score = 3;
+      else if (title.startsWith(q)) score = 2;
+      else if (title.includes(q) || (ticket && ticket.includes(q))) score = 1;
+      if (score >= 0) scored.push({ it, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 6).map((s) => s.it);
+  }, [mention, items, references]);
+
+  function syncMention(value: string, caret: number) {
+    if (!allowMentions) return;
+    setMention(findActiveMention(value, caret));
+    setHighlight(0);
+  }
+
+  function selectMention(item: (typeof items)[number]) {
+    if (!mention) return;
+    const start = mention.start;
+    const end = start + 1 + mention.query.length;
+    setReferences((prev) => {
+      if (prev.some((r) => r.id === item.id) || prev.length >= MAX_REFERENCES) {
+        return prev;
+      }
+      return [
+        ...prev,
+        {
+          kind: "item",
+          id: item.id,
+          label: item.title,
+          ticketNumber: item.ticket_number ?? null,
+        },
+      ];
+    });
+    setText((prev) => prev.slice(0, start) + prev.slice(end));
+    setMention(null);
+    setHighlight(0);
+    // Restore focus + place the caret where the mention token was.
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(start, start);
+      }
+    });
+  }
+
+  function removeReference(id: string) {
+    setReferences((prev) => prev.filter((r) => r.id !== id));
   }
 
   async function uploadOne(file: File) {
@@ -216,12 +336,19 @@ export function AgentComposer({
       name: a.name,
       size: a.size,
     }));
+    const refs = references;
     setText("");
     // Hand off the uploaded descriptors; drop the chips (don't revoke the
     // object URLs here, the optimistic bubble may still reference them
     // briefly, the browser reclaims them on navigation / unmount).
     setAttachments([]);
-    onSend(v, descriptors.length > 0 ? descriptors : undefined);
+    setReferences([]);
+    setMention(null);
+    onSend(
+      v,
+      descriptors.length > 0 ? descriptors : undefined,
+      refs.length > 0 ? refs : undefined
+    );
   }
 
   const placeholder =
@@ -261,8 +388,18 @@ export function AgentComposer({
           ))}
         </div>
       )}
-      <div className="flex items-stretch gap-1.5">
-        {allowAttachments && (
+      {references.length > 0 && (
+        <ReferenceChipList references={references} onRemove={removeReference} />
+      )}
+      <Popover
+        open={!!mention && mentionResults.length > 0}
+        onOpenChange={(v) => {
+          if (!v) setMention(null);
+        }}
+      >
+        <PopoverAnchor asChild>
+          <div className="flex items-stretch gap-1.5">
+            {allowAttachments && (
           <>
             <input
               ref={fileInputRef}
@@ -291,9 +428,44 @@ export function AgentComposer({
         <Textarea
           ref={ref}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            syncMention(
+              e.target.value,
+              e.target.selectionStart ?? e.target.value.length
+            );
+          }}
           onPaste={onPaste}
           onKeyDown={(e) => {
+            // B2: while the mention typeahead is open, the arrow keys,
+            // Enter/Tab (select), and Escape (close) drive it instead of
+            // the composer. This must run before the Enter-to-send below.
+            if (mention && mentionResults.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setHighlight((h) => (h + 1) % mentionResults.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setHighlight(
+                  (h) => (h - 1 + mentionResults.length) % mentionResults.length
+                );
+                return;
+              }
+              if (e.key === "Enter" || e.key === "Tab") {
+                e.preventDefault();
+                selectMention(
+                  mentionResults[Math.min(highlight, mentionResults.length - 1)]
+                );
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setMention(null);
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               submit();
@@ -330,7 +502,45 @@ export function AgentComposer({
             <Send className="h-3 w-3" />
           </Button>
         )}
-      </div>
+          </div>
+        </PopoverAnchor>
+        <PopoverContent
+          align="start"
+          side="top"
+          sideOffset={6}
+          // Keep focus in the textarea so typing keeps driving the query.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          className="w-[min(26rem,80vw)] p-1"
+        >
+          <div className="max-h-56 overflow-y-auto">
+            {mentionResults.map((it, i) => (
+              <button
+                key={it.id}
+                type="button"
+                // mousedown (not click) + preventDefault avoids blurring the
+                // textarea before the selection lands.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectMention(it);
+                }}
+                onMouseEnter={() => setHighlight(i)}
+                className={`mashi-magnetic flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs ${
+                  i === highlight ? "bg-secondary/40" : ""
+                }`}
+              >
+                <Hash className="h-3 w-3 shrink-0 text-primary" />
+                <span className="shrink-0 font-mono text-[10px] text-primary">
+                  {it.ticket_number != null ? `MASH-${it.ticket_number}` : "item"}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-foreground/90">
+                  {it.title}
+                </span>
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { AttachmentDescriptor } from "@/lib/agent/attachments";
+import type { AgentReference } from "@/lib/agent/references";
 
 /**
  * Persistence helpers for agent_threads + agent_messages. Server-only;
@@ -67,6 +68,10 @@ export interface AgentMessageRow {
    * mime, name, size}. Bytes live in Storage; this is the pointer. NULL
    * when the message has no attachments. */
   attachments: AttachmentDescriptor[] | null;
+  /** B2 (P3): @-mention reference descriptors on a user row {kind, id,
+   * label, ticketNumber}. Canonicalized against the user's s2d_items
+   * server-side before persist. NULL when the message has none. */
+  pinned_references: AgentReference[] | null;
 }
 
 type Supa = SupabaseClient;
@@ -184,6 +189,9 @@ interface AppendMessageInput {
   metadata?: Record<string, unknown> | null;
   /** B1 (P3): attachment descriptors on a user row. NULL/empty otherwise. */
   attachments?: AttachmentDescriptor[] | null;
+  /** B2 (P3): pinned @-mention references on a user row. NULL/empty
+   * otherwise. Persisted canonical (already validated against s2d_items). */
+  references?: AgentReference[] | null;
   supabase?: Supa;
 }
 
@@ -211,6 +219,8 @@ export async function appendMessage(
         opts.attachments && opts.attachments.length > 0
           ? opts.attachments
           : null,
+      pinned_references:
+        opts.references && opts.references.length > 0 ? opts.references : null,
     })
     .select("*")
     .single();

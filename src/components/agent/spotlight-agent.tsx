@@ -37,6 +37,7 @@ import { ThreadView } from "@/components/agent/thread-view";
 import { useAgentThread } from "@/store/agent-thread-store";
 import { AgentComposer } from "@/components/agent/composer";
 import type { AttachmentDescriptor } from "@/lib/agent/attachments";
+import type { AgentReference } from "@/lib/agent/references";
 import { Button } from "@/components/ui/button";
 
 type SpotlightTab = "ask" | "search";
@@ -238,6 +239,11 @@ function AskMashiTab({
   const [pendingFirstAttachments, setPendingFirstAttachments] = useState<
     AttachmentDescriptor[] | undefined
   >(undefined);
+  // B2 (P3): references pinned in the empty-state composer before the orphan
+  // thread row exists. Handed to ThreadView with the first message.
+  const [pendingFirstReferences, setPendingFirstReferences] = useState<
+    AgentReference[] | undefined
+  >(undefined);
 
   const recents = useQuery<{ threads: RecentThread[] }>({
     queryKey: ["agent-threads-recent"],
@@ -260,6 +266,7 @@ function AskMashiTab({
         onItemBound={onItemBound}
         initialMessage={pendingFirstMessage ?? undefined}
         initialAttachments={pendingFirstAttachments}
+        initialReferences={pendingFirstReferences}
       />
     );
   }
@@ -268,16 +275,22 @@ function AskMashiTab({
   // Spotlight chat (or jump to an item-bound thread). Item-bound rows
   // open the persistent Ask Mashi sheet; orphan rows load right here.
 
-  async function send(message: string, attachments?: AttachmentDescriptor[]) {
+  async function send(
+    message: string,
+    attachments?: AttachmentDescriptor[],
+    references?: AgentReference[]
+  ) {
     if (sending || (!message.trim() && !(attachments?.length ?? 0))) return;
     setSending(true);
     setPendingFirstMessage(message);
     setPendingFirstAttachments(attachments);
+    setPendingFirstReferences(references);
     const newId = await onCreate();
     if (!newId) {
       setSending(false);
       setPendingFirstMessage(null);
       setPendingFirstAttachments(undefined);
+      setPendingFirstReferences(undefined);
       return;
     }
     // No-op: setOrphanThreadId in the parent triggers the early-return
