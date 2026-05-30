@@ -120,7 +120,7 @@ part of cancellation), so it has no own row. `B2` is optional, kept low priority
 ### Bootstrap (landed outside the numbered loop)
 
 - [x] **B0a** Tracker doc + motion/liveness doctrine on `main` · MERGED (#142)
-- [ ] **B0b** `audit:motion` script + wired into `pnpm verify` and CI · IN REVIEW (#TBD)
+- [ ] **B0b** `audit:motion` script + wired into `pnpm verify` and CI · IN REVIEW (#143)
 
 `audit:motion` grandfathers three currently-dead files in its `EXCLUDE_FILES`:
 `thread-view.tsx`, `ai-elements/conversation.tsx`, `ai-elements/suggestion.tsx`. The PR
