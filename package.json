@@ -27,9 +27,10 @@
     "test:tool-meta": "tsx src/lib/agent/__tests__/tool-meta.test.ts",
     "test:reveal": "tsx src/lib/agent/__tests__/reveal.test.ts",
     "test:memory": "tsx src/lib/agent/__tests__/memory.test.ts",
+    "test:playbooks": "tsx src/lib/agent/__tests__/playbooks.test.ts",
     "embed-tools": "tsx scripts/embed-tools.ts",
     "check:embeddings": "tsx scripts/embed-tools.ts --check",
-    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm audit:motion && pnpm check:embeddings && pnpm test:pricing && pnpm test:retry && pnpm test:budget && pnpm test:provenance && pnpm test:transcript && pnpm test:attachments && pnpm test:references && pnpm test:approval-meta && pnpm test:policy && pnpm test:tool-meta && pnpm test:reveal && pnpm test:memory"
+    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm audit:motion && pnpm check:embeddings && pnpm test:pricing && pnpm test:retry && pnpm test:budget && pnpm test:provenance && pnpm test:transcript && pnpm test:attachments && pnpm test:references && pnpm test:approval-meta && pnpm test:policy && pnpm test:tool-meta && pnpm test:reveal && pnpm test:memory && pnpm test:playbooks"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
