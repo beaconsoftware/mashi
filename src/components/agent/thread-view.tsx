@@ -32,6 +32,11 @@ import {
 } from "@/components/ai-elements/tool";
 import { toolOutcome } from "@/lib/agent/tool-meta";
 import {
+  InteractiveToolView,
+  hasInteractiveToolView,
+  type ToolResultViewHandlers,
+} from "@/components/agent/tool-result-views";
+import {
   Suggestion,
   Suggestions,
 } from "@/components/ai-elements/suggestion";
@@ -120,6 +125,8 @@ interface ThreadData {
 interface InFlightToolCall {
   id: string;
   name: string;
+  /** L4: human present-tense narration for the running state. */
+  narration?: string;
   args?: unknown;
   result?: unknown;
   error?: string;
@@ -159,6 +166,7 @@ export function ThreadView({
   initialMessage,
   initialAttachments,
   initialReferences,
+  onOpenItem,
 }: {
   itemId?: string;
   threadId?: string;
@@ -166,6 +174,11 @@ export function ThreadView({
    * (attach_thread_to_item). The Spotlight surface uses this to swap
    * over to the item-bound sheet for subsequent turns. */
   onItemBound?: (itemId: string) => void;
+  /** L1: open a board item from an interactive tool-result row. The host
+   * wires this (e.g. Spotlight dismisses itself, routes to /s2d, and selects
+   * the item). When absent, an interactive row with an external deep link
+   * still offers "Open" as a link; otherwise it shows no open affordance. */
+  onOpenItem?: (itemId: string) => void;
   /** First message to send the moment this thread mounts. Used by the
    * Spotlight Ask Mashi flow: the user types in the dialog composer,
    * we create the orphan row, then hand the message to ThreadView so
@@ -591,7 +604,7 @@ export function ThreadView({
     } else if (d.kind === "tool_call_start") {
       setLiveToolCalls((prev) => [
         ...prev,
-        { id: d.id, name: d.name },
+        { id: d.id, name: d.name, narration: d.narration },
       ]);
     } else if (d.kind === "tool_call_args") {
       setLiveToolCalls((prev) =>
@@ -782,6 +795,12 @@ export function ThreadView({
               resultByCallId={resultByCallId}
               streaming={streaming}
               onEditUser={editAndResend}
+              toolHandlers={{
+                // L1: inline write actions dispatch a turn through the normal
+                // send path (ring-gated). Disabled while a turn streams.
+                onAction: streaming ? undefined : (p) => void send(p),
+                onOpenItem,
+              }}
             />
           ))}
           {canRegenerate && (
@@ -828,6 +847,7 @@ export function ThreadView({
             <LiveTurnRows
               liveText={liveText}
               liveToolCalls={liveToolCalls}
+              toolHandlers={{ onAction: undefined, onOpenItem }}
             />
           )}
           {followUpsToRender.length > 0 && (
@@ -939,6 +959,7 @@ function PersistedMessageRow({
   resultByCallId,
   streaming,
   onEditUser,
+  toolHandlers,
 }: {
   message: AgentMessageRow;
   resultByCallId: Map<
@@ -949,6 +970,8 @@ function PersistedMessageRow({
   streaming?: boolean;
   /** D3: edit a prior user message and re-run from there. */
   onEditUser?: (messageId: string, content: string) => void;
+  /** L1: open / dispatch handlers for interactive tool-result rows. */
+  toolHandlers?: ToolResultViewHandlers;
 }) {
   if (message.role === "user") {
     const atts = Array.isArray(message.attachments) ? message.attachments : [];
@@ -1009,6 +1032,7 @@ function PersistedMessageRow({
         )}
         {hasToolCalls && (
           <ToolCards
+            handlers={toolHandlers}
             items={message.tool_calls!.map((tc) => {
               const result = resultByCallId.get(tc.id);
               const parsedOutput = result ? parseToolResult(result.content) : null;
@@ -1109,9 +1133,11 @@ function MessageMetadataNote({
 function LiveTurnRows({
   liveText,
   liveToolCalls,
+  toolHandlers,
 }: {
   liveText: string;
   liveToolCalls: InFlightToolCall[];
+  toolHandlers?: ToolResultViewHandlers;
 }) {
   const hasToolCalls = liveToolCalls.length > 0;
   return (
@@ -1124,6 +1150,7 @@ function LiveTurnRows({
       )}
       {hasToolCalls && (
         <ToolCards
+          handlers={toolHandlers}
           items={liveToolCalls.map((tc) => {
             // E3/E1: neutral "Cancelled" outcome for a user-cancelled /
             // expired / policy-blocked ring-3 call instead of a red error.
@@ -1143,6 +1170,7 @@ function LiveTurnRows({
             return {
               id: tc.id,
               name: tc.name,
+              narration: tc.narration,
               input: tc.args,
               state,
               output: showOutput ? tc.result : undefined,
@@ -1182,6 +1210,8 @@ function LiveTurnRows({
 interface ToolCardDescriptor {
   id: string;
   name: string;
+  /** L4: human present-tense narration for the running state. */
+  narration?: string;
   input: unknown;
   state: ToolPartState;
   /** Present only when the result should render (not for an in-flight or a
@@ -1195,12 +1225,18 @@ interface ToolCardDescriptor {
  * as a connected sequence (a left timeline rail + a per-step status dot) so
  * they read as one chain of steps, not loose boxes.
  */
-function ToolCards({ items }: { items: ToolCardDescriptor[] }) {
+function ToolCards({
+  items,
+  handlers,
+}: {
+  items: ToolCardDescriptor[];
+  handlers?: ToolResultViewHandlers;
+}) {
   if (items.length === 0) return null;
   if (items.length === 1) {
     return (
       <div className="space-y-1.5">
-        <ToolCallCard {...items[0]} />
+        <ToolCallCard {...items[0]} handlers={handlers} />
       </div>
     );
   }
@@ -1208,7 +1244,7 @@ function ToolCards({ items }: { items: ToolCardDescriptor[] }) {
     <ToolSequence>
       {items.map((it) => (
         <ToolSequenceItem key={it.id} state={it.state}>
-          <ToolCallCard {...it} />
+          <ToolCallCard {...it} handlers={handlers} />
         </ToolSequenceItem>
       ))}
     </ToolSequence>
@@ -1216,26 +1252,51 @@ function ToolCards({ items }: { items: ToolCardDescriptor[] }) {
 }
 
 /** One I9 tool card: per-tool icon + human label + collapsed outcome line, with
- * the raw snake_case name + parameters + result on expand. */
+ * the raw snake_case name + parameters + result on expand. L1: a result with an
+ * actionable shape (board items, a plan) renders as an interactive control
+ * surface and opens by default so the actions are in reach; L4: while the call
+ * is in flight the header subtext narrates what the agent is doing. */
 function ToolCallCard({
   name,
+  narration,
   input,
   state,
   output,
   errorText,
-}: Omit<ToolCardDescriptor, "id">) {
+  handlers,
+}: Omit<ToolCardDescriptor, "id"> & { handlers?: ToolResultViewHandlers }) {
   const showOutput = output !== undefined || !!errorText;
-  // The collapsed "what happened" line, only meaningful once the call lands.
+  const running =
+    state === "input-available" ||
+    state === "input-streaming" ||
+    state === "approval-requested";
+  // The collapsed line: "what happened" once landed, the live narration while
+  // running (so the card reads as present activity, not a generic spinner).
   const outcome =
-    state === "output-available" ? toolOutcome(name, output, false) : null;
+    state === "output-available"
+      ? toolOutcome(name, output, false)
+      : running
+        ? narration ?? null
+        : null;
+  // L1: only landed, non-error results get an interactive view.
+  const interactive =
+    state === "output-available" && hasInteractiveToolView(name, output);
   return (
-    <Tool defaultOpen={false}>
+    <Tool defaultOpen={interactive}>
       <ToolHeader toolName={name} state={state} outcome={outcome} />
       <ToolContent>
         <ToolRawName toolName={name} />
         <ToolInput input={input} />
-        {showOutput && (
-          <ToolOutput output={output} errorText={errorText} toolName={name} />
+        {interactive ? (
+          <InteractiveToolView
+            toolName={name}
+            output={output}
+            handlers={handlers ?? {}}
+          />
+        ) : (
+          showOutput && (
+            <ToolOutput output={output} errorText={errorText} toolName={name} />
+          )
         )}
       </ToolContent>
     </Tool>

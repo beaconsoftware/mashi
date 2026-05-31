@@ -14,7 +14,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { TOOL_META, toolMeta, toolOutcome } from "@/lib/agent/tool-meta";
+import {
+  TOOL_META,
+  toolMeta,
+  toolNarration,
+  toolOutcome,
+} from "@/lib/agent/tool-meta";
 
 const stats = { pass: 0, fail: 0 };
 
@@ -100,6 +105,36 @@ assert(
   "an errored call has no outcome line (the badge carries it)"
 );
 assert(toolOutcome("whoami", "not an object", false) === null, "non-record output → null");
+
+// L4 — live narration: present-tense, human, never empty.
+assert(
+  toolNarration("search_board") === "Searching the board",
+  "narration gerund-ifies the label (search_board)"
+);
+assert(
+  toolNarration("set_item_title") === "Renaming an item",
+  "narration handles the -e drop (Rename → Renaming)"
+);
+assert(
+  toolNarration("propose_memory") === "Noting that to remember",
+  "narration uses the hand-tuned line for propose_memory (F1 memory moment)"
+);
+assert(
+  toolNarration("get_calendar_event") === "Opening a calendar event",
+  "narration gerund-ifies 'Open …' correctly"
+);
+assert(
+  toolNarration("some_unknown_tool").length > 0,
+  "an unmapped tool still yields a non-empty narration (never throws)"
+);
+// Every registry tool yields a non-empty narration.
+{
+  let allOk = true;
+  for (const name of Object.keys(TOOL_META)) {
+    if (toolNarration(name).trim().length === 0) allOk = false;
+  }
+  assert(allOk, "every registry tool has a non-empty narration line");
+}
 
 console.log(`\ntool-meta: ${stats.pass} passed, ${stats.fail} failed`);
 if (stats.fail > 0) process.exit(1);

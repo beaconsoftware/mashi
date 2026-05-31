@@ -12,6 +12,8 @@
  *     a JSON blob; unknown tools return null so the caller falls back to raw.
  */
 import {
+  deriveActionableItems,
+  derivePlanSteps,
   deriveSources,
   summarizeToolResult,
 } from "@/lib/agent/provenance";
@@ -115,6 +117,68 @@ function testSummaryEmptyAndUnknown() {
   assert(summarizeToolResult("search_board", "blob") === null, "non-record returns null");
 }
 
+function testActionableItems() {
+  console.log("deriveActionableItems: L1 interactive rows");
+  const items = deriveActionableItems("search_board", {
+    items: [
+      {
+        id: "uuid-1",
+        ticket_number: 1234,
+        title: "Ship billing",
+        status: "open",
+        priority: "urgent",
+        source_url: "https://slack.com/x",
+      },
+      { id: "uuid-2", title: "No ticket" },
+      { title: "dropped — no id" },
+    ],
+  });
+  assert(items.length === 2, "two items with ids (the id-less row is dropped)");
+  assert(items[0].ref === "MASH-1234", "ticket number becomes the MASH ref");
+  assert(items[0].href === "https://slack.com/x", "source_url carried as href");
+  assert(items[0].status === "open" && items[0].priority === "urgent", "status + priority carried");
+  assert(items[1].ref === "No ticket", "no ticket → ref falls back to title");
+
+  const today = deriveActionableItems("list_today", {
+    urgent_items: [{ id: "u1", title: "Urgent one" }],
+    sprint_items: [{ id: "s1", title: "Sprint one" }],
+  });
+  assert(today.length === 2, "list_today pulls items across its list keys");
+
+  assert(
+    deriveActionableItems("whoami", { user: "x" }).length === 0,
+    "a non-item tool yields no actionable items (raw fallback)"
+  );
+  const capped = deriveActionableItems(
+    "search_board",
+    { items: Array.from({ length: 20 }, (_, i) => ({ id: `id-${i}`, title: `T${i}` })) },
+    8
+  );
+  assert(capped.length === 8, "the action list is capped");
+}
+
+function testPlanSteps() {
+  console.log("derivePlanSteps: L1 live checklist");
+  const steps = derivePlanSteps("set_plan", {
+    ok: true,
+    plan: [
+      { id: "a", text: "Draft proposal", checked: true },
+      { id: "b", text: "Loop in legal", checked: false },
+      { text: "" },
+    ],
+  });
+  assert(steps.length === 2, "blank-text step dropped, two real steps kept");
+  assert(steps[0].checked === true && steps[1].checked === false, "checked state preserved in order");
+  assert(
+    derivePlanSteps("search_board", { items: [] }).length === 0,
+    "non-plan tool yields no steps"
+  );
+  assert(
+    derivePlanSteps("set_plan", { ok: false, error: "nope" }).length === 0,
+    "a failed set_plan yields no checklist"
+  );
+}
+
 function main() {
   console.log("output-trust provenance + summaries\n");
   testSourcesBoard();
@@ -124,6 +188,8 @@ function main() {
   testSourcesIgnoresUnknownAndErrors();
   testSummaryBoardIsReadable();
   testSummaryEmptyAndUnknown();
+  testActionableItems();
+  testPlanSteps();
   console.log(`\n${stats.pass} passed, ${stats.fail} failed`);
   if (stats.fail > 0) process.exit(1);
 }

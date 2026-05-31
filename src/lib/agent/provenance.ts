@@ -12,6 +12,13 @@
  *     into a compact, readable summary (headline + rows) instead of a raw JSON
  *     blob. Returns null for shapes we don't have a typed summary for — the
  *     caller falls back to (wrap-fixed, copyable) raw JSON.
+ *   - `deriveActionableItems(toolName, output)` (L1): extracts the board items
+ *     from a read result with enough identity (id, title, status) for the
+ *     interactive tool-result view to render rows the user can act on inline
+ *     (open / snooze / add to sprint) without retyping.
+ *   - `derivePlanSteps(toolName, output)` (L1): pulls the ordered, checkable
+ *     plan steps out of a set_plan result so the view renders a live checklist
+ *     reflecting each step's stored done-state.
  */
 
 export type SourceKind =
@@ -368,4 +375,107 @@ export function summarizeToolResult(
     default:
       return null;
   }
+}
+
+// --- L1: interactive tool-result extractors --------------------------------
+
+/** A board item with enough identity for the interactive view to render an
+ * actionable row (open in the board, snooze, add to sprint) without the user
+ * retyping a reference. `ref` is the human handle the agent resolves when an
+ * inline action dispatches a turn ("Snooze MASH-1234 …"). */
+export interface ActionableItem {
+  id: string;
+  title: string;
+  /** "MASH-1234" when the row carries a ticket number, else the title. The
+   * inline-action prompt names the item by this so the agent resolves it. */
+  ref: string;
+  status?: string;
+  priority?: string;
+  /** External deep link when present (used as the "Open" fallback off-board). */
+  href?: string;
+}
+
+function num(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+function actionableFromRow(row: Record<string, unknown>): ActionableItem | null {
+  const id = str(row.id);
+  if (!id) return null;
+  const title = str(row.title) ?? "Untitled item";
+  const ticketNum = num(row.ticket_number) ?? str(row.ticket_number);
+  const ref = ticketNum != null ? `MASH-${ticketNum}` : title;
+  return {
+    id,
+    title,
+    ref,
+    status: str(row.status),
+    priority: str(row.priority),
+    href: isHttpUrl(row.source_url) ? row.source_url : undefined,
+  };
+}
+
+/**
+ * Board items from a read result, with identity, for the L1 interactive view.
+ * Covers the item-bearing read tools (search_board, list_today/get_today).
+ * Returns [] for everything else — the caller falls back to the readable I9
+ * card. Capped so a huge result can't render an unbounded action list.
+ */
+export function deriveActionableItems(
+  toolName: string,
+  output: unknown,
+  limit = 8
+): ActionableItem[] {
+  const rec = asRecord(output);
+  if (!rec) return [];
+  const rows: unknown[] = [];
+  switch (toolName) {
+    case "search_board":
+      rows.push(...asArray(rec.items));
+      break;
+    case "list_today":
+    case "get_today":
+      for (const key of ITEM_LIST_KEYS) rows.push(...asArray(rec[key]));
+      break;
+    default:
+      return [];
+  }
+  const out: ActionableItem[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const row = asRecord(r);
+    if (!row) continue;
+    const item = actionableFromRow(row);
+    if (!item || seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** One step of a Focus-card plan, for the L1 live checklist. */
+export interface PlanStepView {
+  text: string;
+  checked: boolean;
+}
+
+/**
+ * Ordered, checkable plan steps from a set_plan result, so the view renders a
+ * live checklist reflecting each step's stored done-state (it re-renders as the
+ * agent updates the plan across turns). Returns [] for any other tool / shape.
+ */
+export function derivePlanSteps(
+  toolName: string,
+  output: unknown
+): PlanStepView[] {
+  if (toolName !== "set_plan") return [];
+  const rec = asRecord(output);
+  if (!rec || rec.ok === false) return [];
+  return asArray(rec.plan).flatMap((s) => {
+    const row = asRecord(s);
+    const text = row && str(row.text);
+    if (!text) return [];
+    return [{ text, checked: row?.checked === true }];
+  });
 }
