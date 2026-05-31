@@ -281,7 +281,7 @@ motion is caught immediately.
       > ticks off mid-turn" protocol is deferred to a future sub-row — the set_plan checklist
       > reflects stored done-state and re-renders across turns, but there is no turn-level
       > step-progress event yet (inventing one overlaps the playbook execution model).
-    - [ ] **6 · P6.c.b · Slash commands + quick-action chips (L2, L3)** · covers L2, L3 · deps: P6.c.a · IN REVIEW (#PENDING) · PR: #PENDING
+    - [ ] **6 · P6.c.b · Slash commands + quick-action chips (L2, L3)** · covers L2, L3 · deps: P6.c.a · IN REVIEW (#162) · PR: #162
       > L2: slash-command typeahead over the composer (shares B2's mention typeahead) + a
       > keyboard model over the thread (navigate results, one-key approve/undo). L3: contextual
       > quick-action chips after a turn, wired to the same dispatch path L1 introduced. Both
