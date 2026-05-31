@@ -2,7 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, RotateCcw, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  CornerUpLeft,
+  Flame,
+  ListChecks,
+  Loader2,
+  Play,
+  RotateCcw,
+  Send,
+  Sparkles,
+  Target,
+  Wand2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   Conversation,
   ConversationContent,
@@ -42,7 +56,17 @@ import {
 } from "@/components/ai-elements/suggestion";
 import { useCursorContext } from "@/lib/agent/cursor-context";
 import { useRevealBuffer } from "@/hooks/use-reveal-buffer";
-import { deriveSources, type SourceDescriptor } from "@/lib/agent/provenance";
+import {
+  deriveActionableItems,
+  deriveSources,
+  type SourceDescriptor,
+} from "@/lib/agent/provenance";
+import {
+  deriveQuickActions,
+  type QuickActionIconKey,
+  type TurnSignals,
+} from "@/lib/agent/quick-actions";
+import { resolveThreadHotkey } from "@/lib/agent/thread-hotkeys";
 import {
   isBlockedResult,
   isCancelledResult,
@@ -138,6 +162,20 @@ const EMPTY_STATE_SUGGESTIONS = [
   "summarize the last reply",
   "what should I do here?",
 ];
+
+/** L3: map the pure quick-action icon key to a lucide component (kept here so
+ * `quick-actions.ts` stays dependency-free, mirroring tool-meta's split). */
+const QUICK_ACTION_ICONS: Record<QuickActionIconKey, LucideIcon> = {
+  send: Send,
+  tone: Wand2,
+  urgent: Flame,
+  plan: ListChecks,
+  sprint: Target,
+  snooze: Clock,
+  done: CheckCircle2,
+  reply: CornerUpLeft,
+  step: Play,
+};
 
 /**
  * Renders an agent thread plus the composer. Drives both:
@@ -239,6 +277,9 @@ export function ThreadView({
   // both abort it, which tears down the fetch and (via req.signal on the
   // server) cancels the upstream model call + approval poll.
   const abortRef = useRef<AbortController | null>(null);
+  // L2: the thread root, so the keyboard layer can find action controls
+  // ([data-thread-action]) to rove focus across or activate.
+  const containerRef = useRef<HTMLDivElement | null>(null);
   // Optimistic user message bubble. Rendered as soon as the user
   // submits and cleared once the post-stream refetch lands. Without
   // this, the user's typed text disappears from the composer and
@@ -287,6 +328,44 @@ export function ThreadView({
     }
     return map;
   }, [data?.messages]);
+
+  // L3: signals from the latest turn (everything since the last user message),
+  // feeding the contextual quick-action chips. Pure derivation lives in
+  // `quick-actions.ts`; here we just gather the tool names the turn called and
+  // the largest actionable-item count any of its results surfaced.
+  const turnSignals = useMemo<TurnSignals>(() => {
+    const msgs = data?.messages ?? [];
+    let start = 0;
+    for (let j = msgs.length - 1; j >= 0; j--) {
+      if (msgs[j].role === "user") {
+        start = j + 1;
+        break;
+      }
+    }
+    const toolNames: string[] = [];
+    let itemCount = 0;
+    for (let j = start; j < msgs.length; j++) {
+      const m = msgs[j];
+      if (m.role !== "assistant" || !Array.isArray(m.tool_calls)) continue;
+      for (const tc of m.tool_calls) {
+        toolNames.push(tc.name);
+        const res = resultByCallId.get(tc.id);
+        if (!res || res.is_error) continue;
+        try {
+          const items = deriveActionableItems(tc.name, JSON.parse(res.content));
+          if (items.length > itemCount) itemCount = items.length;
+        } catch {
+          // Non-JSON / unparseable result — no item signal from it.
+        }
+      }
+    }
+    return { toolNames, itemCount };
+  }, [data?.messages, resultByCallId]);
+
+  const quickActions = useMemo(
+    () => deriveQuickActions(turnSignals),
+    [turnSignals]
+  );
 
   // Derive any pending follow-up from persisted messages. A follow-up is
   // "pending" if the latest assistant turn called ask_followup_question
@@ -566,6 +645,11 @@ export function ThreadView({
     pendingApprovals.length === 0 &&
     lastRole === "assistant";
 
+  // L3: contextual quick-action chips appear under a settled assistant turn,
+  // gated the same way Regenerate is (idle, nothing pending). Empty derivations
+  // render nothing — the row hides rather than guessing.
+  const showQuickActions = canRegenerate && quickActions.length > 0;
+
   // Auto-fire the first message when ThreadView is handed one. Used by
   // the Spotlight Ask Mashi flow: AskMashiTab creates the orphan row,
   // then mounts us with the user's typed text — we own the send from
@@ -595,6 +679,69 @@ export function ThreadView({
       cursor,
       mode: activeMode,
     });
+  }
+
+  // L2: the enabled action controls in the thread, in DOM order. Roving and
+  // the one-key accelerators reuse the controls' own click handlers (the same
+  // path a mouse takes), so no approval/undo logic is duplicated here.
+  function actionControls(): HTMLElement[] {
+    const root = containerRef.current;
+    if (!root) return [];
+    return Array.from(
+      root.querySelectorAll<HTMLElement>("[data-thread-action]")
+    ).filter((el) => !(el as HTMLButtonElement).disabled);
+  }
+
+  function clickLatestAction(kind: "approve" | "undo") {
+    const matches = actionControls().filter(
+      (el) => el.getAttribute("data-thread-action") === kind
+    );
+    matches.at(-1)?.click();
+  }
+
+  function roveFocus(from: EventTarget | null, dir: 1 | -1) {
+    const all = actionControls();
+    if (all.length === 0) return;
+    const cur =
+      from instanceof HTMLElement
+        ? from.closest<HTMLElement>("[data-thread-action]")
+        : null;
+    const idx = cur ? all.indexOf(cur) : -1;
+    const next = all[(idx + dir + all.length) % all.length] ?? all[0];
+    next.focus();
+  }
+
+  // L2: a keyboard model over the thread. The pure resolver decides intent
+  // from the keystroke + a snapshot of thread state; we carry it out here.
+  function onThreadKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const target = e.target;
+    const composerEmpty =
+      !(target instanceof HTMLTextAreaElement) ||
+      target.value.trim().length === 0;
+    const intent = resolveThreadHotkey(
+      {
+        key: e.key,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+      },
+      {
+        hasApproval: pendingApprovals.length > 0,
+        hasRecallableUndo: undoables.some(
+          (u) => u.recallable !== false && !!u.expiresAt
+        ),
+        composerEmpty,
+        onActionControl:
+          target instanceof HTMLElement &&
+          !!target.closest("[data-thread-action]"),
+      }
+    );
+    if (!intent) return;
+    e.preventDefault();
+    if (intent === "approve") clickLatestAction("approve");
+    else if (intent === "undo") clickLatestAction("undo");
+    else roveFocus(target, intent === "focus-next" ? 1 : -1);
   }
 
   function applyDelta(d: AgentDelta) {
@@ -722,7 +869,11 @@ export function ThreadView({
     !pendingUserMessage;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
+    <div
+      ref={containerRef}
+      onKeyDown={onThreadKeyDown}
+      className="flex h-full min-h-0 flex-col gap-2"
+    >
       <div className="flex items-center justify-end gap-1">
         {(data?.messages.length ?? 0) > 0 && data?.thread && (
           <ThreadExport
@@ -816,6 +967,26 @@ export function ThreadView({
                 Regenerate
               </Button>
             </div>
+          )}
+          {showQuickActions && (
+            <Suggestions className="gap-1.5">
+              {quickActions.map((a) => {
+                const Icon = QUICK_ACTION_ICONS[a.icon];
+                return (
+                  <Suggestion
+                    key={a.id}
+                    suggestion={a.prompt}
+                    onClick={(p) => void send(p)}
+                    title={a.prompt}
+                    data-thread-action="chip"
+                    className="gap-1 px-3"
+                  >
+                    <Icon className="h-3 w-3" />
+                    {a.label}
+                  </Suggestion>
+                );
+              })}
+            </Suggestions>
           )}
           {pendingUserMessage && (
             <div className="space-y-1.5">

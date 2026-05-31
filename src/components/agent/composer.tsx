@@ -1,7 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Hash, Paperclip, Send, Square } from "lucide-react";
+import {
+  Brain,
+  CalendarPlus,
+  Clock,
+  FileText,
+  Hash,
+  ListChecks,
+  ListTodo,
+  Newspaper,
+  Paperclip,
+  PenLine,
+  Search,
+  Send,
+  Square,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,6 +38,26 @@ import {
   type AttachmentKind,
 } from "@/lib/agent/attachments";
 import { MAX_REFERENCES, type AgentReference } from "@/lib/agent/references";
+import {
+  findActiveSlash,
+  matchSlashCommands,
+  type SlashCommand,
+  type SlashIconKey,
+} from "@/lib/agent/slash-commands";
+
+/** L2: map the pure registry's icon key to a lucide component (kept here so
+ * `slash-commands.ts` stays dependency-free, mirroring tool-meta's split). */
+const SLASH_ICONS: Record<SlashIconKey, LucideIcon> = {
+  search: Search,
+  draft: PenLine,
+  brief: Newspaper,
+  schedule: CalendarPlus,
+  plan: ListChecks,
+  snooze: Clock,
+  remember: Brain,
+  summarize: FileText,
+  today: ListTodo,
+};
 
 /**
  * Composer for the agent thread. Enter sends; Shift+Enter inserts a
@@ -40,6 +75,14 @@ import { MAX_REFERENCES, type AgentReference } from "@/lib/agent/references";
  * one strips the `@query` text and pins a reference chip; the structured
  * references ride along with the message so the agent treats them as already
  * resolved (skipping the resolve_reference round-trip).
+ *
+ * L2 (P6.c.b): type `/` at the start to open a slash-command typeahead (shares
+ * the @-mention mechanism). A "complete" command sends its expansion as a turn
+ * right away; an "incomplete" one drops a stem into the composer for the user
+ * to finish. Either way the text flows through the normal `send` pipeline, so
+ * every ring + approval gate still applies — slash commands never call tools
+ * directly. Plain Enter sends; ⌘/Ctrl+Enter is reserved for the thread's
+ * one-key approve accelerator, so the send guard excludes those modifiers.
  */
 
 /**
@@ -104,6 +147,8 @@ export function AgentComposer({
   allowAttachments = true,
   /** B2: enable the `@`-mention typeahead over board items. */
   allowMentions = true,
+  /** L2: enable the `/`-slash command typeahead. */
+  allowSlash = true,
 }: {
   disabled: boolean;
   onSend: (
@@ -117,6 +162,7 @@ export function AgentComposer({
   mode?: "plan" | "act";
   allowAttachments?: boolean;
   allowMentions?: boolean;
+  allowSlash?: boolean;
 }) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -124,6 +170,12 @@ export function AgentComposer({
   // B2: pinned @-mention references + the in-progress typeahead state.
   const [references, setReferences] = useState<AgentReference[]>([]);
   const [mention, setMention] = useState<{ query: string; start: number } | null>(
+    null
+  );
+  // L2: in-progress `/`-command typeahead state. Mutually exclusive with a
+  // mention (one needs a leading `/`, the other an `@`), so the single
+  // `highlight` index is shared between whichever menu is open.
+  const [slash, setSlash] = useState<{ query: string; start: number } | null>(
     null
   );
   const [highlight, setHighlight] = useState(0);
@@ -222,6 +274,44 @@ export function AgentComposer({
     if (!allowMentions) return;
     setMention(findActiveMention(value, caret));
     setHighlight(0);
+  }
+
+  // L2: slash-command typeahead matches, capped + ranked by the pure registry.
+  const slashResults = useMemo<SlashCommand[]>(() => {
+    if (!slash) return [];
+    return matchSlashCommands(slash.query);
+  }, [slash]);
+
+  function syncSlash(value: string, caret: number) {
+    if (!allowSlash) return;
+    setSlash(findActiveSlash(value, caret));
+    setHighlight(0);
+  }
+
+  function selectSlash(cmd: SlashCommand) {
+    if (!slash) return;
+    const start = slash.start;
+    // The token spans the `/` plus the typed query.
+    const end = start + 1 + slash.query.length;
+    setSlash(null);
+    setHighlight(0);
+    if (cmd.complete) {
+      // A whole-prompt command: strip the `/token` and dispatch it as a turn
+      // through the normal send path (ring + approval gates still apply).
+      setText((prev) => prev.slice(0, start) + prev.slice(end));
+      onSend(cmd.expansion);
+      return;
+    }
+    // A stem: drop it in and leave the caret at its end so the user finishes.
+    setText((prev) => prev.slice(0, start) + cmd.expansion + prev.slice(end));
+    const caret = start + cmd.expansion.length;
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      }
+    });
   }
 
   function selectMention(item: (typeof items)[number]) {
@@ -375,6 +465,11 @@ export function AgentComposer({
   const sendDisabled =
     disabled || uploading || (text.trim().length === 0 && ready.length === 0);
 
+  // At most one typeahead is open at a time (mention needs `@`, slash needs a
+  // leading `/`). The shared Popover opens for whichever has results.
+  const mentionOpen = !!mention && mentionResults.length > 0;
+  const slashOpen = !!slash && slashResults.length > 0;
+
   return (
     <div
       className="flex flex-col gap-1.5"
@@ -409,9 +504,12 @@ export function AgentComposer({
         <ReferenceChipList references={references} onRemove={removeReference} />
       )}
       <Popover
-        open={!!mention && mentionResults.length > 0}
+        open={mentionOpen || slashOpen}
         onOpenChange={(v) => {
-          if (!v) setMention(null);
+          if (!v) {
+            setMention(null);
+            setSlash(null);
+          }
         }}
       >
         <PopoverAnchor asChild>
@@ -447,17 +545,45 @@ export function AgentComposer({
           value={text}
           onChange={(e) => {
             setText(e.target.value);
-            syncMention(
-              e.target.value,
-              e.target.selectionStart ?? e.target.value.length
-            );
+            const caret = e.target.selectionStart ?? e.target.value.length;
+            syncMention(e.target.value, caret);
+            syncSlash(e.target.value, caret);
           }}
           onPaste={onPaste}
           onKeyDown={(e) => {
+            // L2: the slash menu drives the same keys as the mention menu.
+            // Only one is ever open, so the branches don't conflict; this
+            // must run before the Enter-to-send below.
+            if (slashOpen) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setHighlight((h) => (h + 1) % slashResults.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setHighlight(
+                  (h) => (h - 1 + slashResults.length) % slashResults.length
+                );
+                return;
+              }
+              if (e.key === "Enter" || e.key === "Tab") {
+                e.preventDefault();
+                selectSlash(
+                  slashResults[Math.min(highlight, slashResults.length - 1)]
+                );
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setSlash(null);
+                return;
+              }
+            }
             // B2: while the mention typeahead is open, the arrow keys,
             // Enter/Tab (select), and Escape (close) drive it instead of
             // the composer. This must run before the Enter-to-send below.
-            if (mention && mentionResults.length > 0) {
+            if (mentionOpen) {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
                 setHighlight((h) => (h + 1) % mentionResults.length);
@@ -483,7 +609,9 @@ export function AgentComposer({
                 return;
               }
             }
-            if (e.key === "Enter" && !e.shiftKey) {
+            // Plain Enter sends. ⌘/Ctrl+Enter is left to bubble to the thread
+            // (L2 one-key approve); Shift+Enter inserts a newline.
+            if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
               e.preventDefault();
               submit();
             }
@@ -533,30 +661,63 @@ export function AgentComposer({
           className="w-[min(26rem,80vw)] p-1"
         >
           <div className="max-h-56 overflow-y-auto">
-            {mentionResults.map((it, i) => (
-              <button
-                key={it.id}
-                type="button"
-                // mousedown (not click) + preventDefault avoids blurring the
-                // textarea before the selection lands.
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  selectMention(it);
-                }}
-                onMouseEnter={() => setHighlight(i)}
-                className={`mashi-magnetic flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs ${
-                  i === highlight ? "bg-secondary/40" : ""
-                }`}
-              >
-                <Hash className="h-3 w-3 shrink-0 text-primary" />
-                <span className="shrink-0 font-mono text-[10px] text-primary">
-                  {it.ticket_number != null ? `MASH-${it.ticket_number}` : "item"}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-foreground/90">
-                  {it.title}
-                </span>
-              </button>
-            ))}
+            {slashOpen
+              ? slashResults.map((cmd, i) => {
+                  const Icon = SLASH_ICONS[cmd.icon];
+                  return (
+                    <button
+                      key={cmd.name}
+                      type="button"
+                      // mousedown (not click) + preventDefault avoids blurring
+                      // the textarea before the selection lands.
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        selectSlash(cmd);
+                      }}
+                      onMouseEnter={() => setHighlight(i)}
+                      className={`mashi-magnetic flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs ${
+                        i === highlight ? "bg-secondary/40" : ""
+                      }`}
+                    >
+                      <Icon className="h-3 w-3 shrink-0 text-primary" />
+                      <span className="shrink-0 font-mono text-[10px] text-primary">
+                        /{cmd.name}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-foreground/90">
+                        {cmd.label}
+                      </span>
+                      <span className="shrink-0 truncate text-[10px] text-muted-foreground">
+                        {cmd.hint}
+                      </span>
+                    </button>
+                  );
+                })
+              : mentionResults.map((it, i) => (
+                  <button
+                    key={it.id}
+                    type="button"
+                    // mousedown (not click) + preventDefault avoids blurring the
+                    // textarea before the selection lands.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectMention(it);
+                    }}
+                    onMouseEnter={() => setHighlight(i)}
+                    className={`mashi-magnetic flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-xs ${
+                      i === highlight ? "bg-secondary/40" : ""
+                    }`}
+                  >
+                    <Hash className="h-3 w-3 shrink-0 text-primary" />
+                    <span className="shrink-0 font-mono text-[10px] text-primary">
+                      {it.ticket_number != null
+                        ? `MASH-${it.ticket_number}`
+                        : "item"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-foreground/90">
+                      {it.title}
+                    </span>
+                  </button>
+                ))}
           </div>
         </PopoverContent>
       </Popover>

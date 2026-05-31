@@ -147,6 +147,9 @@ export function UndoStrip({ action, onUndone, onExpired }: Props) {
           variant="ghost"
           onClick={clickUndo}
           disabled={undoing}
+          // L2: the thread's quick-undo (⌘/Ctrl+Z) and arrow roving find this
+          // control by attribute and click it, reusing the undo path as-is.
+          data-thread-action="undo"
           className="mashi-press h-6 gap-1 px-2 text-[11px]"
         >
           {undoing ? (

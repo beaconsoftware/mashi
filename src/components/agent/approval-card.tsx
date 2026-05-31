@@ -282,6 +282,10 @@ export function ApprovalCard({ approval, base, onResolved }: Props) {
               variant={meta.weight === "send" ? "destructive" : "default"}
               onClick={() => submit("approve")}
               disabled={submitting}
+              // L2: the thread's one-key approve (⌘/Ctrl+Enter) and arrow
+              // roving find this control by attribute and click it, so the
+              // approval logic stays in one place.
+              data-thread-action="approve"
               className={cn(
                 "mashi-press h-7 gap-1 px-2 text-[11px]",
                 meta.weight === "send" && "mashi-glow-focus"
