@@ -296,7 +296,7 @@ motion is caught immediately.
     > wiring that makes external tools callable under the ring/approval gate (P6.d.b), and the
     > settings surface to add/remove servers and set per-tool policies (P6.d.c). All gated behind
     > `MCP_CLIENT_ENABLED`. `MERGED` only when every sub-row is.
-    - [ ] **6 · P6.d.a · MCP client foundation (data model + transport + discovery + ring-mapping)** · covers G2 (stage 1) · deps: P6.a · IN REVIEW (#PENDING) · PR: #PENDING
+    - [ ] **6 · P6.d.a · MCP client foundation (data model + transport + discovery + ring-mapping)** · covers G2 (stage 1) · deps: P6.a · IN REVIEW (#163) · PR: #163
       > Foundation, flag-gated, NOT wired into the loop (zero behavior change, no UI). New
       > migration `048_mcp_servers.sql`: owner-only `mcp_servers` (encrypted `credentials`,
       > transport/url/status) + `mcp_server_tools` (discovered catalogue, conservative
