@@ -150,6 +150,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P6.a** Agent-proposed MASHI.md memory (F1) · MERGED (#159)
 - [x] **P6.b** Playbooks — canned multi-step procedures (F2) · MERGED (#160)
 - [x] **P6.c.a** Interactive tool results + live narration (L1, L4) · MERGED (#161)
+- [x] **P6.c.b** Slash commands + quick-action chips (L2, L3) · MERGED (#162)
 
 `audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
 that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
@@ -281,16 +282,42 @@ motion is caught immediately.
       > ticks off mid-turn" protocol is deferred to a future sub-row — the set_plan checklist
       > reflects stored done-state and re-renders across turns, but there is no turn-level
       > step-progress event yet (inventing one overlaps the playbook execution model).
-    - [ ] **6 · P6.c.b · Slash commands + quick-action chips (L2, L3)** · covers L2, L3 · deps: P6.c.a · IN REVIEW (#162) · PR: #162
+    - [x] **6 · P6.c.b · Slash commands + quick-action chips (L2, L3)** · covers L2, L3 · deps: P6.c.a · MERGED (#162) · PR: #162
       > L2: slash-command typeahead over the composer (shares B2's mention typeahead) + a
       > keyboard model over the thread (navigate results, one-key approve/undo). L3: contextual
       > quick-action chips after a turn, wired to the same dispatch path L1 introduced. Both
       > depend on L1's interactive surface (P6.c.a).
-  - [ ] **6 · P6.d · MCP client behind a flag (G2)** · covers G2 · deps: P6.a · TODO · PR: -
+  - **6 · P6.d · MCP client behind a flag (G2)** · covers G2 · deps: P6.a · split into P6.d.a + P6.d.b + P6.d.c
     > XL, staged, behind a flag: an MCP *client* so users can register external MCP servers;
     > their tools map into the ring model (external writes → ring-3 approval) + tool-retrieval
     > index + settings UI + encrypted per-user credentials. Honor injection-defense (external
-    > tool output is untrusted data). Likely its own multi-PR split when started.
+    > tool output is untrusted data). Split (as the brief anticipated) into three sub-rows: the
+    > persistence + transport + discovery + ring-mapping foundation (P6.d.a), the loop + retrieval
+    > wiring that makes external tools callable under the ring/approval gate (P6.d.b), and the
+    > settings surface to add/remove servers and set per-tool policies (P6.d.c). All gated behind
+    > `MCP_CLIENT_ENABLED`. `MERGED` only when every sub-row is.
+    - [ ] **6 · P6.d.a · MCP client foundation (data model + transport + discovery + ring-mapping)** · covers G2 (stage 1) · deps: P6.a · IN REVIEW (#PENDING) · PR: #PENDING
+      > Foundation, flag-gated, NOT wired into the loop (zero behavior change, no UI). New
+      > migration `048_mcp_servers.sql`: owner-only `mcp_servers` (encrypted `credentials`,
+      > transport/url/status) + `mcp_server_tools` (discovered catalogue, conservative
+      > `read`/`write_world` ring). A dependency-free Streamable-HTTP MCP client
+      > (`src/lib/mcp/client.ts`) over pure JSON-RPC helpers (`jsonrpc.ts`), a server-side
+      > discovery sync (`discovery.ts`, owner-scoped reads + explicit-`user_id` writes), and the
+      > trust-critical pure mapping module (`external-tools.ts`: `mcp__slug__tool` namespacing,
+      > leading-verb ring classification defaulting to gated `write_world`, untrusted-data output
+      > envelope for injection defense). `MCP_CLIENT_ENABLED` flag (`src/lib/flags.ts`). Pure
+      > modules unit-tested (`test:mcp-external` 43, `test:mcp-jsonrpc` 12).
+    - [ ] **6 · P6.d.b · Loop + retrieval wiring (external tools callable)** · covers G2 (stage 2) · deps: P6.d.a · TODO · PR: -
+      > Load a user's enabled external tools into the per-turn toolset, map their ring into the
+      > existing hook/approval layer (external `write_world` → ring-3 gate, reads → ring-1), wrap
+      > every external result in the untrusted-data envelope before it re-enters the model, and
+      > extend tool retrieval to index external tools (runtime embed, since they aren't in the
+      > committed `_embeddings.json`). Token budget + cost tracking + A4-style latency/failure
+      > handling apply.
+    - [ ] **6 · P6.d.c · Settings surface** · covers G2 (stage 3) · deps: P6.d.b · TODO · PR: -
+      > Add/remove servers, run "Test connection" (the discovery sync), see discovered tools and
+      > their ring, toggle individual tools, set per-tool policy (E1). Owner-scoped; credentials
+      > write-only.
 
 ### XL items (kept separate, one PR each)
 
