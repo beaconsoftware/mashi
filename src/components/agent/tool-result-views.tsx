@@ -67,6 +67,9 @@ function ItemRow({
             type="button"
             size="sm"
             variant="ghost"
+            // L2: the per-row "Open" is the roving stop for this result, so
+            // arrow keys step result-to-result (Tab reaches Snooze/Done).
+            data-thread-action="item"
             className="mashi-press h-6 gap-1 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
             onClick={() => onOpenItem(item.id)}
           >
@@ -79,6 +82,7 @@ function ItemRow({
               href={item.href}
               target="_blank"
               rel="noopener noreferrer"
+              data-thread-action="item"
               className="mashi-press inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
             >
               <ExternalLink className="size-3" />

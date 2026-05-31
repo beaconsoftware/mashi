@@ -149,6 +149,7 @@ not jamming multi-week work into one un-reviewable diff.
 - [x] **P5.c** Feel parity — cadence + scroll + perf + optimistic (K1-K5) · MERGED (#158)
 - [x] **P6.a** Agent-proposed MASHI.md memory (F1) · MERGED (#159)
 - [x] **P6.b** Playbooks — canned multi-step procedures (F2) · MERGED (#160)
+- [x] **P6.c.a** Interactive tool results + live narration (L1, L4) · MERGED (#161)
 
 `audit:motion` grandfathers the pre-buildout dead files in its `EXCLUDE_FILES`. The batch
 that makes each one alive MUST remove its carve-out: `thread-view.tsx` (I2/I3, dropped in
@@ -267,7 +268,7 @@ motion is caught immediately.
     > for one clean PR, and the L-internal deps order it (L2/L3 both need L1; L4 is independent),
     > so it's split: P6.c.a lands the L1 foundation + L4 narration; P6.c.b lands L2 + L3 (both on
     > L1). `MERGED` only when both sub-rows are.
-    - [ ] **6 · P6.c.a · Interactive tool results + live narration (L1, L4)** · covers L1, L4 · deps: P6.a · IN REVIEW (#161) · PR: #161
+    - [x] **6 · P6.c.a · Interactive tool results + live narration (L1, L4)** · covers L1, L4 · deps: P6.a · MERGED (#161) · PR: #161
       > L1: a result-type → component registry renders board-item results (search_board,
       > list_today) as a live list with inline Open / Snooze / Done, and a set_plan result as a
       > live checklist; unmapped results fall back to the I9 readable card. Inline actions dispatch
@@ -280,7 +281,7 @@ motion is caught immediately.
       > ticks off mid-turn" protocol is deferred to a future sub-row — the set_plan checklist
       > reflects stored done-state and re-renders across turns, but there is no turn-level
       > step-progress event yet (inventing one overlaps the playbook execution model).
-    - [ ] **6 · P6.c.b · Slash commands + quick-action chips (L2, L3)** · covers L2, L3 · deps: P6.c.a · TODO · PR: -
+    - [ ] **6 · P6.c.b · Slash commands + quick-action chips (L2, L3)** · covers L2, L3 · deps: P6.c.a · IN REVIEW (#162) · PR: #162
       > L2: slash-command typeahead over the composer (shares B2's mention typeahead) + a
       > keyboard model over the thread (navigate results, one-key approve/undo). L3: contextual
       > quick-action chips after a turn, wired to the same dispatch path L1 introduced. Both

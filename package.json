@@ -28,9 +28,11 @@
     "test:reveal": "tsx src/lib/agent/__tests__/reveal.test.ts",
     "test:memory": "tsx src/lib/agent/__tests__/memory.test.ts",
     "test:playbooks": "tsx src/lib/agent/__tests__/playbooks.test.ts",
+    "test:keyboard": "tsx src/lib/agent/__tests__/keyboard.test.ts",
+    "test:quick-actions": "tsx src/lib/agent/__tests__/quick-actions.test.ts",
     "embed-tools": "tsx scripts/embed-tools.ts",
     "check:embeddings": "tsx scripts/embed-tools.ts --check",
-    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm audit:motion && pnpm check:embeddings && pnpm test:pricing && pnpm test:retry && pnpm test:budget && pnpm test:provenance && pnpm test:transcript && pnpm test:attachments && pnpm test:references && pnpm test:approval-meta && pnpm test:policy && pnpm test:tool-meta && pnpm test:reveal && pnpm test:memory && pnpm test:playbooks"
+    "verify": "pnpm typecheck && pnpm lint && pnpm audit:layers && pnpm audit:translucency && pnpm audit:motion && pnpm check:embeddings && pnpm test:pricing && pnpm test:retry && pnpm test:budget && pnpm test:provenance && pnpm test:transcript && pnpm test:attachments && pnpm test:references && pnpm test:approval-meta && pnpm test:policy && pnpm test:tool-meta && pnpm test:reveal && pnpm test:memory && pnpm test:playbooks && pnpm test:keyboard && pnpm test:quick-actions"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
